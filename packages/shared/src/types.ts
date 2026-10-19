@@ -789,13 +789,15 @@ export interface SwapReceipt {
 }
 
 export type OrderKind =
-  | 'limit_buy' //       buy when price/mcap <= trigger
-  | 'limit_sell' //      sell when price/mcap >= trigger
-  | 'take_profit' //     sell when change from entry >= trigger
-  | 'stop_loss' //       sell when change from entry <= -trigger
-  | 'trailing_stop' //   sell when price falls trigger% from peak (after activation)
-  | 'dev_sell' //        sell when dev sells
-  | 'migration_sell'; // sell when token migrates
+  | 'limit_buy' //       buy when price/mcap crosses trigger in `direction` (below = buy the dip, above = breakout)
+  | 'limit_sell' //      sell when price/mcap crosses trigger in `direction` (above = take profit, below = stop loss)
+  | 'take_profit' //     sell when change from entry >= triggerValue pct
+  | 'stop_loss' //       sell when change from entry <= -triggerValue pct
+  | 'trailing_stop' //   sell when price falls triggerValue pct from the peak; armed immediately (trailing SL)
+  //                     or once change >= activateAtChangePct (trailing TP)
+  | 'dev_sell' //        sell when the dev sells >= devSellThreshold of their holdings in one trade
+  | 'migration_buy' //   buy the moment the token migrates to its AMM pool ("migrated snipe")
+  | 'migration_sell'; // sell the moment the token migrates
 
 export type OrderStatus = 'open' | 'filled' | 'cancelled' | 'failed' | 'expired';
 
@@ -815,9 +817,13 @@ export interface Order {
   refPriceUsd: number | null;
   /** For trailing stops: highest price seen since activation. */
   peakPriceUsd: number | null;
-  /** For trailing stops: change pct needed to arm. */
+  /** For trailing stops: change pct needed to arm (null/0 = armed immediately). */
   activateAtChangePct: number | null;
   armed: boolean;
+  /** For limit orders: which crossing triggers. */
+  direction: 'above' | 'below' | null;
+  /** For dev_sell: minimum share of the dev's holdings sold in one trade (0..1). */
+  devSellThreshold: number | null;
   amount: number;
   amountKind: AmountKind;
   presetId: PresetId;
@@ -846,6 +852,8 @@ export interface CreateOrderRequest {
   /** Hours until expiry; omit for GTC. */
   expiresInHours?: number;
   activateAtChangePct?: number;
+  direction?: 'above' | 'below';
+  devSellThreshold?: number;
 }
 
 export interface PortfolioSummary {

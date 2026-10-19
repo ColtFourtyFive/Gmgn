@@ -1,38 +1,63 @@
-// STUB — replaced by the analytics implementation.
+// Analytics facade: token-side analytics (lists, token pages, security) and
+// wallet-side analytics (classification, profiles, leaderboards, feeds,
+// signals) live in separate modules; this class exposes them as AnalyticsApi.
+
 import type { FastifyInstance } from 'fastify';
 import type { AnalyticsApi, AppContext } from '../context';
-
-const todo = (): never => {
-  throw new Error('analytics: not implemented');
-};
+import { TokenAnalytics } from './tokens';
+import { registerTokenRoutes } from './tokens/routes';
+import { WalletAnalytics } from './wallets';
+import { registerWalletRoutes } from './wallets/routes';
 
 export class Analytics implements AnalyticsApi {
-  constructor(private ctx: AppContext) {}
-  install(): void {}
-  tokenSummary = todo;
-  tokenRef = todo;
-  tokenDetail = todo;
-  devInfo = todo;
-  viewTrade = todo;
-  trades = todo;
-  holders = todo;
-  topTraders = todo;
-  trenches = todo;
-  trending = todo;
-  newPairs = todo;
-  walletProfile = todo;
-  walletHoldings = todo;
-  walletActivity = todo;
-  leaderboard = todo;
-  feed = todo;
-  signals = todo;
-  narratives = todo;
-  search = todo;
-  walletTags = todo;
-  serialize(): unknown {
-    return null;
+  readonly tokens: TokenAnalytics;
+  readonly wallets: WalletAnalytics;
+
+  constructor(ctx: AppContext) {
+    this.tokens = new TokenAnalytics(ctx);
+    this.wallets = new WalletAnalytics(ctx);
   }
-  restore(_data: unknown): void {}
+
+  /** Wallet classification runs first so token summaries see fresh tags. */
+  install(): void {
+    this.wallets.install();
+    this.tokens.install();
+  }
+
+  tokenSummary: AnalyticsApi['tokenSummary'] = (t) => this.tokens.summary(t);
+  tokenRef: AnalyticsApi['tokenRef'] = (t) => this.tokens.ref(t);
+  tokenDetail: AnalyticsApi['tokenDetail'] = (t) => this.tokens.detail(t);
+  devInfo: AnalyticsApi['devInfo'] = (t) => this.tokens.devInfo(t);
+  viewTrade: AnalyticsApi['viewTrade'] = (trade, viewer) => this.tokens.viewTrade(trade, viewer);
+  trades: AnalyticsApi['trades'] = (t, opts, viewer) => this.tokens.trades(t, opts, viewer);
+  holders: AnalyticsApi['holders'] = (t, opts, viewer) => this.tokens.holders(t, opts, viewer);
+  topTraders: AnalyticsApi['topTraders'] = (t, opts, viewer) => this.tokens.topTraders(t, opts, viewer);
+  trenches: AnalyticsApi['trenches'] = (q) => this.tokens.trenches(q);
+  trending: AnalyticsApi['trending'] = (q) => this.tokens.trending(q);
+  newPairs: AnalyticsApi['newPairs'] = (chain, filters, limit) => this.tokens.newPairs(chain, filters, limit);
+  narratives: AnalyticsApi['narratives'] = (chain) => this.tokens.narratives(chain);
+  search: AnalyticsApi['search'] = (q, chain) => this.tokens.search(q, chain);
+
+  walletTags: AnalyticsApi['walletTags'] = (w) => this.wallets.tags(w);
+  walletProfile: AnalyticsApi['walletProfile'] = (w, viewer) => this.wallets.profile(w, viewer);
+  walletHoldings: AnalyticsApi['walletHoldings'] = (w, opts, viewer) => this.wallets.holdings(w, opts, viewer);
+  walletActivity: AnalyticsApi['walletActivity'] = (w, opts, viewer) => this.wallets.activity(w, opts, viewer);
+  leaderboard: AnalyticsApi['leaderboard'] = (chain, opts, viewer) => this.wallets.leaderboard(chain, opts, viewer);
+  feed: AnalyticsApi['feed'] = (chain, kind, limit, viewer) => this.wallets.feed(chain, kind, limit, viewer);
+  signals: AnalyticsApi['signals'] = (chain, opts) => this.wallets.signals(chain, opts);
+
+  serialize(): unknown {
+    return { tokens: this.tokens.serialize(), wallets: this.wallets.serialize() };
+  }
+
+  restore(data: unknown): void {
+    const d = (data ?? {}) as { tokens?: unknown; wallets?: unknown };
+    this.tokens.restore(d.tokens);
+    this.wallets.restore(d.wallets);
+  }
 }
 
-export async function registerMarketRoutes(_app: FastifyInstance, _ctx: AppContext): Promise<void> {}
+export async function registerMarketRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
+  await registerTokenRoutes(app, ctx);
+  await registerWalletRoutes(app, ctx);
+}

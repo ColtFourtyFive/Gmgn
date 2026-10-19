@@ -243,6 +243,10 @@ export interface WorldEvents {
   curveCompleted: [token: TokenState];
   tokenMigrated: [token: TokenState];
   walletCreated: [wallet: WalletState];
+  /** A KOL publicly "calls" (shills) a token; analytics turns these into call signals. */
+  kolCall: [token: TokenState, wallet: WalletState];
+  /** Off-chain flag changes: community takeover, paid boost, socials updated. */
+  tokenFlag: [token: TokenState, flag: 'cto' | 'boost' | 'socials'];
 }
 
 export interface WorldSnapshot {

@@ -2,7 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens. Colors are "r g b" triplets so Tailwind can apply alpha. */
+/*
+ * Design tokens. Colors are "r g b" triplets so Tailwind can apply alpha
+ * (bg-up/10, border-line/60). Token names are a stable API: pages and
+ * components reference them through Tailwind (bg-panel, text-muted, ...).
+ */
 :root,
 [data-theme='dark'] {
   --bg: 10 12 16;
@@ -17,7 +21,9 @@
   --accent: 255 181 71; /* brand: flare amber */
   --accent-fg: 20 14 2;
   --up: 34 214 135;
+  --up-fg: 3 22 13;
   --down: 255 84 104;
+  --down-fg: 255 255 255;
   --warn: 255 193 7;
   --info: 92 164 255;
   --smart: 74 222 128;
@@ -28,6 +34,8 @@
   --bundler: 250 204 21;
   --whale: 56 189 248;
   --fresh: 45 212 191;
+  --bot: 148 163 184;
+  --shadow-float: 0 14px 36px -12px rgb(0 0 0 / 0.7), 0 2px 6px -2px rgb(0 0 0 / 0.4);
   color-scheme: dark;
 }
 
@@ -40,12 +48,14 @@
   --line-strong: 205 210 220;
   --fg: 20 23 31;
   --muted: 96 104 120;
-  --faint: 150 157 171;
-  --accent: 214 128 0;
-  --accent-fg: 255 255 255;
-  --up: 0 160 96;
+  --faint: 140 147 161;
+  --accent: 200 115 0;
+  --accent-fg: 20 14 2;
+  --up: 0 148 88;
+  --up-fg: 255 255 255;
   --down: 222 44 70;
-  --warn: 196 140 0;
+  --down-fg: 255 255 255;
+  --warn: 180 125 0;
   --info: 30 110 230;
   --smart: 22 163 74;
   --kol: 147 51 234;
@@ -55,47 +65,66 @@
   --bundler: 202 138 4;
   --whale: 2 132 199;
   --fresh: 13 148 136;
+  --bot: 100 116 139;
+  --shadow-float: 0 14px 36px -14px rgb(16 24 40 / 0.22), 0 2px 6px -2px rgb(16 24 40 / 0.08);
   color-scheme: light;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-}
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-body {
-  @apply bg-bg text-fg font-sans text-base antialiased;
-  font-feature-settings: 'cv11', 'ss01', 'tnum';
-}
+  body {
+    @apply bg-bg text-fg font-sans text-base antialiased;
+    font-feature-settings: 'cv11', 'ss01', 'tnum';
+    -webkit-tap-highlight-color: transparent;
+  }
 
-/* Tabular numbers everywhere numbers matter. */
-.num {
-  font-variant-numeric: tabular-nums;
-}
+  ::selection {
+    background: rgb(var(--accent) / 0.3);
+  }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--line-strong)) transparent;
-}
-*::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-*::-webkit-scrollbar-thumb {
-  background: rgb(var(--line-strong));
-  border-radius: 3px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 1px;
+  }
 
-:focus-visible {
-  outline: 2px solid rgb(var(--accent));
-  outline-offset: 1px;
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border-radius: 3px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Number inputs: we render our own steppers. */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
 }
 
 @layer components {
+  /* Tabular numbers everywhere numbers matter. */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
   .panel {
     @apply bg-panel border border-line rounded;
   }
@@ -105,8 +134,22 @@ body {
   .input {
     @apply h-8 w-full rounded border border-line bg-panel-2 px-2 text-sm text-fg placeholder:text-faint outline-none transition-colors focus:border-accent;
   }
+  /* Wrapper that looks like .input and hosts a bare <input> plus prefix/suffix. */
+  .input-group {
+    @apply flex h-8 w-full items-center gap-1.5 rounded border border-line bg-panel-2 px-2 text-sm text-fg transition-colors focus-within:border-accent;
+  }
+  .input-bare {
+    @apply h-full w-full min-w-0 bg-transparent text-fg placeholder:text-faint outline-none focus-visible:outline-none;
+  }
+
   .btn {
-    @apply inline-flex h-8 items-center justify-center gap-1.5 rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-8 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-xs {
+    @apply h-6 gap-1 px-2 text-xs;
+  }
+  .btn-sm {
+    @apply h-7 px-2.5 text-sm;
   }
   .btn-primary {
     @apply btn bg-accent text-accent-fg hover:brightness-110;
@@ -117,17 +160,53 @@ body {
   .btn-outline {
     @apply btn border border-line text-fg hover:border-line-strong hover:bg-panel-2;
   }
+  .btn-soft {
+    @apply btn bg-panel-3 text-fg hover:bg-line-strong/60;
+  }
   .btn-buy {
-    @apply btn bg-up text-white hover:brightness-110;
+    @apply btn bg-up text-up-fg hover:brightness-110;
   }
   .btn-sell {
-    @apply btn bg-down text-white hover:brightness-110;
+    @apply btn bg-down text-down-fg hover:brightness-110;
   }
+  .btn-danger {
+    @apply btn border border-down/40 text-down hover:bg-down/10;
+  }
+
   .table-head {
     @apply text-2xs uppercase tracking-wide text-faint font-medium;
   }
   .link {
     @apply text-fg hover:text-accent transition-colors;
+  }
+  .kbd {
+    @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-line-strong bg-panel-2 px-1 font-mono text-2xs leading-none text-muted;
+  }
+
+  /* Subscript zero-count inside tiny prices: 0.0₅123. */
+  .subz {
+    font-size: 0.72em;
+    line-height: 0;
+    vertical-align: -0.28em;
+  }
+
+  /* Skeleton shimmer block. */
+  .skeleton {
+    @apply animate-shimmer rounded bg-panel-3;
+    background-image: linear-gradient(90deg, transparent 0%, rgb(var(--line-strong) / 0.45) 50%, transparent 100%);
+    background-size: 200% 100%;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
@@ -136,6 +215,7 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
