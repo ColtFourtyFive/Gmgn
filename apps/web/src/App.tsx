@@ -22,6 +22,7 @@ const AlertsPage = lazy(() => import('@/pages/AlertsPage'));
 const RewardsPage = lazy(() => import('@/pages/RewardsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+const UiGalleryPage = lazy(() => import('@/pages/UiGalleryPage'));
 
 /** Validates :chain and remembers it; unknown chains redirect to the last used chain. */
 function ChainGuard({ children }: { children: React.ReactNode }) {
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/rewards" element={<RewardsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/_ui" element={<UiGalleryPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>

@@ -49,7 +49,7 @@
   --fg: 20 23 31;
   --muted: 96 104 120;
   --faint: 140 147 161;
-  --accent: 200 115 0;
+  --accent: 217 125 0;
   --accent-fg: 20 14 2;
   --up: 0 148 88;
   --up-fg: 255 255 255;
@@ -207,6 +207,11 @@
   }
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Full viewport height that tracks mobile browser toolbars (dvh) with a vh fallback. */
+  .h-app {
+    height: 100vh;
+    height: 100dvh;
   }
 }
 

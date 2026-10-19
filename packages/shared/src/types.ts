@@ -705,6 +705,8 @@ export interface UserWallet {
 export interface Account {
   id: string;
   username: string;
+  /** Instant guest account (no password yet); registering while signed in as a guest upgrades it in place. */
+  isGuest?: boolean;
   createdAt: number;
   referralCode: string;
   referredBy: string | null;

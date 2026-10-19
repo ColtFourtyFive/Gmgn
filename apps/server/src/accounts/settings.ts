@@ -102,7 +102,6 @@ const chainPatch = z
   })
   .partial();
 
-const ratio = num.min(0).max(1);
 const displayPatch = z
   .object({
     currency: z.enum(['usd', 'native']),
@@ -113,7 +112,7 @@ const displayPatch = z
     confirmTrades: z.boolean(),
     sounds: z.boolean(),
     hotkeys: z.boolean(),
-    riskThresholds: z.object({ top10: ratio, dev: ratio, insiders: ratio, bundlers: ratio, snipers: ratio }).partial(),
+    riskThresholds: z.object({ top10: num, dev: num, insiders: num, bundlers: num, snipers: num }).partial(),
   })
   .partial();
 
@@ -160,7 +159,9 @@ export function applySettingsPatch(current: UserSettings, patch: SettingsPatch):
   }
   const { riskThresholds, ...display } = patch.display ?? {};
   Object.assign(next.display, display);
-  Object.assign(next.display.riskThresholds, riskThresholds);
+  for (const [key, value] of Object.entries(riskThresholds ?? {})) {
+    next.display.riskThresholds[key as keyof DisplaySettings['riskThresholds']] = clamp(value, 0, 1);
+  }
   return next;
 }
 

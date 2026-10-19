@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function read<T>(key: string, initial: T): T {
   try {
@@ -16,6 +16,9 @@ function read<T>(key: string, initial: T): T {
  */
 export function useLocalStorage<T>(key: string, initial: T): [T, (next: T | ((prev: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => read(key, initial));
+  // `initial` is only a fallback; keep the latest without re-subscribing on its identity.
+  const initialRef = useRef(initial);
+  initialRef.current = initial;
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {
@@ -34,12 +37,10 @@ export function useLocalStorage<T>(key: string, initial: T): [T, (next: T | ((pr
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === key) setValue(read(key, initial));
+      if (e.key === key) setValue(read(key, initialRef.current));
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-    // `initial` is only a fallback; re-subscribing on its identity is unnecessary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   return [value, set];
