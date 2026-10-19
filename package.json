@@ -1,0 +1,17 @@
+{
+  "name": "trenchscope",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Trenchscope — a multi-chain memecoin trading terminal (spinoff web app) with a built-in market simulator",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm --filter @trenchscope/web build && pnpm --filter @trenchscope/server build",
+    "start": "pnpm --filter @trenchscope/server start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "e2e": "pnpm --filter @trenchscope/web e2e"
+  }
+}

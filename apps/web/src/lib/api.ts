@@ -1,0 +1,188 @@
+// Typed REST client for the Trenchscope API (see docs/API.md).
+
+import type {
+  Account,
+  AlertRule,
+  AppNotification,
+  AuthResponse,
+  CandleResponse,
+  ChainId,
+  CopyTradeTask,
+  CreateOrderRequest,
+  DevInfo,
+  FeedItem,
+  FollowedWallet,
+  LeaderboardRow,
+  MetaResponse,
+  Narrative,
+  Order,
+  PortfolioSummary,
+  Position,
+  Quote,
+  QuoteRequest,
+  Resolution,
+  RewardsSummary,
+  SearchResult,
+  Signal,
+  SniperTask,
+  StatWindow,
+  SwapReceipt,
+  SwapRequest,
+  TokenDetail,
+  TokenFilters,
+  TokenPositionRow,
+  TokenSummary,
+  Trade,
+  TrenchesColumn,
+  TrenchesSnapshot,
+  TrendingSnapshot,
+  TrendingSort,
+  UserSettings,
+  UserWallet,
+  WalletPeriod,
+  WalletProfile,
+  WatchlistItem,
+} from '@trenchscope/shared';
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+  }
+}
+
+let authToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn;
+}
+
+type Query = Record<string, string | number | boolean | undefined | null | object>;
+
+function qs(query?: Query): string {
+  if (!query) return '';
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null || v === '') continue;
+    p.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  }
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (opts.body !== undefined) headers['content-type'] = 'application/json';
+  if (authToken) headers.authorization = `Bearer ${authToken}`;
+  const res = await fetch(`/api${path}${qs(opts.query)}`, {
+    method,
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    signal: opts.signal,
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text };
+    }
+  }
+  if (!res.ok) {
+    const err = (data ?? {}) as { error?: string; code?: string };
+    if (res.status === 401) onUnauthorized?.();
+    throw new ApiError(res.status, err.error ?? res.statusText, err.code);
+  }
+  return data as T;
+}
+
+const get = <T>(path: string, query?: Query, signal?: AbortSignal) => request<T>('GET', path, { query, signal });
+const post = <T>(path: string, body?: unknown) => request<T>('POST', path, { body: body ?? {} });
+const put = <T>(path: string, body: unknown) => request<T>('PUT', path, { body });
+const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, { body });
+const del = <T>(path: string) => request<T>('DELETE', path);
+
+export const api = {
+  // meta
+  meta: () => get<MetaResponse>('/meta'),
+  search: (q: string, chain?: ChainId, signal?: AbortSignal) => get<SearchResult>('/search', { q, chain }, signal),
+
+  // market
+  trenches: (chain: ChainId, filters?: Partial<Record<TrenchesColumn, TokenFilters>>, limit?: number) =>
+    get<TrenchesSnapshot>(`/${chain}/trenches`, { filters, limit }),
+  trending: (chain: ChainId, q: { window: StatWindow; sort?: TrendingSort; order?: 'asc' | 'desc'; filters?: TokenFilters; limit?: number }) =>
+    get<TrendingSnapshot>(`/${chain}/trending`, q),
+  newPairs: (chain: ChainId, filters?: TokenFilters, limit?: number) => get<TokenSummary[]>(`/${chain}/new-pairs`, { filters, limit }),
+  token: (chain: ChainId, address: string) => get<TokenDetail>(`/${chain}/tokens/${address}`),
+  candles: (chain: ChainId, address: string, resolution: Resolution, limit?: number) =>
+    get<CandleResponse>(`/${chain}/tokens/${address}/candles`, { resolution, limit }),
+  trades: (chain: ChainId, address: string, q: { filter?: string; wallet?: string; minUsd?: number; limit?: number; before?: number } = {}) =>
+    get<Trade[]>(`/${chain}/tokens/${address}/trades`, q),
+  holders: (chain: ChainId, address: string, q: { tag?: string; limit?: number } = {}) => get<Position[]>(`/${chain}/tokens/${address}/holders`, q),
+  topTraders: (chain: ChainId, address: string, q: { tag?: string; sort?: string; order?: 'asc' | 'desc'; limit?: number } = {}) =>
+    get<Position[]>(`/${chain}/tokens/${address}/top-traders`, q),
+  dev: (chain: ChainId, address: string) => get<DevInfo>(`/${chain}/tokens/${address}/dev`),
+  wallet: (chain: ChainId, address: string) => get<WalletProfile>(`/${chain}/wallets/${address}`),
+  walletHoldings: (chain: ChainId, address: string, q: { includeClosed?: boolean; sort?: string } = {}) =>
+    get<TokenPositionRow[]>(`/${chain}/wallets/${address}/holdings`, { ...q, includeClosed: q.includeClosed ? 1 : undefined }),
+  walletActivity: (chain: ChainId, address: string, q: { type?: string; limit?: number; before?: number } = {}) =>
+    get<FeedItem[]>(`/${chain}/wallets/${address}/activity`, q),
+  leaderboard: (chain: ChainId, q: { tag?: string; period?: WalletPeriod; sort?: string; limit?: number } = {}) =>
+    get<LeaderboardRow[]>(`/${chain}/leaderboard`, q),
+  feed: (chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit?: number) => get<FeedItem[]>(`/${chain}/feed`, { kind, limit }),
+  signals: (chain: ChainId, q: { kind?: string; limit?: number } = {}) => get<Signal[]>(`/${chain}/signals`, q),
+  narratives: (chain: ChainId) => get<Narrative[]>(`/${chain}/narratives`),
+
+  // accounts
+  guest: (referralCode?: string) => post<AuthResponse>('/auth/guest', { referralCode }),
+  register: (username: string, password: string, referralCode?: string) => post<AuthResponse>('/auth/register', { username, password, referralCode }),
+  login: (username: string, password: string) => post<AuthResponse>('/auth/login', { username, password }),
+  logout: () => post<{ ok: true }>('/auth/logout'),
+  me: () => get<Account>('/me'),
+  settings: () => get<UserSettings>('/settings'),
+  updateSettings: (patchBody: DeepPartial<UserSettings>) => put<UserSettings>('/settings', patchBody),
+  faucet: (chain: ChainId) => post<UserWallet>('/wallet/faucet', { chain }),
+  follows: (chain?: ChainId) => get<FollowedWallet[]>('/follows', { chain }),
+  follow: (body: { chain: ChainId; address: string; remark?: string; group?: string; notify?: boolean }) => post<FollowedWallet>('/follows', body),
+  updateFollow: (chain: ChainId, address: string, body: { remark?: string; group?: string; notify?: boolean }) =>
+    patch<FollowedWallet>(`/follows/${chain}/${address}`, body),
+  unfollow: (chain: ChainId, address: string) => del<{ ok: true }>(`/follows/${chain}/${address}`),
+  watchlist: () => get<{ items: WatchlistItem[]; tokens: TokenSummary[] }>('/watchlist'),
+  addWatch: (chain: ChainId, address: string) => post<WatchlistItem>('/watchlist', { chain, address }),
+  removeWatch: (chain: ChainId, address: string) => del<{ ok: true }>(`/watchlist/${chain}/${address}`),
+  notifications: (limit?: number) => get<AppNotification[]>('/notifications', { limit }),
+  markRead: (ids?: string[]) => post<{ ok: true }>('/notifications/read', { ids }),
+  rewards: () => get<RewardsSummary>('/rewards'),
+
+  // trading
+  quote: (body: QuoteRequest) => post<Quote>('/trade/quote', body),
+  swap: (body: SwapRequest) => post<SwapReceipt>('/trade/swap', body),
+  orders: (q: { status?: 'open' | 'history'; chain?: ChainId; token?: string } = {}) => get<Order[]>('/orders', q),
+  createOrder: (body: CreateOrderRequest) => post<Order>('/orders', body),
+  cancelOrder: (id: string) => del<Order>(`/orders/${id}`),
+  portfolio: (chain: ChainId | 'all' = 'all') => get<PortfolioSummary>('/portfolio', { chain }),
+  portfolioActivity: (q: { chain?: ChainId; limit?: number } = {}) => get<FeedItem[]>('/portfolio/activity', q),
+  copyTasks: () => get<CopyTradeTask[]>('/copytrade'),
+  createCopyTask: (body: Omit<CopyTradeTask, 'id' | 'createdAt' | 'stats'>) => post<CopyTradeTask>('/copytrade', body),
+  updateCopyTask: (id: string, body: Partial<CopyTradeTask>) => patch<CopyTradeTask>(`/copytrade/${id}`, body),
+  deleteCopyTask: (id: string) => del<{ ok: true }>(`/copytrade/${id}`),
+  sniperTasks: () => get<SniperTask[]>('/sniper'),
+  createSniperTask: (body: Omit<SniperTask, 'id' | 'createdAt' | 'buysDone' | 'lastTriggeredAt'>) => post<SniperTask>('/sniper', body),
+  updateSniperTask: (id: string, body: Partial<SniperTask>) => patch<SniperTask>(`/sniper/${id}`, body),
+  deleteSniperTask: (id: string) => del<{ ok: true }>(`/sniper/${id}`),
+  alerts: () => get<AlertRule[]>('/alerts'),
+  createAlert: (body: Omit<AlertRule, 'id' | 'createdAt' | 'lastTriggeredAt'>) => post<AlertRule>('/alerts', body),
+  updateAlert: (id: string, body: Partial<AlertRule>) => patch<AlertRule>(`/alerts/${id}`, body),
+  deleteAlert: (id: string) => del<{ ok: true }>(`/alerts/${id}`),
+};
+
+export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? (T[K] extends unknown[] ? T[K] : DeepPartial<T[K]>) : T[K] };

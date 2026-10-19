@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens. Colors are "r g b" triplets so Tailwind can apply alpha. */
+:root,
+[data-theme='dark'] {
+  --bg: 10 12 16;
+  --panel: 17 20 26;
+  --panel-2: 23 27 34;
+  --panel-3: 31 36 45;
+  --line: 34 39 49;
+  --line-strong: 48 55 68;
+  --fg: 230 233 240;
+  --muted: 140 148 163;
+  --faint: 92 99 114;
+  --accent: 255 181 71; /* brand: flare amber */
+  --accent-fg: 20 14 2;
+  --up: 34 214 135;
+  --down: 255 84 104;
+  --warn: 255 193 7;
+  --info: 92 164 255;
+  --smart: 74 222 128;
+  --kol: 192 132 252;
+  --dev: 251 146 60;
+  --sniper: 248 113 113;
+  --insider: 244 114 182;
+  --bundler: 250 204 21;
+  --whale: 56 189 248;
+  --fresh: 45 212 191;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: 244 245 248;
+  --panel: 255 255 255;
+  --panel-2: 247 248 250;
+  --panel-3: 236 238 243;
+  --line: 226 229 236;
+  --line-strong: 205 210 220;
+  --fg: 20 23 31;
+  --muted: 96 104 120;
+  --faint: 150 157 171;
+  --accent: 214 128 0;
+  --accent-fg: 255 255 255;
+  --up: 0 160 96;
+  --down: 222 44 70;
+  --warn: 196 140 0;
+  --info: 30 110 230;
+  --smart: 22 163 74;
+  --kol: 147 51 234;
+  --dev: 234 88 12;
+  --sniper: 220 38 38;
+  --insider: 219 39 119;
+  --bundler: 202 138 4;
+  --whale: 2 132 199;
+  --fresh: 13 148 136;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg font-sans text-base antialiased;
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+}
+
+/* Tabular numbers everywhere numbers matter. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line-strong)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--line-strong));
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 1px;
+}
+
+@layer components {
+  .panel {
+    @apply bg-panel border border-line rounded;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded px-1.5 py-px text-2xs font-medium leading-4 whitespace-nowrap;
+  }
+  .input {
+    @apply h-8 w-full rounded border border-line bg-panel-2 px-2 text-sm text-fg placeholder:text-faint outline-none transition-colors focus:border-accent;
+  }
+  .btn {
+    @apply inline-flex h-8 items-center justify-center gap-1.5 rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-fg hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:bg-panel-3 hover:text-fg;
+  }
+  .btn-outline {
+    @apply btn border border-line text-fg hover:border-line-strong hover:bg-panel-2;
+  }
+  .btn-buy {
+    @apply btn bg-up text-white hover:brightness-110;
+  }
+  .btn-sell {
+    @apply btn bg-down text-white hover:brightness-110;
+  }
+  .table-head {
+    @apply text-2xs uppercase tracking-wide text-faint font-medium;
+  }
+  .link {
+    @apply text-fg hover:text-accent transition-colors;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

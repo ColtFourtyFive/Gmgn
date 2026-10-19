@@ -1,0 +1,191 @@
+// Composition root: builds the world, services, HTTP routes and WebSocket hub.
+
+import { existsSync } from 'node:fs';
+import Fastify, { type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import websocket from '@fastify/websocket';
+import { CHAIN_IDS, LAUNCHPADS, PLATFORM_FEE_RATE, type MetaResponse } from '@trenchscope/shared';
+import { Accounts, registerAccountRoutes } from './accounts';
+import { Analytics, registerMarketRoutes } from './analytics';
+import { HttpError, sendError, type AppConfig, type AppContext } from './context';
+import { loadSnapshot, saveSnapshot, SNAPSHOT_VERSION, type Snapshot } from './persistence';
+import { Engine } from './sim/engine';
+import { MarketSim } from './sim/market';
+import { World } from './sim/world';
+import { Trading, registerTradingRoutes } from './trading';
+import { Hub } from './ws/hub';
+
+export interface BuiltApp {
+  app: FastifyInstance;
+  ctx: AppContext;
+  market: MarketSim;
+  /** Persist a snapshot now (no-op when persistence is disabled). */
+  save(): void;
+  close(): Promise<void>;
+}
+
+export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  return {
+    port: Number(process.env.PORT ?? 8787),
+    host: process.env.HOST ?? '0.0.0.0',
+    dataDir: process.env.DATA_DIR ?? '.data',
+    seed: process.env.SIM_SEED ?? 'trenchscope',
+    warmupMinutes: Number(process.env.WARMUP_MINUTES ?? 90),
+    snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 60000),
+    webDist: process.env.WEB_DIST ?? null,
+    ...overrides,
+  };
+}
+
+export async function buildApp(config: AppConfig, opts: { start?: boolean; persist?: boolean; logger?: boolean } = {}): Promise<BuiltApp> {
+  const persist = opts.persist ?? config.snapshotEveryMs > 0;
+  const snapshot = persist ? loadSnapshot(config.dataDir) : null;
+
+  const world = snapshot ? World.restore(snapshot.world) : new World(config.seed);
+  const engine = new Engine(world);
+  const hub = new Hub();
+  const ctx = { config, world, engine, hub } as AppContext;
+  const accounts = new Accounts(ctx);
+  const analytics = new Analytics(ctx);
+  const trading = new Trading(ctx);
+  ctx.accounts = accounts;
+  ctx.analytics = analytics;
+  ctx.trading = trading;
+  const market = new MarketSim(ctx);
+
+  // Install order = ticker order: market dynamics first, then analytics, trading, accounts.
+  market.install();
+  analytics.install();
+  trading.install();
+  accounts.install();
+  hub.setAuthResolver((token) => ctx.accounts.resolveToken(token));
+
+  if (snapshot) {
+    market.restore(snapshot.market);
+    ctx.accounts.restore(snapshot.accounts);
+    ctx.analytics.restore(snapshot.analytics);
+    ctx.trading.restore(snapshot.trading);
+    console.log(`[app] restored snapshot from ${new Date(snapshot.savedAt).toISOString()} (${world.tokens.size} tokens)`);
+  } else {
+    market.seedPopulation();
+    if (config.warmupMinutes > 0) engine.warmup(config.warmupMinutes * 60000);
+  }
+
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
+  await app.register(cors, { origin: true });
+  await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
+
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof HttpError) return sendError(reply, err);
+    const status = (err as { statusCode?: number }).statusCode;
+    const message = err instanceof Error ? err.message : 'request failed';
+    if (status && status >= 400 && status < 500) return reply.status(status).send({ error: message });
+    console.error('[app] unhandled error', err);
+    return reply.status(500).send({ error: 'internal error' });
+  });
+
+  app.get('/ws', { websocket: true }, (socket) => {
+    hub.attach(socket);
+  });
+
+  app.get('/api/health', async () => ({ ok: true, now: world.now, tokens: world.tokens.size, clients: hub.clientCount, tps: engine.tps }));
+
+  app.get('/api/meta', async (): Promise<MetaResponse> => buildMeta(ctx));
+
+  await registerMarketRoutes(app, ctx);
+  await registerAccountRoutes(app, ctx);
+  await registerTradingRoutes(app, ctx);
+
+  // `market` channel: chain-level info every 5s.
+  hub.register('market', {
+    onSubscribe(sub) {
+      hub.send(sub, 'market', buildMeta(ctx).chains);
+    },
+  });
+  engine.addTicker('market-channel', () => hub.publish('market', 'market', buildMeta(ctx).chains), { everyMs: 5000 });
+
+  if (config.webDist && existsSync(config.webDist)) {
+    await app.register(fastifyStatic, { root: config.webDist, prefix: '/', wildcard: false });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/api') || req.url.startsWith('/ws')) return reply.status(404).send({ error: 'not found' });
+      return reply.sendFile('index.html');
+    });
+  }
+
+  const save = () => {
+    if (!persist) return;
+    const snap: Snapshot = {
+      version: SNAPSHOT_VERSION,
+      savedAt: Date.now(),
+      world: world.serialize(),
+      market: market.serialize(),
+      accounts: ctx.accounts.serialize(),
+      analytics: ctx.analytics.serialize(),
+      trading: ctx.trading.serialize(),
+    };
+    try {
+      saveSnapshot(config.dataDir, snap);
+    } catch (err) {
+      console.error('[app] snapshot failed', err);
+    }
+  };
+
+  let snapTimer: NodeJS.Timeout | null = null;
+  if (opts.start ?? true) {
+    engine.start();
+    if (persist && config.snapshotEveryMs > 0) {
+      snapTimer = setInterval(save, config.snapshotEveryMs);
+      snapTimer.unref?.();
+    }
+  }
+
+  return {
+    app,
+    ctx,
+    market,
+    save,
+    async close() {
+      if (snapTimer) clearInterval(snapTimer);
+      engine.stop();
+      save();
+      await app.close();
+    },
+  };
+}
+
+export function buildMeta(ctx: AppContext): MetaResponse {
+  const { world, engine } = ctx;
+  return {
+    serverTime: world.now,
+    platformFeeRate: PLATFORM_FEE_RATE,
+    chains: CHAIN_IDS.map((id) => {
+      const c = world.chains[id];
+      let volume24hUsd = 0;
+      let tracked = 0;
+      for (const addr of world.tokensByChain[id]) {
+        const t = world.tokens.get(addr);
+        if (!t || t.dormant) continue;
+        tracked++;
+        volume24hUsd += (t.cache.volume24hUsd as number | undefined) ?? 0;
+      }
+      const base = { low: 0, medium: 0, high: 0 };
+      const fee = id === 'sol' ? 0.0001 : id === 'eth' ? 0.0008 : id === 'bsc' ? 0.0001 : 0.00002;
+      base.low = fee * 0.5;
+      base.medium = fee;
+      base.high = fee * 3;
+      return {
+        chain: id,
+        nativeUsd: c.nativeUsd,
+        nativeChange24h: c.nativeUsdOpen24h > 0 ? c.nativeUsd / c.nativeUsdOpen24h - 1 : 0,
+        priorityFee: base,
+        tokensTracked: tracked,
+        launches1h: c.launches.length,
+        migrations1h: c.migrations.length,
+        volume24hUsd,
+      };
+    }),
+    launchpads: LAUNCHPADS.map((l) => ({ id: l.id, chain: l.chain, name: l.name, color: l.color })),
+    sim: { seed: world.seed, startedAt: world.startedAt, speed: 1, tradesPerSecond: engine.tps },
+  };
+}
