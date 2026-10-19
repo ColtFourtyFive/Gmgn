@@ -5,6 +5,10 @@ const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // Scope Tailwind's `--tw-*` defaults to the elements whose utilities read
+  // them, instead of `*, ::before, ::after`: ~50 custom properties on every
+  // node made style recalcs of large live tables 2x slower.
+  experimental: { optimizeUniversalDefaults: true },
   darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
