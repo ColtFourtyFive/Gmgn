@@ -15,7 +15,7 @@ const SEC = 1000;
 const MIN = 60 * SEC;
 
 /** Trades per second a token sees at unit activity, per chain. */
-export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.65, bsc: 0.5, base: 0.45, eth: 0.8 };
+export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.58, bsc: 0.42, base: 0.45, eth: 0.8 };
 
 const COPYCAT_FATES: TokenFate[] = ['dud', 'rug', 'pump_dump'];
 const COPYCAT_WEIGHTS = [70, 20, 10];

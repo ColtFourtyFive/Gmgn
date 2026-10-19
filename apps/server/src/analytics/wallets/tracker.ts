@@ -345,6 +345,10 @@ export class WalletTrack {
     tr.lastTradeAt = d.lastTradeAt ?? 0;
     tr.hours = d.hours ?? [];
     tr.days = d.days ?? [];
+    for (const b of tr.hours.concat(tr.days)) {
+      b.entries ??= 0;
+      b.hits ??= 0;
+    }
     tr.tokens = d.tokens instanceof Map ? d.tokens : new Map();
     tr.cw = Ring.from(d.cw ?? [], CW_RING);
     tr.act = Ring.from(d.act ?? [], d.actCap || 100);

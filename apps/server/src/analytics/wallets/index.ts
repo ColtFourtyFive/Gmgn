@@ -295,8 +295,9 @@ export class WalletAnalytics {
     this.tracks.get(e.wallet)?.creditHit(e.at);
   };
 
+  /** Paper-trading account wallets (observable via accountId) keep a longer activity history. */
   private actCap(w: WalletState): number {
-    return w.accountId !== null || w.archetype === 'user' ? ACT_RING_USER : ACT_RING_SIM;
+    return w.accountId !== null ? ACT_RING_USER : ACT_RING_SIM;
   }
 
   // -------------------------------------------------------------------------

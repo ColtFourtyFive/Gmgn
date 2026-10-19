@@ -107,14 +107,14 @@ for (const chain of CHAIN_IDS) {
   const peaks = [6e4, 5e5, 1e6, 1e7, Infinity];
   const peakBands = peaks.map((hi, i) => migrated.filter((t) => t.athMarketCapUsd < hi && t.athMarketCapUsd >= (i ? peaks[i - 1] : 0)).length);
   const rugged = all.filter((t) => simOf(t).ruggedAt);
-  const drawdown = avg(rugged.map((t) => 1 - world.marketCapUsd(t) / t.athMarketCapUsd));
+  const drawdown = (fate: string) => formatPercent(avg(rugged.filter((t) => t.fate === fate).map((t) => 1 - world.marketCapUsd(t) / t.athMarketCapUsd)), { sign: false });
   const fates = new Map<string, number>();
   for (const t of all) fates.set(t.fate, (fates.get(t.fate) ?? 0) + 1);
   const sampleAlmost = samples.slice(1).map((s) => s.almost[chain]);
   const sampleTps = samples.slice(1).map((s) => s.tps[chain]);
 
   console.log(`\n--- ${chain.toUpperCase()} (native $${world.nativeUsd(chain).toFixed(2)}) ---`);
-  console.log(`launches ${st.launches} (${(st.launches / hours).toFixed(0)}/h) | migrations ${st.migrations} (${(st.migrations / hours).toFixed(1)}/h, ${formatPercent(st.migrations / Math.max(1, st.launches), { sign: false })}) | rugs ${st.rugs} (avg drawdown ${formatPercent(drawdown, { sign: false })}) | dumps ${st.dumps} | CTO ${st.ctos} | boosts ${st.boosts} | revivals ${st.revivals} | pruned ${st.pruned}`);
+  console.log(`launches ${st.launches} (${(st.launches / hours).toFixed(0)}/h) | migrations ${st.migrations} (${(st.migrations / hours).toFixed(1)}/h, ${formatPercent(st.migrations / Math.max(1, st.launches), { sign: false })}) | rugs ${st.rugs} (avg drawdown from ATH: rug ${drawdown('rug')}, slow rug ${drawdown('slow_rug')}) | dumps ${st.dumps} | CTO ${st.ctos} | boosts ${st.boosts} | revivals ${st.revivals} | pruned ${st.pruned}`);
   console.log(`fates: ${[...fates].map(([f, n]) => `${f} ${formatPercent(n / all.length, { sign: false, digits: 1 })}`).join(', ')}`);
   console.log(`trades ${st.trades} (${(st.trades / (minutes * 60)).toFixed(1)}/s avg; 10-min samples ${sampleTps.map((x) => x.toFixed(1)).join(' ')})`);
   console.log(`tokens: ${all.length} total, ${live.length} active, ${all.length - live.length} dormant | curve progress <10%: ${bands[0]}, 10-30%: ${bands[1]}, 30-99% (almost): ${bands[2]} (samples ${sampleAlmost.join(' ')}) | migrated ${migrated.length}`);

@@ -247,11 +247,16 @@ export class MarketSim {
     return 'retail';
   }
 
-  /** Smart money's edge: they mostly buy tokens whose hidden plan still has upside, and not above value. */
-  private smartWants(w: WalletState, t: TokenState, s: TokenSim, gap: number, now: number): boolean {
+  /**
+   * The informed edge: smart money mostly buys tokens whose hidden plan still has
+   * upside (and not above value); whales get a weaker version of the same read.
+   */
+  private informedWants(role: Role, w: WalletState, t: TokenState, s: TokenSim, gap: number, now: number): boolean {
     const rng = this.world.rng;
-    if (hasUpside(t.fate, s, now + 5 * MIN)) return gap > -0.05 && rng.chance(0.9);
-    return rng.chance((1 - w.skill) * 0.2);
+    const upside = hasUpside(t.fate, s, now + 5 * MIN);
+    if (role === 'smart') return upside ? gap > -0.05 && rng.chance(0.9) : rng.chance((1 - w.skill) * 0.2);
+    if (role === 'whale') return upside || !rng.chance(w.skill * 0.6);
+    return true;
   }
 
   /** Skilled wallets read the contract before aping. */
@@ -264,7 +269,7 @@ export class MarketSim {
     const rng = world.rng;
     let role = this.pickBuyerRole(stage, t, gap, momentum);
     let w = roster.pick(t.chain, role);
-    if (w && (role === 'smart' || role === 'sniper' || role === 'whale') && (this.avoidsContract(w, t) || (role === 'smart' && !this.smartWants(w, t, s, gap, now)))) {
+    if (w && (role === 'smart' || role === 'sniper' || role === 'whale') && (this.avoidsContract(w, t) || !this.informedWants(role, w, t, s, gap, now))) {
       role = 'retail';
       w = roster.pick(t.chain, role);
     }
