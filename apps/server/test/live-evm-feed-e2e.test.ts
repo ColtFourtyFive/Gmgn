@@ -16,7 +16,7 @@ import { FixtureRpc, type RpcFixture } from '../src/live/evm/feed/fixture-rpc';
 import { toUnits } from '../src/live/evm/feed/math';
 import { parseRawLog } from '../src/live/evm/feed/rpc';
 import { FLAP_TOPIC } from '../src/live/evm/feed/venues/flap';
-import { PONS_TOPIC } from '../src/live/evm/feed/venues/pons';
+import { PONS, PONS_TOPIC } from '../src/live/evm/feed/venues/pons';
 import { buildVenues } from '../src/live/evm/feed/venues/registry';
 import { NativePriceFeed } from '../src/live/evm/price';
 import type { TokenState } from '../src/sim/world';
@@ -137,9 +137,14 @@ describe('Robinhood Chain replay (Pons, Flap, Uniswap V4)', () => {
       }
     }
 
-    // Trenches: curve tokens in New / Near graduation; summaries priced in USD.
+    // Trenches: the fresh launch in New (curves first seen trading days after their launch
+    // sit in the ledger by age, not at the end); summaries priced in USD.
     const trenches = analytics.trenches({ chain: 'robinhood' });
-    expect(trenches.new.length + trenches.almost.length).toBeGreaterThan(0);
+    expect(world.progress(token)).toBeLessThan(0.35);
+    expect(trenches.new.map((s) => s.address)).toContain(token.address);
+    expect(trenches.almost.length).toBeGreaterThan(0);
+    const ages = world.tokensByChain.robinhood.map((a) => world.tokens.get(a)!.createdAt);
+    expect(ages).toEqual([...ages].sort((a, b) => a - b));
     const s = analytics.tokenSummary(token);
     expect(s.launchpad).toBe('pons');
     expect(s.marketCapUsd).toBeGreaterThan(0);
@@ -183,6 +188,56 @@ describe('Robinhood Chain replay (Pons, Flap, Uniswap V4)', () => {
     a.feed.poller.cursor = BigInt(a.fixture.from - 1);
     while ((a.feed.poller.cursor ?? -1n) < BigInt(a.fixture.to)) await a.feed.pollOnce();
     expect(a.built.ctx.world.tradeTotal).toBe(before);
+  });
+});
+
+describe('Robinhood Chain replay: a Pons launch that graduates in its launch transaction', () => {
+  // Block 93,660,704: one transaction launches CREORA, buys the whole curve for 28 wallets
+  // (CurveBuy recipients), completes it (CurveCompleted: 4.2 ETH), sweeps it and seeds the
+  // Uniswap V4 pool (PoolGraduated), then buys four times through that pool.
+  const TOKEN = '0xb11384a6ac2b3708e3d25a834c8a88687accbcd1';
+  const TX = '0xcd2a2dea83a735db6b30cc299f5b597eeb5cce48b8b9b8bba2ac7495bdcf9572';
+
+  it('books the bundled buys to their recipients, completes the curve, then migrates into the hooked V4 pool', async () => {
+    const r = await replay('robinhood-pons-graduation.json');
+    const { world, analytics } = r.built.ctx;
+    expect(r.rpc.missingCalls).toBe(0);
+    const completed: number[] = [];
+    world.on('curveCompleted', (t) => completed.push(world.progress(t)));
+
+    const t = world.tokens.get(TOKEN)!;
+    expect(t).toMatchObject({ symbol: 'CREORA', launchpad: 'pons', status: 'migrated', creator: '0x428b02828345263b94419fce37c8f4cf68e59c03' });
+    // the curve as CurveCompleted reports it: 4.2 ETH raised, the reserved 2/7 of supply left
+    const done = r.fixture.logs.map(parseRawLog).find((l) => l.topics[0] === PONS_TOPIC.curveCompleted && l.transactionHash === TX)!;
+    expect(done).toBeDefined();
+    expect(t.curve!.realNative).toBeCloseTo(4.2, 9);
+    expect(t.curve!.virtualTokens).toBeCloseTo(285_714_285.714, 2);
+    expect(t.completedAt).toBe(t.migratedAt);
+
+    // the graduation pool: native ETH / CREORA, fee 0, PonsV2MemeHook, locked liquidity
+    const pool = r.feed.pools.forToken(TOKEN)!;
+    expect(pool).toMatchObject({ kind: 'v4', id: '0x089ada66d5258297e1cab1516708a9fb1aef166df3ee901a75f3f2c7f7e79202', hooks: PONS.memeHook, feeRate: 0, quote: '0x0000000000000000000000000000000000000000' });
+    expect(t.pool).toMatchObject({ address: pool.id, dex: 'Uniswap V4', lpBurnedRate: 1 });
+    // seeded with PoolGraduated's 4.2 ETH
+    expect(t.pool!.initialLiquidityUsd / (2 * world.nativeUsd('robinhood'))).toBeCloseTo(4.2, 6);
+    expect(world.priceNative(t)).toBeGreaterThan(0);
+
+    // one trade per recipient wallet (one of them bought twice in the transaction: merged)
+    const recipients = new Set(r.fixture.logs.map(parseRawLog).filter((l) => l.topics[0] === PONS_TOPIC.curveBuy && l.transactionHash === TX).map((l) => `0x${l.topics[2].slice(26)}`));
+    expect(recipients.size).toBe(28);
+    const launchBuys = t.trades.filter((tr) => tr.txHash === TX && recipients.has(tr.wallet));
+    expect(launchBuys).toHaveLength(28);
+    expect(launchBuys.every((tr) => tr.side === 'buy')).toBe(true);
+    // the curve's 4.2 ETH (net of the 1% fee) all went into those buys
+    expect(launchBuys.reduce((s, tr) => s + tr.nativeAmount, 0) * 0.99).toBeCloseTo(4.2, 3);
+    expect(launchBuys.reduce((s, tr) => s + tr.tokenAmount, 0)).toBeCloseTo(714_285_714.2857, 0);
+    expect(expectExactHolders(r)).toBeGreaterThanOrEqual(28);
+
+    // Trenches: in the Migrated column, not in New / Near graduation
+    const trenches = analytics.trenches({ chain: 'robinhood' });
+    expect(trenches.migrated.map((s) => s.address)).toContain(TOKEN);
+    expect([...trenches.new, ...trenches.almost].map((s) => s.address)).not.toContain(TOKEN);
+    expect(completed).toEqual([]); // nothing re-completes after the replay
   });
 });
 

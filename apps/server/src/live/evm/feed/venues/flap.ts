@@ -306,7 +306,7 @@ export class FlapVenue implements Venue {
     }
     const t = ctx.token(e.token);
     if (!t || t.status !== 'curve') return;
-    const wallet = ctx.traderOf(e.log, e.account);
+    const wallet = ctx.traderOf(e.log, e.account, e.side === 'buy' ? t.address : undefined);
     if (!wallet) return;
     const s = e.supply !== null ? flapCurveState(c, e.supply) : null;
     ctx.trade(t, {

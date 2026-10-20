@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Hex } from 'viem';
 import { addressTopic, ENTRY_POINTS, TOPIC } from '../src/live/evm/feed/abi';
+import { mergeTrades } from '../src/live/evm/feed/chain-feed';
 import { BlockClock } from '../src/live/evm/feed/clock';
 import { endpointLogLimits, loadEvmFeedSettings } from '../src/live/evm/feed/config';
 import { BoundedSet, LruMap } from '../src/live/evm/feed/lru';
@@ -376,6 +377,24 @@ describe('holder book', () => {
     b.trim();
     expect([...b.tokens()]).toEqual(['0xt3']);
     expect(b.dropped).toBe(2);
+  });
+});
+
+describe('one ledger trade per transaction and wallet', () => {
+  const base = { wallet: '0xw', at: 1000, txHash: '0x1', slot: 7 };
+  it('sums same-side swaps and keeps the last post-trade state', () => {
+    const m = mergeTrades(
+      { ...base, side: 'buy', nativeAmount: 1, tokenAmount: 100, curve: { virtualNative: 2, virtualTokens: 900 } },
+      { ...base, side: 'buy', nativeAmount: 2, tokenAmount: 150, at: 1001, curve: { virtualNative: 4, virtualTokens: 750 } },
+    );
+    expect(m).toMatchObject({ side: 'buy', nativeAmount: 3, tokenAmount: 250, at: 1000, curve: { virtualNative: 4, virtualTokens: 750 } });
+  });
+
+  it('nets a buy and a sell (round trips that net to nothing book nothing)', () => {
+    const buy = { ...base, side: 'buy' as const, nativeAmount: 1, tokenAmount: 100 };
+    expect(mergeTrades(buy, { ...base, side: 'sell', nativeAmount: 0.4, tokenAmount: 40 })).toMatchObject({ side: 'buy', tokenAmount: 60, nativeAmount: 0.6 });
+    expect(mergeTrades(buy, { ...base, side: 'sell', nativeAmount: 1.5, tokenAmount: 150 })).toMatchObject({ side: 'sell', tokenAmount: 50, nativeAmount: 0.5 });
+    expect(mergeTrades(buy, { ...base, side: 'sell', nativeAmount: 1.1, tokenAmount: 100 }).tokenAmount).toBe(0);
   });
 });
 

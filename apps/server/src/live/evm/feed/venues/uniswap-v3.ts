@@ -199,7 +199,8 @@ export class UniswapV3Venue implements Venue {
     const dToken = pool.tokenIsCurrency0 ? e.amount0 : e.amount1;
     const dNative = pool.tokenIsCurrency0 ? e.amount1 : e.amount0;
     if (dToken === 0n || dNative === 0n || dToken > 0n === dNative > 0n) return;
-    const wallet = ctx.traderOf(e.log, topicAddress(e.log.topics[2]));
+    // Swap's recipient receives the bought tokens.
+    const wallet = ctx.traderOf(e.log, topicAddress(e.log.topics[2]), dToken < 0n ? t.address : undefined);
     const r = worldReserves(pool);
     if (!wallet || !r) return;
     ctx.trade(t, {

@@ -11,7 +11,7 @@
 // mainnet logs and eth_call reads of the curves.
 
 import { decodeAbiParameters, decodeFunctionResult, encodeFunctionData, parseAbi, toEventSelector, type Hex } from 'viem';
-import { decodeCall, encodeCall, topicAddress, v4PoolId, ZERO_ADDRESS, type PoolKey } from '../abi';
+import { ARB_BLOCK_NUMBER_CALL, ARBSYS, decodeCall, encodeCall, topicAddress, v4PoolId, ZERO_ADDRESS, type PoolKey } from '../abi';
 import { LruMap } from '../lru';
 import { toUnits } from '../math';
 import type { Erc20Info } from '../metadata';
@@ -29,6 +29,9 @@ export const PONS = {
   poolFee: 0,
   poolTickSpacing: 200,
 } as const;
+
+/** Curves per eth_call: 10 reads each plus the block read stay inside one Multicall3 chunk (150). */
+const CURVES_PER_CALL = 14;
 
 export const PONS_TOPIC = {
   tokenLaunched: toEventSelector('TokenLaunched(address,address,address,address,uint256,uint256)'),
@@ -73,6 +76,13 @@ export interface PonsCurve {
   graduated: boolean;
   /** Launch time (ms), 0 when unknown. */
   launchedAt: number;
+  /** L2 block whose state the reserves were read at (null: unknown, taken as the requested block). */
+  stateBlock: bigint | null;
+  /**
+   * Trades in (after, through] are already in the reserves: the read landed past the
+   * window (the node had no state that far back and answered at its head).
+   */
+  included?: { after: bigint; through: bigint };
 }
 
 /** The curve as World reserves: virtual = phantom + real quote x token reserve; sellable = reserve - reserved. */
@@ -204,8 +214,11 @@ export class PonsVenue implements Venue {
             c.graduated = false;
             for (const e of evs) if (e.kind === 'trade' && e.curve === curve && e.log.blockNumber <= done.log.blockNumber && isBefore(e.log, done.log)) undoTrade(c, e);
           } else {
-            // Read at the window's end: walk this window's trades back to the state before them.
-            for (const e of evs) if (e.kind === 'trade' && e.curve === curve) undoTrade(c, e);
+            // Read at the window's end (or wherever the node's state was): walk the trades it
+            // includes back to the state before this window; later ones are not applied twice.
+            const at = c.stateBlock ?? ctx.windowTo;
+            for (const e of evs) if (e.kind === 'trade' && e.curve === curve && e.log.blockNumber <= at) undoTrade(c, e);
+            if (at > ctx.windowTo) c.included = { after: ctx.windowTo, through: at };
           }
         }
       }
@@ -258,10 +271,12 @@ export class PonsVenue implements Venue {
         c = this.register(a, a.deployer, a.params.launchedAt || ctx.timeOf(e.log), ctx) ?? undefined;
         if (!c) return;
       }
-      applyTrade(c, e);
+      const inc = c.included;
+      if (inc && e.log.blockNumber > inc.through) delete c.included;
+      if (!(inc && e.log.blockNumber > inc.after && e.log.blockNumber <= inc.through)) applyTrade(c, e);
       const t = ctx.token(c.token);
       if (!t) return;
-      const wallet = ctx.traderOf(e.log, e.side === 'buy' ? topicAddress(e.log.topics[2]) : topicAddress(e.log.topics[1]));
+      const wallet = e.side === 'buy' ? ctx.traderOf(e.log, topicAddress(e.log.topics[2]), t.address) : ctx.traderOf(e.log, topicAddress(e.log.topics[1]));
       if (!wallet) return;
       const s = ponsCurveState(c, t.decimals);
       ctx.trade(t, {
@@ -340,14 +355,24 @@ export class PonsVenue implements Venue {
     return c;
   }
 
-  /** Immutable curve parameters + current reserves; drops non-Pons or non-ETH curves. */
+  /**
+   * Immutable curve parameters + reserves at `block`; drops non-Pons or non-ETH
+   * curves. Each batch also reads ArbSys.arbBlockNumber() in the same eth_call,
+   * so the reserves' block is known even when the node answers at its head.
+   */
   private async readCurves(curves: string[], ctx: FeedContext, block?: bigint): Promise<Map<string, PonsCurve>> {
+    const out = new Map<string, PonsCurve>();
+    for (let i = 0; i < curves.length; i += CURVES_PER_CALL) await this.readCurveBatch(curves.slice(i, i + CURVES_PER_CALL), ctx, block, out);
+    return out;
+  }
+
+  private async readCurveBatch(curves: string[], ctx: FeedContext, block: bigint | undefined, out: Map<string, PonsCurve>): Promise<void> {
     const fns = ['token', 'factory', 'pairToken', 'phantomQuote', 'launchSupply', 'reservedTokens', 'feeBps', 'graduated', 'getReserves', 'launchedAt'] as const;
-    const res = await ctx.rpc.call(
-      curves.flatMap((c) => fns.map((fn) => ({ target: c, data: encodeFunctionData({ abi: curveAbi, functionName: fn }) }))),
+    const [blockRes, ...res] = await ctx.rpc.call(
+      [{ target: ARBSYS, data: ARB_BLOCK_NUMBER_CALL }, ...curves.flatMap((c) => fns.map((fn) => ({ target: c, data: encodeFunctionData({ abi: curveAbi, functionName: fn }) })))],
       block,
     );
-    const out = new Map<string, PonsCurve>();
+    const stateBlock = blockRes && blockRes.length >= 66 ? BigInt(blockRes.slice(0, 66)) : (block ?? null);
     curves.forEach((curve, i) => {
       const r = res.slice(i * fns.length, (i + 1) * fns.length);
       const dec = <T>(j: number) => decodeCall<T>(curveAbi, fns[j], r[j]);
@@ -375,9 +400,9 @@ export class PonsVenue implements Venue {
         quoteReserve: reserves[0],
         tokenReserve: reserves[1],
         launchedAt: Number(dec<bigint>(9) ?? 0n) * 1000,
+        stateBlock,
       });
     });
-    return out;
   }
 
   private async readDeployers(tokens: string[], ctx: FeedContext): Promise<Map<string, string>> {
@@ -419,6 +444,8 @@ export class PonsVenue implements Venue {
     if (!c || !erc20) return false;
     const meta = (await this.readTokenMeta([token], ctx)).get(token) ?? { logo: '', description: '', socials: {} };
     const at = c.launchedAt || ctx.now();
+    // Read at the head: trades the feed has yet to apply are already in these reserves.
+    if (c.stateBlock !== null && c.stateBlock > ctx.appliedThrough) c.included = { after: ctx.appliedThrough, through: c.stateBlock };
     if (!c.graduated && info.sweptAt === 0n) return !!this.register({ params: c, erc20, deployer: null, ...meta }, info.deployer.toLowerCase(), at, ctx);
     if (!this.v4) return false;
     const key = graduatedKey(token);

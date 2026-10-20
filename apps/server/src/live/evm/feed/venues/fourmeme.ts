@@ -220,7 +220,7 @@ export class FourMemeVenue implements Venue {
       }
       const t = ctx.token(e.token);
       if (!t || t.status !== 'curve') return;
-      const wallet = ctx.traderOf(e.log, e.account);
+      const wallet = ctx.traderOf(e.log, e.account, e.side === 'buy' ? t.address : undefined);
       if (!wallet) return;
       const s = fourCurveState(c, e.offers, e.funds, t.decimals);
       // Buyers pay cost + fee; sellers receive cost - fee.

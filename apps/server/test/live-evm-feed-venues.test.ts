@@ -4,19 +4,22 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { decodeAbiParameters } from 'viem';
-import { TOPIC } from '../src/live/evm/feed/abi';
+import { decodeAbiParameters, encodeAbiParameters, toFunctionSelector, type Hex } from 'viem';
+import { ARB_BLOCK_NUMBER_CALL, ARBSYS, TOPIC } from '../src/live/evm/feed/abi';
+import { ChainFeed } from '../src/live/evm/feed/chain-feed';
 import type { RpcFixture } from '../src/live/evm/feed/fixture-rpc';
 import { cleanSocials, cleanText, cleanUrl } from '../src/live/evm/feed/metadata';
 import { classifyNarrative } from '../src/live/evm/feed/narrative';
-import { parseRawLog } from '../src/live/evm/feed/rpc';
+import { parseRawLog, type CallRequest, type EvmRpc, type LogQuery, type RawLog } from '../src/live/evm/feed/rpc';
 import { CLANKER_TOPIC, parseClankerMetadata } from '../src/live/evm/feed/venues/clanker';
 import { FLAP_PORTALS, FLAP_TOPIC, flapCurveState, type FlapCurve } from '../src/live/evm/feed/venues/flap';
 import { FOUR_MEME, FOUR_TOPIC, fourCurveState } from '../src/live/evm/feed/venues/fourmeme';
-import { applyTrade, graduatedKey, PONS, PONS_TOPIC, ponsCurveState, undoTrade, type PonsCurve } from '../src/live/evm/feed/venues/pons';
+import { applyTrade, graduatedKey, PONS, PONS_TOPIC, ponsCurveState, PonsVenue, undoTrade, type PonsCurve } from '../src/live/evm/feed/venues/pons';
 import { POOLS_TRADE_TOPIC, socialsFromText } from '../src/live/evm/feed/venues/pools-trade';
+import { World } from '../src/sim/world';
 
 const FIXTURES = join(__dirname, 'fixtures/evm/feed');
+const PONS_PHANTOM = 1_680_000_000_000_000_000n;
 const load = (name: string): RpcFixture => JSON.parse(readFileSync(join(FIXTURES, name), 'utf8')) as RpcFixture;
 
 /** A Pons V2 curve (0x81968cbc...) as read on mainnet at block 93,675,099. */
@@ -28,6 +31,7 @@ function ponsCurve(quoteReserve: bigint, tokenReserve: bigint): PonsCurve {
     launchSupply: 10n ** 27n,
     reserved: 285_714_285_714_285_714_285_714_285n,
     feeBps: 100,
+    stateBlock: null,
     quoteReserve,
     tokenReserve,
     graduated: false,
@@ -232,6 +236,119 @@ describe('metadata', () => {
     expect(classifyNarrative('Fat Cat', 'FATCAT', '').narrative).toBe('Cats');
     expect(classifyNarrative('Sentinel', 'SNTL', 'an autonomous agent').narrative).toBe('AI Agents');
     expect(classifyNarrative('Zzz', 'ZZZ', '').narrative).toBe('Classic Memes');
+  });
+});
+
+describe('Pons adoption when the node answers past the window', () => {
+  // A curve first seen trading (launched before the feed started). The node keeps no state
+  // for the window's end and answers at its head (ArbSys.arbBlockNumber() says which block):
+  // trades between the window and that block are in the reserves already and must not be
+  // applied twice.
+  const CURVE = '0xc0000000000000000000000000000000000000c1';
+  const TOKEN = '0xc0000000000000000000000000000000000000d1';
+  const BUYER = '0xc0000000000000000000000000000000000000e1';
+  const E18 = 10n ** 18n;
+  const buys = [
+    { block: 105n, quote: E18 / 10n, tokens: 10n ** 24n },
+    { block: 115n, quote: E18 / 5n, tokens: 2n * 10n ** 24n },
+    { block: 118n, quote: (3n * E18) / 10n, tokens: 3n * 10n ** 24n },
+  ];
+  const net = (q: bigint) => q - q / 100n; // 1% fee, no creator tax
+  const pre = { quote: PONS_PHANTOM + E18, tokens: 600_000_000n * E18 };
+  const word = (v: bigint) => v.toString(16).padStart(64, '0');
+  const curveBuyLog = (b: (typeof buys)[number], i: number): RawLog => ({
+    address: CURVE,
+    topics: [PONS_TOPIC.curveBuy, `0x${word(BigInt(BUYER))}`, `0x${word(BigInt(BUYER))}`],
+    data: `0x${word(b.quote)}${word(b.tokens)}${word(b.quote / 100n)}${word(0n)}`,
+    blockNumber: b.block,
+    blockHash: `0x${word(b.block)}`,
+    transactionHash: `0x${word(1000n + BigInt(i))}`,
+    transactionIndex: 0,
+    logIndex: i,
+    removed: false,
+  });
+  const SELECTORS = new Map(
+    ['token()', 'factory()', 'pairToken()', 'phantomQuote()', 'launchSupply()', 'reservedTokens()', 'feeBps()', 'graduated()', 'getReserves()', 'launchedAt()', 'name()', 'symbol()', 'decimals()', 'totalSupply()'].map(
+      (sig) => [toFunctionSelector(sig), sig.slice(0, -2)] as const,
+    ),
+  );
+
+  class HeadStateRpc implements EvmRpc {
+    head = 110n;
+    readonly logs = buys.map(curveBuyLog);
+    async blockNumber() {
+      return this.head;
+    }
+    async getLogs(q: LogQuery) {
+      return this.logs.filter((l) => l.blockNumber >= q.fromBlock && l.blockNumber <= q.toBlock && (!q.address || q.address.includes(l.address)));
+    }
+    async blockTimestamps(blocks: bigint[]) {
+      return new Map(blocks.map((b) => [b, 1_800_000_000 + Number(b)]));
+    }
+    async transactions(hashes: Hex[]) {
+      return new Map(hashes.map((h) => [h, { from: BUYER, to: CURVE }]));
+    }
+    async receiptLogs() {
+      return new Map<string, RawLog[]>();
+    }
+    async storageAt(): Promise<Hex> {
+      return `0x${word(0n)}`;
+    }
+    /** Reserves as of block 116 (the first two buys), whatever block is asked for. */
+    async call(calls: CallRequest[]): Promise<(Hex | null)[]> {
+      const state = { quote: pre.quote + net(buys[0].quote) + net(buys[1].quote), tokens: pre.tokens - buys[0].tokens - buys[1].tokens };
+      const answers: Record<string, Hex> = {
+        [`${ARBSYS}:${ARB_BLOCK_NUMBER_CALL}`]: `0x${word(116n)}`,
+        [`${CURVE}:token`]: `0x${word(BigInt(TOKEN))}`,
+        [`${CURVE}:factory`]: `0x${word(BigInt(PONS.factory))}`,
+        [`${CURVE}:pairToken`]: `0x${word(0n)}`,
+        [`${CURVE}:phantomQuote`]: `0x${word(PONS_PHANTOM)}`,
+        [`${CURVE}:launchSupply`]: `0x${word(10n ** 27n)}`,
+        [`${CURVE}:reservedTokens`]: `0x${word(285_714_285_714_285_714_285_714_285n)}`,
+        [`${CURVE}:feeBps`]: `0x${word(100n)}`,
+        [`${CURVE}:graduated`]: `0x${word(0n)}`,
+        [`${CURVE}:getReserves`]: `0x${word(state.quote)}${word(state.tokens)}`,
+        [`${CURVE}:launchedAt`]: `0x${word(1_799_999_000n)}`,
+        [`${TOKEN}:name`]: encodeAbiParameters([{ type: 'string' }], ['Test Cat']),
+        [`${TOKEN}:symbol`]: encodeAbiParameters([{ type: 'string' }], ['TCAT']),
+        [`${TOKEN}:decimals`]: `0x${word(18n)}`,
+        [`${TOKEN}:totalSupply`]: `0x${word(10n ** 27n)}`,
+      };
+      return calls.map((c) => answers[`${c.target.toLowerCase()}:${SELECTORS.get(c.data.slice(0, 10) as Hex) ?? c.data}`] ?? null);
+    }
+  }
+
+  it('walks back only the trades the reserves include and skips them later', async () => {
+    const rpc = new HeadStateRpc();
+    const world = new World('t', 1_800_000_200_000);
+    const feed = new ChainFeed({
+      chain: 'robinhood',
+      world,
+      rpc,
+      venues: [new PonsVenue(undefined)],
+      maxTrackedTokens: 100,
+      pollMs: 1000,
+      confirmations: 0,
+      rescan: 0,
+      backfill: 10,
+      ipfsGateways: [],
+      pruneWorld: false,
+      fetchJson: async () => null,
+      now: () => world.now,
+    });
+    await feed.pollOnce(); // window 101-110: adopts the curve at its first buy
+    const t = world.tokens.get(TOKEN)!;
+    expect(t).toMatchObject({ symbol: 'TCAT', launchpad: 'pons', status: 'curve' });
+    // the reserves as read (block 116: the 115 buy is in them already, it is booked next window)
+    expect(t.curve!.realNative).toBeCloseTo(Number(E18 + net(buys[0].quote) + net(buys[1].quote)) / 1e18, 12);
+    expect(t.trades).toHaveLength(1);
+    rpc.head = 120n;
+    await feed.pollOnce(); // window 111-120: the 115 buy is in the reserves already, the 118 buy is new
+    const real = E18 + net(buys[0].quote) + net(buys[1].quote) + net(buys[2].quote);
+    expect(t.curve!.realNative).toBeCloseTo(Number(real) / 1e18, 12);
+    expect(t.curve!.virtualTokens).toBeCloseTo(Number(pre.tokens - buys[0].tokens - buys[1].tokens - buys[2].tokens) / 1e18, 3);
+    // every buy is still booked as a trade
+    expect(t.trades).toHaveLength(3);
   });
 });
 

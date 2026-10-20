@@ -72,14 +72,21 @@ export interface FeedContext {
   readonly tracked: TrackedTokens;
   /** The window being processed (its last block). */
   readonly windowTo: bigint;
+  /** Last block whose logs are fully applied (ensureToken reads land after it). */
+  readonly appliedThrough: bigint;
   /** Wall clock (ms; the World clock in live mode). */
   now(): number;
   /** Wrapped native or the zero address (native ETH in V4 pools). */
   isNative(address: string): boolean;
   /** Block time of a log (ms). */
   timeOf(log: RawLog): number;
-  /** The trader of a swap log (resolved transaction sender), or `reported` when unknown. */
-  traderOf(log: RawLog, reported?: string): string | null;
+  /**
+   * The trader of a swap log: the transaction's sender (or its ERC-4337 user
+   * operation's), `reported` when unknown. With `receives` (the token a buy
+   * delivers to `reported`), a recipient other than the sender that holds the
+   * token after the transaction is the trader (bundled buys for many wallets).
+   */
+  traderOf(log: RawLog, reported?: string, receives?: string): string | null;
   /** This chain's token in the World. */
   token(address: string): TokenState | undefined;
   /** Not a memecoin (e.g. Robinhood Chain stock tokens): never listed. Known only after `screen`. */

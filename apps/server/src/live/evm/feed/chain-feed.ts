@@ -128,6 +128,8 @@ export class ChainFeed implements FeedContext {
   private readonly counters = new Map<string, VenueCounters>();
   private readonly errors: FeedError[] = [];
   private readonly excluded = new LruMap<string, boolean>(10_000);
+  /** Per token: the trade being merged (same transaction and wallet), booked when the next one differs. */
+  private readonly openTrades = new Map<string, { t: TokenState; trade: ExternalTrade }>();
   private running = false;
   private loopDone: Promise<void> | null = null;
   private wake: (() => void) | null = null;
@@ -294,6 +296,7 @@ export class ChainFeed implements FeedContext {
         this.error(e.venue.id, err);
       }
     }
+    this.flushTrades();
     for (const v of this.venues) v.endWindow?.(this);
     this.poller.markDelivered(all);
     this.poller.commit(w);
@@ -336,6 +339,10 @@ export class ChainFeed implements FeedContext {
     return this.clockNow();
   }
 
+  get appliedThrough(): bigint {
+    return this.poller.cursor ?? 0n;
+  }
+
   isNative(address: string): boolean {
     const a = address.toLowerCase();
     return a === this.wrappedNative || a === ZERO_ADDRESS;
@@ -346,8 +353,15 @@ export class ChainFeed implements FeedContext {
     return this.clock.timeOf(log.blockNumber) ?? this.clockNow();
   }
 
-  traderOf(log: RawLog, reported?: string): string | null {
-    return this.senders.traderOf(log.transactionHash, log.logIndex, reported);
+  traderOf(log: RawLog, reported?: string, receives?: string): string | null {
+    const sender = this.senders.traderOf(log.transactionHash, log.logIndex, reported);
+    // A buy for another wallet (bundled launch buys, "buy for" routers): the recipient that ends
+    // the transaction holding the token is the trader. Known for tokens followed since launch.
+    if (receives && reported && sender && reported !== sender && reported !== ZERO_ADDRESS) {
+      const b = this.holders.balanceAfter(log.transactionHash, receives.toLowerCase(), reported);
+      if (b !== undefined && b > 0n) return reported;
+    }
+    return sender;
   }
 
   token(address: string): TokenState | undefined {
@@ -415,6 +429,7 @@ export class ChainFeed implements FeedContext {
       narrative,
       logoGlyph: glyph,
     });
+    this.placeByAge(t);
     if (input.buyTax) t.buyTax = input.buyTax;
     if (input.sellTax) t.sellTax = input.sellTax;
     if (input.pool) this.pools.add(input.pool);
@@ -426,6 +441,29 @@ export class ChainFeed implements FeedContext {
       this.meta.fetchLater(input.offchain.uri, (doc) => this.applyOffchain(address, parse(doc)));
     }
     return t;
+  }
+
+  /**
+   * Keep the chain's token list in creation order. The ledger's newest-first
+   * scans (Trenches' New column, narratives) stop at the first token older than
+   * a day, so a token first seen trading long after its launch must not sit at
+   * the end of the list.
+   */
+  private placeByAge(t: TokenState): void {
+    const list = this.world.tokensByChain[this.chain];
+    const n = list.length;
+    const age = (a: string) => this.world.tokens.get(a)?.createdAt ?? 0;
+    if (n < 2 || list[n - 1] !== t.address || age(list[n - 2]) <= t.createdAt) return;
+    // first position whose token is younger than t
+    let lo = 0;
+    let hi = n - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (age(list[mid]) <= t.createdAt) lo = mid + 1;
+      else hi = mid;
+    }
+    list.pop();
+    list.splice(lo, 0, t.address);
   }
 
   private applyOffchain(address: string, m: { description?: string; imageUrl?: string | null; socials?: Socials }): void {
@@ -460,7 +498,39 @@ export class ChainFeed implements FeedContext {
     }
   }
 
+  /**
+   * The ledger books one trade per transaction, wallet and token: swaps of the
+   * same transaction by the same wallet (multi-hop routes, bundles) are merged
+   * into one before booking, keeping the last swap's post-trade state.
+   */
   trade(t: TokenState, trade: ExternalTrade): void {
+    const open = this.openTrades.get(t.address);
+    if (open && open.t === t && open.trade.txHash === trade.txHash && open.trade.wallet === trade.wallet) {
+      open.trade = mergeTrades(open.trade, trade);
+      return;
+    }
+    if (open) this.flushTrade(t.address);
+    this.openTrades.set(t.address, { t, trade });
+  }
+
+  private flushTrade(token: string): void {
+    const open = this.openTrades.get(token);
+    if (!open) return;
+    this.openTrades.delete(token);
+    this.bookTrade(open.t, open.trade);
+  }
+
+  private flushTrades(): void {
+    for (const token of [...this.openTrades.keys()]) this.flushTrade(token);
+  }
+
+  private bookTrade(t: TokenState, trade: ExternalTrade): void {
+    if (this.world.tokens.get(t.address) !== t) return;
+    if (!(trade.tokenAmount > 0)) {
+      // Swaps that netted out: no trade, but the venue state moved.
+      setTradeState(t, trade);
+      return;
+    }
     if (t.dormant) this.follow(t, this.tracked.get(t.address)?.venue ?? t.launchpad, trade.at);
     if (trade.walletTokenBalance === undefined) {
       // The trader's balance once the transaction is done, from its transfers (tokens followed since launch).
@@ -476,11 +546,13 @@ export class ChainFeed implements FeedContext {
   }
 
   complete(t: TokenState, at: number): void {
+    this.flushTrade(t.address);
     this.world.completeCurve(t, at);
     this.lastEventAt = this.clockNow();
   }
 
   migrate(t: TokenState, pool: AmmPool, at: number): void {
+    this.flushTrade(t.address);
     const r = worldReserves(pool);
     if (!r) return;
     this.pools.add(pool);
@@ -495,6 +567,7 @@ export class ChainFeed implements FeedContext {
   }
 
   syncPool(t: TokenState, pool: AmmPool): void {
+    this.flushTrade(t.address);
     const r = worldReserves(pool);
     if (!r || !t.pool) return;
     t.pool.native = r.native;
@@ -659,4 +732,37 @@ export class ChainFeed implements FeedContext {
       recentErrors: [...this.errors],
     };
   }
+}
+
+/** Two swaps of one wallet in one transaction as one trade (net of buys and sells; last state wins). */
+export function mergeTrades(a: ExternalTrade, b: ExternalTrade): ExternalTrade {
+  const sign = (x: ExternalTrade) => (x.side === 'buy' ? 1 : -1);
+  const tokens = sign(a) * a.tokenAmount + sign(b) * b.tokenAmount;
+  // Native spent (buys) minus native received (sells).
+  const spent = sign(a) * a.nativeAmount + sign(b) * b.nativeAmount;
+  const side = tokens >= 0 ? 'buy' : 'sell';
+  const fees = a.fees || b.fees ? { platform: (a.fees?.platform ?? 0) + (b.fees?.platform ?? 0), network: (a.fees?.network ?? 0) + (b.fees?.network ?? 0) } : undefined;
+  return {
+    ...b,
+    side,
+    tokenAmount: Math.abs(tokens),
+    nativeAmount: Math.max(0, side === 'buy' ? spent : -spent),
+    at: a.at,
+    ...(fees ? { fees } : {}),
+  };
+}
+
+/** A trade's post-trade venue state, without booking it (World.recordExternalTrade's state update). */
+function setTradeState(t: TokenState, e: ExternalTrade): void {
+  if (e.curve && t.curve) {
+    t.curve.virtualNative = e.curve.virtualNative;
+    t.curve.virtualTokens = e.curve.virtualTokens;
+    if (e.curve.realNative !== undefined) t.curve.realNative = e.curve.realNative;
+    if (e.curve.realTokens !== undefined) t.curve.realTokens = e.curve.realTokens;
+  }
+  if (t.pool && e.pool) {
+    t.pool.native = e.pool.native;
+    t.pool.tokens = e.pool.tokens;
+  } else if (t.pool && e.priceNative && e.priceNative > 0) t.pool.tokens = t.pool.native / e.priceNative;
+  t.version++;
 }

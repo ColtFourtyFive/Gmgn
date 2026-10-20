@@ -80,6 +80,14 @@ export const ENTRY_POINTS = new Set([
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
+/**
+ * Arbitrum's ArbSys precompile (Robinhood Chain is an Arbitrum Orbit chain):
+ * arbBlockNumber() is the L2 block whose state a call ran against (block.number
+ * there is the parent chain's). Checked on Robinhood Chain at latest and past blocks.
+ */
+export const ARBSYS = '0x0000000000000000000000000000000000000064';
+export const ARB_BLOCK_NUMBER_CALL = '0xa3b1b31d' as const;
+
 /** Uniswap V4 PoolKey. */
 export interface PoolKey {
   currency0: string;

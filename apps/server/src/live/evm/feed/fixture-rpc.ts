@@ -5,6 +5,7 @@
 // deterministically.
 
 import type { Hex } from 'viem';
+import { ARB_BLOCK_NUMBER_CALL, ARBSYS } from './abi';
 import { parseRawLog, type CallRequest, type EvmRpc, type LogQuery, type RawLog, type TxInfo } from './rpc';
 
 export interface RpcFixture {
@@ -167,8 +168,10 @@ export class FixtureRpc implements EvmRpc {
     return out;
   }
 
-  async call(calls: CallRequest[]): Promise<(Hex | null)[]> {
+  async call(calls: CallRequest[], block?: bigint): Promise<(Hex | null)[]> {
     return calls.map((c) => {
+      // The state block of a read: the replay answers as of the block asked for.
+      if (c.target.toLowerCase() === ARBSYS && c.data.toLowerCase() === ARB_BLOCK_NUMBER_CALL) return `0x${(block ?? this.head).toString(16).padStart(64, '0')}` as Hex;
       const k = callKey(c);
       if (!(k in this.fixture.calls)) {
         this.missingCalls++;

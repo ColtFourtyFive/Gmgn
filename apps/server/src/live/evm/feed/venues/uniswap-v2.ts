@@ -198,7 +198,8 @@ export class UniswapV2Venue implements Venue {
       tokens = tokenIn - tokenOut;
       native = nativeOut - nativeIn;
     } else return;
-    const wallet = ctx.traderOf(e.log, topicAddress(e.log.topics[2]));
+    // Swap's `to` receives the bought tokens.
+    const wallet = ctx.traderOf(e.log, topicAddress(e.log.topics[2]), side === 'buy' ? t.address : undefined);
     const r = worldReserves(pool);
     if (!wallet || !r) return;
     ctx.trade(t, {
