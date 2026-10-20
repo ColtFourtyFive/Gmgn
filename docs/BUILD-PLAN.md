@@ -105,7 +105,7 @@ The table merges the overlapping gaps into one item each.
   - `trading/schemas.ts` → `schemas/{swap,orders,copy,sniper,alerts}.ts`
   - `analytics/tokens/index.ts` → `{search,lists,detail,trades}.ts`
 - **`trading/execution.ts`.** W1.1 owns it in W1 and W3.1 owns it in W3. Other workstreams act only through the preflight hooks and submit options added in W0.
-- **Migrations and API docs.** `store/sqlite.ts` MIGRATIONS is append-only, with migration-number ranges reserved per workstream at wave start. In `docs/API.md` each workstream appends its own section, and the doc/contract test from W4.9 enforces it.
+- **Migrations and API docs.** `store/migrations.ts` MIGRATIONS is append-only, with migration-number ranges reserved per workstream at wave start. In `docs/API.md` each workstream appends its own section, and the doc/contract test from W4.9 enforces it.
 
 ### Real-service verification set
 

@@ -1,6 +1,6 @@
 // Durable store (SQLite via node:sqlite): state blobs, append-only audit,
-// idempotent fills and transfers, durability across reopen, and the
-// write-through scheduler used in live mode.
+// idempotent fills and transfers, durability across reopen, the migration
+// registry and the write-through scheduler used in live mode.
 
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,21 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WalletTransfer } from '@trenchscope/shared';
 import type { LiveFillRecord } from '../src/context';
-import { ACCOUNTS_FLUSH_MS, DurableSync, SCHEMA_VERSION, STORE_FILE, TRADING_SAVE_EVERY_MS, decodeValue, encodeValue, openStore, type SqliteStore } from '../src/store';
+import {
+  ACCOUNTS_FLUSH_MS,
+  DurableSync,
+  MIGRATION_RANGES,
+  MIGRATIONS,
+  SCHEMA_VERSION,
+  STORE_FILE,
+  SqliteStore,
+  TRADING_SAVE_EVERY_MS,
+  checkMigrations,
+  decodeValue,
+  encodeValue,
+  openStore,
+  type Migration,
+} from '../src/store';
 
 let dir: string;
 const opened: SqliteStore[] = [];
@@ -219,6 +233,99 @@ describe('SqliteStore', () => {
     store.close();
     expect(store.isOpen).toBe(false);
     expect(() => store.putState('k', 1)).toThrow();
+  });
+});
+
+describe('migrations', () => {
+  /** Everything opening a database could change: the schema cookie, the schema and the applied versions. */
+  function schemaOf(path: string) {
+    const raw = new DatabaseSync(path);
+    try {
+      return {
+        cookie: (raw.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version,
+        objects: raw.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name").all(),
+        applied: raw.prepare('SELECT version, applied_at FROM schema_migrations ORDER BY applied_at, version').all() as { version: number; applied_at: number }[],
+      };
+    } finally {
+      raw.close();
+    }
+  }
+
+  function openWith(path: string, clock: () => number, migrations: readonly Migration[] = MIGRATIONS): SqliteStore {
+    const store = new SqliteStore(path, clock, migrations);
+    opened.push(store);
+    return store;
+  }
+
+  it('the registry is numbered: strictly increasing versions inside reserved, non-overlapping ranges', () => {
+    expect(() => checkMigrations(MIGRATIONS)).not.toThrow();
+    for (let i = 1; i < MIGRATIONS.length; i++) expect(MIGRATIONS[i].version).toBeGreaterThan(MIGRATIONS[i - 1].version);
+    expect(SCHEMA_VERSION).toBe(MIGRATIONS[MIGRATIONS.length - 1].version);
+    const ranges = [...MIGRATION_RANGES].sort((a, b) => a.from - b.from);
+    for (const [i, r] of ranges.entries()) {
+      expect(Number.isSafeInteger(r.from) && Number.isSafeInteger(r.to) && r.from >= 1 && r.from <= r.to, r.owner).toBe(true);
+      if (i > 0) expect(r.from, `${r.owner} overlaps ${ranges[i - 1].owner}`).toBeGreaterThan(ranges[i - 1].to);
+    }
+    for (const m of MIGRATIONS) expect(ranges.some((r) => m.version >= r.from && m.version <= r.to), `v${m.version} is in no reserved range`).toBe(true);
+  });
+
+  it('checkMigrations refuses an empty, out-of-order, duplicated or non-integer list', () => {
+    const m = (version: number): Migration => ({ version, sql: '' });
+    expect(() => checkMigrations([])).toThrow(/empty/);
+    expect(() => checkMigrations([m(2), m(1)])).toThrow(/out of order/);
+    expect(() => checkMigrations([m(1), m(1)])).toThrow(/out of order/);
+    expect(() => checkMigrations([m(0)])).toThrow(/out of order/);
+    expect(() => checkMigrations([m(1), m(1.5)])).toThrow(/out of order/);
+    expect(() => openWith(':memory:', Date.now, [m(2), m(1)])).toThrow(/out of order/);
+  });
+
+  it('a new database applies every migration once, in strictly increasing version order', () => {
+    const path = join(dir, STORE_FILE);
+    let now = 1_000;
+    openWith(path, () => now++).close();
+    const { applied } = schemaOf(path);
+    expect(applied.map((r) => r.version)).toEqual(MIGRATIONS.map((m) => m.version));
+    for (let i = 1; i < applied.length; i++) {
+      expect(applied[i].version).toBeGreaterThan(applied[i - 1].version);
+      expect(applied[i].applied_at).toBeGreaterThan(applied[i - 1].applied_at);
+    }
+  });
+
+  it('opening an existing database created by the current schema is a no-op', () => {
+    const path = join(dir, STORE_FILE);
+    const a = openWith(path, () => 1_000);
+    a.putState('accounts', { version: 1 });
+    a.appendFill(fill());
+    a.close();
+    const before = schemaOf(path);
+    expect(before.applied).toEqual(MIGRATIONS.map((m) => ({ version: m.version, applied_at: 1_000 })));
+
+    const b = openWith(path, () => 2_000);
+    expect(b.schemaVersion()).toBe(SCHEMA_VERSION);
+    expect(b.getState('accounts')).toEqual({ version: 1 });
+    expect(b.fillsFor('acc_1', { limit: 10 })).toEqual([fill()]);
+    b.close();
+    // no migration re-ran (applied_at would read 2000) and the schema was not touched (the cookie counts every change)
+    expect(schemaOf(path)).toEqual(before);
+  });
+
+  it('applies a registered migration the database lacks even below its current version (blocks merge in any order)', () => {
+    const path = join(dir, STORE_FILE);
+    const later: Migration = { version: 1_060, sql: 'CREATE TABLE w16 (id INTEGER PRIMARY KEY);' };
+    const earlier: Migration = { version: 1_030, sql: 'CREATE TABLE w13 (id INTEGER PRIMARY KEY);' };
+    openWith(path, () => 1_000, [...MIGRATIONS, later]).close();
+    // re-running v1060 would fail (table w16 already exists)
+    const store = openWith(path, () => 2_000, [...MIGRATIONS, earlier, later]);
+    expect(store.schemaVersion()).toBe(1_060);
+    store.close();
+    const { applied, objects } = schemaOf(path);
+    expect(applied.slice(-2)).toEqual([
+      { version: 1_060, applied_at: 1_000 },
+      { version: 1_030, applied_at: 2_000 },
+    ]);
+    expect(objects.map((o) => o.name)).toEqual(expect.arrayContaining(['w13', 'w16']));
+    // the newest registered version still bounds what a server accepts
+    expect(() => openWith(path, () => 3_000, MIGRATIONS)).toThrow(/newer than this server/);
   });
 });
 
