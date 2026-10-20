@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatCompact, formatNative, type SwapRequest } from '@trenchscope/shared';
 import { Button } from '@/components/ui';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { nativeSymbol } from '@/lib/chain';
 import { Compact, Native, Pct, Usd } from '@/components/common';
 import { slippageLabel } from './PresetBar';
@@ -53,7 +54,7 @@ export function MarketForm(props: TradeFormProps) {
             <Pct value={q.priceImpact} sign={false} colored={false} />
           </SummaryRow>
         )}
-        <SummaryRow label={`Preset ${presetId}`}>
+        <SummaryRow label={PRESET_LABEL[presetId].long}>
           {slippageLabel(preset)} slippage · {preset.antiMev ? 'anti-MEV' : 'public'}
         </SummaryRow>
         <SummaryRow label="Market cap">

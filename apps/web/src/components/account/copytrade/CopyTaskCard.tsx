@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { describeStrategy } from '@/components/trade/StrategyEditor';
 import { AddressLink, Age, Native, Pct, Usd, WalletAvatar, WalletTags } from '@/components/common';
 import { Badge, Button, Toggle } from '@/components/ui';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { errorMessage } from '@/lib/format';
@@ -103,7 +104,7 @@ export function CopyTaskCard({ task, onEdit, onDelete, onToggle, toggling }: Cop
         <DetailRow label="Exit strategy">
           <span title={describeStrategy(task.strategy)}>{describeStrategy(task.strategy)}</span>
         </DetailRow>
-        <DetailRow label="Preset">{task.presetId}</DetailRow>
+        <DetailRow label="Preset">{PRESET_LABEL[task.presetId].long}</DetailRow>
       </dl>
 
       <div className="grid grid-cols-4 gap-px border-y border-line bg-line text-center sm:grid-cols-5">

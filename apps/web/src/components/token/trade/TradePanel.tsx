@@ -8,7 +8,7 @@ import clsx from 'clsx';
 import { Tabs } from '@/components/ui';
 import { useDeposit } from '@/components/layout/AccountControls';
 import { useHotkeys } from '@/hooks/useHotkeys';
-import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
+import { PRESET_LABEL, useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
 import type { DeepPartial } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
 import { useSession } from '@/store/session';
@@ -68,7 +68,7 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
   const onRaiseSlippage = () => {
     const next = Math.min(0.5, Math.max(preset.slippage + 0.1, 0.3));
     savePreset(chain, side, presetId, { slippage: next, autoSlippage: false })
-      .then(() => toast.info(`Slippage raised to ${Math.round(next * 100)}%`, `${side === 'buy' ? 'Buy' : 'Sell'} preset ${presetId}`))
+      .then(() => toast.info(`Slippage raised to ${Math.round(next * 100)}%`, `${side === 'buy' ? 'Buy' : 'Sell'} preset ${PRESET_LABEL[presetId].long}`))
       .catch((err) => toast.error('Couldn’t update preset', errorMessage(err)));
   };
 

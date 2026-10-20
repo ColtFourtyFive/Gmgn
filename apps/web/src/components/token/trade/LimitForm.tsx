@@ -8,6 +8,7 @@ import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import clsx from 'clsx';
 import { Native, Price, Usd } from '@/components/common';
 import { Button, Field, NumberInput, SegmentedControl } from '@/components/ui';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { formatNativeFor } from '@/lib/format';
 import { requireAuth } from '@/store/session';
 import { changeVs } from '../model';
@@ -176,7 +177,7 @@ export function LimitForm(props: TradeFormProps & { defaultTrigger: TriggerType 
       ) : (
         <StartTradingCta />
       )}
-      <p className="text-2xs text-faint">Executes with preset {presetId} when the trigger is crossed. Orders run server-side, even with this page closed.</p>
+      <p className="text-2xs text-faint">Executes with preset {PRESET_LABEL[presetId].long} when the trigger is crossed. Orders run server-side, even with this page closed.</p>
     </div>
   );
 }

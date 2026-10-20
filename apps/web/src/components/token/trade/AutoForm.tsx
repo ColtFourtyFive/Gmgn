@@ -12,6 +12,7 @@ import { Compact, Native } from '@/components/common';
 import { DEFAULT_STRATEGY, describeStrategy, EMPTY_STRATEGY, isStrategyEmpty, StrategyEditor, strategyOrderCount } from '@/components/trade/StrategyEditor';
 import { Button, SegmentedControl, Select } from '@/components/ui';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
 import { errorMessage } from '@/lib/format';
@@ -91,7 +92,7 @@ function AutoBuy({ token, presetId, preset, trade, signedIn, balance, maxBuy, in
           <Native value={amount} chain={token.chain} />
         </SummaryRow>
         <SummaryRow label="Exit strategy">{describeStrategy(strategy)}</SummaryRow>
-        <SummaryRow label={`Preset ${presetId}`}>{slippageLabel(preset)} slippage</SummaryRow>
+        <SummaryRow label={PRESET_LABEL[presetId].long}>{slippageLabel(preset)} slippage</SummaryRow>
       </>,
     );
   };

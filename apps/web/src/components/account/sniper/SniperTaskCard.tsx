@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { describeStrategy } from '@/components/trade/StrategyEditor';
 import { AddressLink, Age, LaunchpadBadge, Native, Pct } from '@/components/common';
 import { Badge, Button, Toggle, Tooltip } from '@/components/ui';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
 import { toast } from '@/store/toasts';
@@ -158,7 +159,7 @@ export function SniperTaskCard({ task, onEdit, onDelete, onToggle, toggling }: S
         <DetailRow label="Exit strategy">
           <span title={describeStrategy(task.strategy)}>{describeStrategy(task.strategy)}</span>
         </DetailRow>
-        <DetailRow label="Preset">{task.presetId}</DetailRow>
+        <DetailRow label="Preset">{PRESET_LABEL[task.presetId].long}</DetailRow>
       </dl>
 
       <footer className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-line px-3 py-2">
