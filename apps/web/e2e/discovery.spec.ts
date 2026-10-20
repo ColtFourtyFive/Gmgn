@@ -7,16 +7,16 @@ import { CHAIN, listSignature, parkPointer, passTradeGate, readBalance, toast } 
 
 const LIVE_TIMEOUT = 25_000;
 
-function column(page: Page, name: 'New' | 'Almost bonded' | 'Migrated'): Locator {
+function column(page: Page, name: 'New' | 'Near graduation' | 'Migrated'): Locator {
   return page.getByRole('main').getByRole('region', { name, exact: true });
 }
 
-function columnList(page: Page, name: 'New' | 'Almost bonded' | 'Migrated'): Locator {
+function columnList(page: Page, name: 'New' | 'Near graduation' | 'Migrated'): Locator {
   return column(page, name).getByRole('list', { name: `${name} tokens` });
 }
 
 /** Phones show one Trenches column at a time, behind tabs. */
-async function showColumn(page: Page, isMobile: boolean, tab: 'New' | 'Almost' | 'Migrated'): Promise<void> {
+async function showColumn(page: Page, isMobile: boolean, tab: 'New' | 'Graduating' | 'Migrated'): Promise<void> {
   if (!isMobile) return;
   const t = page.getByRole('tablist', { name: 'Trenches columns' }).getByRole('tab', { name: new RegExp(`^${tab}\\b`) });
   await t.click();
@@ -37,8 +37,8 @@ test('trenches columns receive live updates', async ({ page, isMobile }) => {
   await showColumn(page, isMobile, 'New');
   await expectListChanges(columnList(page, 'New'));
 
-  await showColumn(page, isMobile, 'Almost');
-  await expectListChanges(columnList(page, 'Almost bonded'));
+  await showColumn(page, isMobile, 'Graduating');
+  await expectListChanges(columnList(page, 'Near graduation'));
 });
 
 test('a filter preset changes the column results', async ({ page }) => {

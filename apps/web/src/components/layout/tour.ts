@@ -31,7 +31,7 @@ export interface TourStep {
   placement?: Placement;
 }
 
-const COLUMN_HEADERS = ['New', 'Almost bonded', 'Migrated'].map((c) => `main section[aria-label="${c}"] > header`).join(', ');
+const COLUMN_HEADERS = ['New', 'Near graduation', 'Migrated'].map((c) => `main section[aria-label="${c}"] > header`).join(', ');
 
 export const TOUR_STEPS: TourStep[] = [
   {

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { formatUsd, shortAddress, type CopyTradeTask } from '@trenchscope/shared';
+import { formatUsd, shortAddress, type CopyTradeTask, PRESET_LABELS } from '@trenchscope/shared';
 import { ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { describeStrategy } from '@/components/trade/StrategyEditor';
@@ -110,7 +110,7 @@ export function CopyTaskCard({ task, onEdit, onDelete, onToggle, toggling }: Cop
         <DetailRow label="Exit strategy">
           <span title={describeStrategy(task.strategy)}>{describeStrategy(task.strategy)}</span>
         </DetailRow>
-        <DetailRow label="Preset">{task.presetId}</DetailRow>
+        <DetailRow label="Preset">{PRESET_LABELS[task.presetId]}</DetailRow>
       </dl>
 
       <div className="grid grid-cols-4 gap-px border-y border-line bg-line text-center sm:grid-cols-5">

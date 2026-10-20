@@ -1,7 +1,7 @@
 // Small form building blocks shared by the account drawers and settings.
 
 import type { ReactNode } from 'react';
-import { formatPercent, type ChainId, type PresetId } from '@trenchscope/shared';
+import { formatPercent, type ChainId, type PresetId, PRESET_IDS, PRESET_LABELS } from '@trenchscope/shared';
 import { CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 import { Heading, HeadingScope, SegmentedControl } from '@/components/ui';
@@ -40,9 +40,8 @@ export function Note({ tone = 'info', title, children, className }: { tone?: key
   );
 }
 
-const PRESETS: PresetId[] = ['P1', 'P2', 'P3'];
 
-/** P1 / P2 / P3 trade-preset switcher; tooltips summarize each preset of the chain's buy presets. */
+/** Trade-preset slot switcher (Calm / Fast / Snipe); tooltips summarize each preset of the chain's buy presets. */
 export function PresetPicker({ chain, value, onChange, side = 'buy', className }: { chain: ChainId; value: PresetId; onChange: (p: PresetId) => void; side?: 'buy' | 'sell'; className?: string }) {
   const trade = useTradeSettings(chain);
   const presets = side === 'buy' ? trade.buyPresets : trade.sellPresets;
@@ -52,10 +51,10 @@ export function PresetPicker({ chain, value, onChange, side = 'buy', className }
       onChange={onChange}
       aria-label="Trade preset"
       className={className}
-      items={PRESETS.map((id) => {
+      items={PRESET_IDS.map((id) => {
         const p = presets[id];
         const slip = p.autoSlippage ? 'auto slippage' : `${formatPercent(p.slippage, { sign: false, digits: 0 })} slippage`;
-        return { value: id, label: id, title: `${id}: ${slip}${p.antiMev ? ' · anti-MEV' : ''}` };
+        return { value: id, label: PRESET_LABELS[id], title: `${PRESET_LABELS[id]}: ${slip}${p.antiMev ? ' · anti-MEV' : ''}` };
       })}
     />
   );

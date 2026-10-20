@@ -747,6 +747,9 @@ export interface TrendingSnapshot {
 // ---------------------------------------------------------------------------
 
 export type PresetId = 'P1' | 'P2' | 'P3';
+export const PRESET_IDS: PresetId[] = ['P1', 'P2', 'P3'];
+/** Display names of the three preset slots; the ids stay internal. */
+export const PRESET_LABELS: Record<PresetId, string> = { P1: 'Calm', P2: 'Fast', P3: 'Snipe' };
 
 export interface TradePreset {
   id: PresetId;

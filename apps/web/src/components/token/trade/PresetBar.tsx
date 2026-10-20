@@ -2,7 +2,7 @@
 // (slippage + auto, priority fee, tip, anti-MEV) saved to account settings.
 
 import { useEffect, useState } from 'react';
-import { CHAINS, formatPercent, type ChainId, type PresetId, type TradePreset, type UserSettings } from '@trenchscope/shared';
+import { CHAINS, formatPercent, type ChainId, type PresetId, type TradePreset, type UserSettings, PRESET_IDS, PRESET_LABELS } from '@trenchscope/shared';
 import { Settings2, ShieldCheck, ShieldOff } from 'lucide-react';
 import clsx from 'clsx';
 import { Native } from '@/components/common';
@@ -13,8 +13,7 @@ import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 import type { TradeSide } from '../store';
 
-const PRESET_IDS: PresetId[] = ['P1', 'P2', 'P3'];
-const PRESET_ITEMS = PRESET_IDS.map((id) => ({ value: id, label: id }));
+const PRESET_ITEMS = PRESET_IDS.map((id) => ({ value: id, label: PRESET_LABELS[id] }));
 const SLIPPAGE_PRESETS = [10, 20, 30, 50];
 
 export function presetsKey(side: TradeSide): 'buyPresets' | 'sellPresets' {
@@ -62,9 +61,9 @@ export function PresetBar({ chain, side, presetId, onPresetChange, preset }: Pre
           setOpen(next);
         }}
         placement="bottom-end"
-        aria-label={`Edit ${presetId}`}
+        aria-label={`Edit ${PRESET_LABELS[presetId]} preset`}
         className="w-72 p-3"
-        trigger={<IconButton size="xs" label={`Edit ${side} preset ${presetId}`} icon={<Settings2 size={13} />} />}
+        trigger={<IconButton size="xs" label={`Edit ${side} preset ${PRESET_LABELS[presetId]}`} icon={<Settings2 size={13} />} />}
       >
         {(close) => <PresetEditor chain={chain} side={side} id={presetId} preset={preset} onDone={close} />}
       </Popover>

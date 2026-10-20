@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { CHAIN_IDS, CHAINS, type ChainId, type ChainTradeSettings, type PresetId, type TradePreset } from '@trenchscope/shared';
+import { CHAIN_IDS, CHAINS, type ChainId, type ChainTradeSettings, type PresetId, type TradePreset, PRESET_LABELS } from '@trenchscope/shared';
 import { ShieldCheck, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon, Native } from '@/components/common';
@@ -8,7 +8,6 @@ import { useMeta } from '@/hooks';
 import { NumberList } from './NumberList';
 import { PRESET_IDS, path, type SettingsErrors } from './model';
 
-const PRESET_NAMES: Record<PresetId, string> = { P1: 'Preset 1', P2: 'Preset 2', P3: 'Preset 3' };
 
 /** Label left, compact control right, error underneath. */
 function InlineRow({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
@@ -84,7 +83,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
       >
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted">Active {side} preset</span>
-          <SegmentedControl size="sm" value={active} onChange={setActive} aria-label={`Active ${side} preset`} items={PRESET_IDS.map((id) => ({ value: id, label: id }))} />
+          <SegmentedControl size="sm" value={active} onChange={setActive} aria-label={`Active ${side} preset`} items={PRESET_IDS.map((id) => ({ value: id, label: PRESET_LABELS[id] }))} />
           {suggested && (
             <span className="text-xs text-faint sm:ml-auto">
               Network priority fee now: <Native value={suggested.low} /> / <Native value={suggested.medium} /> / <Native value={suggested.high} chain={chain} />
@@ -98,10 +97,10 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
             return (
               <fieldset key={id} className={clsx('flex min-w-0 flex-col gap-2.5 rounded border bg-panel-2 p-3', id === active ? 'border-accent/50' : 'border-line')}>
                 <legend className="sr-only">
-                  {side} {PRESET_NAMES[id]}
+                  {side} preset {PRESET_LABELS[id]}
                 </legend>
                 <div className="flex items-center gap-2">
-                  <span className="num text-md font-semibold text-fg">{id}</span>
+                  <span className="text-md font-semibold text-fg">{PRESET_LABELS[id]}</span>
                   {id === active ? <Badge tone="accent">Active</Badge> : (
                     <button type="button" onClick={() => setActive(id)} className="touch-target text-xs text-muted hover:text-accent">
                       Set active
@@ -120,7 +119,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
                     suffix="%"
                     size="sm"
                     disabled={p.autoSlippage}
-                    aria-label={`${id} ${side} slippage`}
+                    aria-label={`${PRESET_LABELS[id]} ${side} slippage`}
                     invalid={!!err('slippage')}
                     wrapperClassName={clsx('!w-[104px]', p.autoSlippage && 'opacity-50')}
                   />
@@ -133,7 +132,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
                     step={0.0001}
                     suffix={sym}
                     size="sm"
-                    aria-label={`${id} ${side} priority fee`}
+                    aria-label={`${PRESET_LABELS[id]} ${side} priority fee`}
                     invalid={!!err('priorityFee')}
                     wrapperClassName="!w-[124px]"
                   />
@@ -154,7 +153,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
                     suffix={sym}
                     size="sm"
                     disabled={!p.antiMev}
-                    aria-label={`${id} ${side} anti-MEV tip`}
+                    aria-label={`${PRESET_LABELS[id]} ${side} anti-MEV tip`}
                     invalid={!!err('tip')}
                     wrapperClassName={clsx('!w-[124px]', !p.antiMev && 'opacity-50')}
                   />

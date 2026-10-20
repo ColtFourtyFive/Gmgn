@@ -1,3 +1,4 @@
+import { PRESET_LABELS } from '@trenchscope/shared';
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SniperTask } from '@trenchscope/shared';
@@ -158,7 +159,7 @@ export function SniperTaskCard({ task, onEdit, onDelete, onToggle, toggling }: S
         <DetailRow label="Exit strategy">
           <span title={describeStrategy(task.strategy)}>{describeStrategy(task.strategy)}</span>
         </DetailRow>
-        <DetailRow label="Preset">{task.presetId}</DetailRow>
+        <DetailRow label="Preset">{PRESET_LABELS[task.presetId]}</DetailRow>
       </dl>
 
       <footer className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-line px-3 py-2">

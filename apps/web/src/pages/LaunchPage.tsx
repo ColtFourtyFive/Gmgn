@@ -8,7 +8,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { CHAINS, formatCompact, formatPercent, type ChainId, type LaunchConfig } from '@trenchscope/shared';
+import { CHAINS, formatCompact, formatPercent, type ChainId, type LaunchConfig, PRESET_LABELS } from '@trenchscope/shared';
 import { Rocket } from 'lucide-react';
 import { splitFieldError } from '@/components/account';
 import { Note } from '@/components/account/FormBits';
@@ -256,7 +256,7 @@ function Launch({ chain, config }: { chain: ChainId; config: LaunchConfig }) {
             <ConfirmRow label="Dev buy">{devBuy > 0 ? `${formatNativeFor(chain, devBuy)} · ≈ ${share(block.devShare)} of supply` : 'None'}</ConfirmRow>
             {bundles > 0 && <ConfirmRow label="Bundle wallets">{`${bundles} × ${formatNativeFor(chain, bundleBuy)} · ≈ ${share(block.bundleShare)} of supply`}</ConfirmRow>}
             {form.useStrategy && devBuy > 0 && <ConfirmRow label="Exit strategy">{describeStrategy(form.strategy)}</ConfirmRow>}
-            <ConfirmRow label="Preset">{form.presetId}</ConfirmRow>
+            <ConfirmRow label="Preset">{PRESET_LABELS[form.presetId]}</ConfirmRow>
             <ConfirmRow label="Total cost">
               <Native value={cost.total} chain={chain} className="font-semibold" />
             </ConfirmRow>

@@ -1,4 +1,4 @@
-// Trenches: the live three-column launchpad board (New | Almost bonded |
+// Trenches: the live three-column launchpad board (New | Near graduation |
 // Migrated) streamed from `trenches:<chain>`, with per-column filters (saved
 // per chain + column, the viewer's blacklist merged into each), client-side
 // sorting, pause-on-hover and hotkeys.

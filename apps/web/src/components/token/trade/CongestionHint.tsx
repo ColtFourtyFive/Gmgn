@@ -4,7 +4,7 @@
 // congestion": slower landing, and below the low tier while congested a
 // 25-55% chance to expire) and offers to raise the preset to the suggestion.
 
-import { CHAINS, type ChainId, type ChainMarketInfo, type PresetId, type TradePreset } from '@trenchscope/shared';
+import { CHAINS, type ChainId, type ChainMarketInfo, type PresetId, type TradePreset, PRESET_LABELS } from '@trenchscope/shared';
 import { TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 import { Native } from '@/components/common';
@@ -52,7 +52,7 @@ export function CongestionHint({ chain, side, presetId, preset }: CongestionHint
   const raise = () =>
     requireAuth(() => {
       savePreset(chain, side, presetId, { priorityFee: suggested })
-        .then(() => toast.success(`Priority fee raised on ${presetId}`, `${side === 'buy' ? 'Buy' : 'Sell'} preset now bids the suggested fee.`))
+        .then(() => toast.success(`Priority fee raised on ${PRESET_LABELS[presetId]}`, `${side === 'buy' ? 'Buy' : 'Sell'} preset now bids the suggested fee.`))
         .catch((err) => toast.error('Couldn’t update preset', errorMessage(err)));
     });
 

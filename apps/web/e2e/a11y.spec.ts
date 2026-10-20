@@ -64,7 +64,7 @@ test.describe('accessibility', () => {
 
   test('settings', async ({ page, guest }) => {
     await page.goto('/settings');
-    await expect(page.getByLabel('P2 buy slippage')).toBeVisible();
+    await expect(page.getByLabel('Fast buy slippage')).toBeVisible();
     await expectNoSeriousViolations(page);
   });
 
@@ -133,7 +133,7 @@ test.describe('accessibility', () => {
 
     test('settings', async ({ page }) => {
       await page.goto('/settings');
-      await expect(page.getByLabel('P2 buy slippage')).toBeVisible();
+      await expect(page.getByLabel('Fast buy slippage')).toBeVisible();
       await expectNoSeriousViolations(page);
     });
   });
@@ -143,7 +143,7 @@ test.describe('accessibility', () => {
 test.describe('focus visibility and forced colors', () => {
   test('focus is never hidden under a sticky bottom bar (WCAG 2.4.11)', async ({ page, guest }) => {
     await page.goto('/settings');
-    const field = page.getByLabel('P2 buy slippage');
+    const field = page.getByLabel('Fast buy slippage');
     await field.fill('17');
     await expect(page.getByRole('region', { name: 'Unsaved changes' })).toBeVisible();
     const hidden: string[] = [];

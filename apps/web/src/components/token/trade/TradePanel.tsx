@@ -3,7 +3,7 @@
 // below the suggestion), then the form of the selected order type.
 
 import { useEffect, useRef, useState } from 'react';
-import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type Position, type PresetId, type TokenDetail, type UserSettings } from '@trenchscope/shared';
+import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type Position, type PresetId, type TokenDetail, type UserSettings, PRESET_LABELS } from '@trenchscope/shared';
 import { FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import { Tabs } from '@/components/ui';
@@ -71,7 +71,7 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
   const onRaiseSlippage = () => {
     const next = Math.min(0.5, Math.max(preset.slippage + 0.1, 0.3));
     savePreset(chain, side, presetId, { slippage: next, autoSlippage: false })
-      .then(() => toast.info(`Slippage raised to ${Math.round(next * 100)}%`, `${side === 'buy' ? 'Buy' : 'Sell'} preset ${presetId}`))
+      .then(() => toast.info(`Slippage raised to ${Math.round(next * 100)}%`, `${side === 'buy' ? 'Buy' : 'Sell'} preset ${PRESET_LABELS[presetId]}`))
       .catch((err) => toast.error('Couldn’t update preset', errorMessage(err)));
   };
 

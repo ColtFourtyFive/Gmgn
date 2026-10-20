@@ -1,7 +1,7 @@
 // Market order: buy a native amount or sell a percent / token amount now.
 
 import { useEffect, useState } from 'react';
-import { formatCompact, formatNative, type SwapRequest } from '@trenchscope/shared';
+import { formatCompact, formatNative, type SwapRequest, PRESET_LABELS } from '@trenchscope/shared';
 import { Button } from '@/components/ui';
 import { nativeSymbol } from '@/lib/chain';
 import { Compact, Native, Pct, Usd } from '@/components/common';
@@ -53,7 +53,7 @@ export function MarketForm(props: TradeFormProps) {
             <Pct value={q.priceImpact} sign={false} colored={false} />
           </SummaryRow>
         )}
-        <SummaryRow label={`Preset ${presetId}`}>
+        <SummaryRow label={`Preset ${PRESET_LABELS[presetId]}`}>
           {slippageLabel(preset)} slippage · {preset.antiMev ? 'anti-MEV' : 'public'}
         </SummaryRow>
         <SummaryRow label="Market cap">

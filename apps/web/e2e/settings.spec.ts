@@ -11,7 +11,7 @@ test('slippage preset and theme persist after reload', async ({ page, guest }) =
   await expect(sections.getByRole('tab', { name: 'Trading' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('radiogroup', { name: 'Chain' }).getByRole('radio', { name: /Solana/ })).toHaveAttribute('aria-checked', 'true');
 
-  const slippage = page.getByLabel('P2 buy slippage');
+  const slippage = page.getByLabel('Fast buy slippage');
   await expect(slippage).toHaveValue('25');
   await slippage.fill('30');
   await slippage.blur();
@@ -39,7 +39,7 @@ test('slippage preset and theme persist after reload', async ({ page, guest }) =
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(theme.getByRole('radio', { name: 'Light' })).toHaveAttribute('aria-checked', 'true');
   await sections.getByRole('tab', { name: 'Trading' }).click();
-  await expect(page.getByLabel('P2 buy slippage')).toHaveValue('30');
+  await expect(page.getByLabel('Fast buy slippage')).toHaveValue('30');
 
   // Without this browser's local copy, the theme still comes from the account.
   await page.evaluate(() => localStorage.removeItem('ts.theme'));

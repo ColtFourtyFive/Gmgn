@@ -5,7 +5,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { formatNative, type CreateOrderRequest, type StrategySpec, type SwapRequest } from '@trenchscope/shared';
+import { formatNative, type CreateOrderRequest, type StrategySpec, type SwapRequest, PRESET_LABELS } from '@trenchscope/shared';
 import { Code, Rocket, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native } from '@/components/common';
@@ -91,7 +91,7 @@ function AutoBuy({ token, presetId, preset, trade, signedIn, balance, maxBuy, in
           <Native value={amount} chain={token.chain} />
         </SummaryRow>
         <SummaryRow label="Exit strategy">{describeStrategy(strategy)}</SummaryRow>
-        <SummaryRow label={`Preset ${presetId}`}>{slippageLabel(preset)} slippage</SummaryRow>
+        <SummaryRow label={`Preset ${PRESET_LABELS[presetId]}`}>{slippageLabel(preset)} slippage</SummaryRow>
       </>,
     );
   };
