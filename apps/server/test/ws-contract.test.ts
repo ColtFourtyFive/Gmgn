@@ -18,11 +18,11 @@ function serverUserTypes(): string[] {
   return [...types].sort();
 }
 
-/** Types listed for `user` in the realtime protocol comment of packages/shared/src/types.ts. */
+/** Types listed for `user` in the realtime protocol comment of packages/shared/src/types/ws.ts. */
 function contractUserTypes(): string[] {
-  const lines = read('packages/shared/src/types.ts').split('\n');
+  const lines = read('packages/shared/src/types/ws.ts').split('\n');
   const start = lines.findIndex((l) => /^ \*\s+user\b.*->/.test(l));
-  expect(start, 'user channel entry in the types.ts realtime protocol comment').toBeGreaterThan(-1);
+  expect(start, 'user channel entry in the types/ws.ts realtime protocol comment').toBeGreaterThan(-1);
   const types: string[] = [];
   for (let i = start; i < lines.length; i++) {
     const line = lines[i]!;
@@ -50,7 +50,7 @@ function apiDocUserTypes(): string[] {
 }
 
 describe('user channel contract', () => {
-  it('types.ts lists exactly the message types the server publishes on the user channel', () => {
+  it('types/ws.ts lists exactly the message types the server publishes on the user channel', () => {
     const server = serverUserTypes();
     expect(server).toContain('fill');
     expect(contractUserTypes()).toEqual(server);

@@ -59,8 +59,9 @@ TP / SL / trailing orders, token launches). It runs in one of two modes per depl
   archetype/skill). Analytics, classification and risk scores use only what a real indexer could see
   (trades, balances, funding links, blocks, timestamps); hidden state is used only in tests to
   measure classifier quality (rug-ratio AUC, smart-money precision/recall).
-- **Contract first.** `packages/shared/src/types.ts` + `docs/API.md` define every DTO, endpoint and
-  channel. Server modules talk through the interfaces in `apps/server/src/context.ts`.
+- **Contract first.** `packages/shared/src/types/*` (re-exported by `types.ts`) + `docs/API.md` define
+  every DTO, endpoint and channel. Server modules talk through the interfaces in
+  `apps/server/src/context.ts`.
 - **Realtime by channel.** The hub groups subscriptions by `(channel, params)` so each distinct query
   (e.g. a Trenches filter set) is computed once per cadence and fanned out (queries that differ only in
   viewers' blacklist exclusions share one computation and, when nothing shown is hidden, one payload);
