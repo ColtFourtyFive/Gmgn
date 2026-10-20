@@ -138,9 +138,10 @@ while (done < WANT && Date.now() - t0 < 40 * 60_000) {
     if (mc) w.peak = Math.max(w.peak, mc);
   }
   for (const w of [...watching.values()]) {
-    // A partial dev sell may be followed by the full dump: wait up to 30 s for "sold all", then 10 s past it.
+    // A partial dev sell may be followed by the full dump: wait up to 30 s for it, then 10 s past it.
     const mine = sells.filter((x) => x.token?.address === w.t.address);
-    const all = mine.find((x) => /all/i.test(x.title));
+    // "sold all", "team sold all", or a single sell of 80%+ counts as the full dump.
+    const all = mine.find((x) => /all/i.test(x.title) || Number((x.title.match(/(\d+)%/) || [])[1]) >= 80);
     if (mine.length && !w.devSellAt) { w.devSellAt = Math.min(...mine.map((x) => x.createdAt)) / 1000; console.log('dev sell', w.n, w.t.symbol, mine[0].title); }
     if (all && !w.dumpAt) w.dumpAt = all.createdAt / 1000;
     const now = Date.now() / 1000;

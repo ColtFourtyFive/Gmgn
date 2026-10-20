@@ -1,0 +1,2313 @@
+{
+ "takes": [
+  {
+   "n": 1,
+   "file": "watch-brick",
+   "peakMc": 29325.525114057473,
+   "mc0": 22861.10414263756,
+   "symbol": "BRICK",
+   "address": "pv5BdSjvZ7xTdxeTRJbBp1S398EUk5BVNVrztFoUpit",
+   "createdAt": 1792536289.756,
+   "lapseStart": 1792536332.780997,
+   "rtStart": 1792536498.003754,
+   "end": 1792536538.142255,
+   "devSellAt": 1792536527.382,
+   "dumpAt": 1792536527.382,
+   "security": {
+    "renouncedMint": true,
+    "renouncedFreeze": true,
+    "isOpenSource": null,
+    "isRenounced": null,
+    "isHoneypot": null,
+    "buyTax": 0,
+    "sellTax": 0,
+    "lpBurnedRate": null,
+    "top10HolderRate": 0.12096773623793515,
+    "top100HolderRate": 0.13222419040864,
+    "devHoldRate": 0.012847738015145839,
+    "devStatus": "sold_part",
+    "insiderHoldRate": 0.05811508790587723,
+    "sniperHoldRate": 0,
+    "sniperCount": 2,
+    "bundlerRate": 0.593198723680251,
+    "ratTraderRate": 0.5763780328733961,
+    "freshWalletRate": 0.5,
+    "botDegenRate": 0,
+    "isWashTrading": false,
+    "rugRatio": 0.925,
+    "riskLevel": "high",
+    "checks": [
+     {
+      "key": "mint",
+      "label": "Mint authority",
+      "value": "Renounced",
+      "level": "good"
+     },
+     {
+      "key": "freeze",
+      "label": "Freeze authority",
+      "value": "Renounced",
+      "level": "good"
+     },
+     {
+      "key": "tax",
+      "label": "Buy / sell tax",
+      "value": "0% / 0%",
+      "level": "good"
+     },
+     {
+      "key": "lp",
+      "label": "LP burned",
+      "value": "On curve",
+      "level": "info"
+     },
+     {
+      "key": "top10",
+      "label": "Top 10 holders",
+      "value": "12%",
+      "level": "good"
+     },
+     {
+      "key": "dev",
+      "label": "Dev holding",
+      "value": "1.3% (sold part)",
+      "level": "good"
+     },
+     {
+      "key": "insiders",
+      "label": "Insiders",
+      "value": "5.8%",
+      "level": "warn",
+      "hint": "Wallets funded by or linked to the dev"
+     },
+     {
+      "key": "snipers",
+      "label": "Snipers",
+      "value": "2 (0%)",
+      "level": "good"
+     },
+     {
+      "key": "bundlers",
+      "label": "Bundlers",
+      "value": "59%",
+      "level": "bad",
+      "hint": "Share of volume from launch-block bundles"
+     },
+     {
+      "key": "fresh",
+      "label": "Fresh wallets",
+      "value": "50%",
+      "level": "bad",
+      "hint": "Share of holders that are brand-new wallets"
+     },
+     {
+      "key": "bots",
+      "label": "Bot degens",
+      "value": "0%",
+      "level": "good"
+     },
+     {
+      "key": "wash",
+      "label": "Wash trading",
+      "value": "No",
+      "level": "good"
+     },
+     {
+      "key": "smart",
+      "label": "Smart money",
+      "value": "0",
+      "level": "warn"
+     },
+     {
+      "key": "rug",
+      "label": "Rug ratio",
+      "value": "93%",
+      "level": "bad",
+      "hint": "Composite rug likelihood from holder, dev and contract signals"
+     }
+    ]
+   },
+   "athMarketCapUsd": 29325.525114057473,
+   "trades": [
+    {
+     "t": 1792536632.726,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341581,
+     "mc": 6860.174155329319,
+     "usd": 10.330096763319585
+    },
+    {
+     "t": 1792536584.613,
+     "side": "sell",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341461,
+     "mc": 6880.339703853469,
+     "usd": 102.2528259337761
+    },
+    {
+     "t": 1792536583.107,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341457,
+     "mc": 7102.027780407399,
+     "usd": 1.655539153470115
+    },
+    {
+     "t": 1792536580.589,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341451,
+     "mc": 7104.963924984303,
+     "usd": 3.6836898617681144
+    },
+    {
+     "t": 1792536564.693,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341411,
+     "mc": 7113.278251489715,
+     "usd": 6.482212078651686
+    },
+    {
+     "t": 1792536548.48,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341371,
+     "mc": 7127.995329092239,
+     "usd": 1.5511822962925303
+    },
+    {
+     "t": 1792536536.942,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341342,
+     "mc": 7136.208076215759,
+     "usd": 43.128097531085835
+    },
+    {
+     "t": 1792536536.942,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341342,
+     "mc": 7043.948966089046,
+     "usd": 18.64901657053068
+    },
+    {
+     "t": 1792536535.688,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341339,
+     "mc": 7004.241111147879,
+     "usd": 7.266992684588666
+    },
+    {
+     "t": 1792536532.683,
+     "side": "sell",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341331,
+     "mc": 7020.0148598725045,
+     "usd": 146.9789685350301
+    },
+    {
+     "t": 1792536529.394,
+     "side": "buy",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341323,
+     "mc": 7343.139565763556,
+     "usd": 194.58048256822812
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "dev",
+      "fresh"
+     ],
+     "isDev": true,
+     "block": 4481341318,
+     "mc": 6924.366149614775,
+     "usd": 1484.8177620112162
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 10497.7082413606,
+     "usd": 564.7696079729437
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 12051.344775714428,
+     "usd": 662.5825590413691
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 14010.679889040708,
+     "usd": 609.4215599994321
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 15943.04449454002,
+     "usd": 861.2445447115068
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 18886.68561977759,
+     "usd": 635.7143815020954
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 21219.365998752135,
+     "usd": 856.5210053805018
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 24576.999200036196,
+     "usd": 777.8267830313106
+    },
+    {
+     "t": 1792536527.382,
+     "side": "sell",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341318,
+     "mc": 27839.715219352347,
+     "usd": 339.0484676311938
+    },
+    {
+     "t": 1792536526.882,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341317,
+     "mc": 29325.525114057473,
+     "usd": 182.07152134610317
+    },
+    {
+     "t": 1792536521.093,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341302,
+     "mc": 28508.467195834237,
+     "usd": 60.016693418775205
+    },
+    {
+     "t": 1792536508.527,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341271,
+     "mc": 28246.371693822748,
+     "usd": 86.09003144249316
+    },
+    {
+     "t": 1792536501.516,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341253,
+     "mc": 27906.13376036135,
+     "usd": 7.383008231247922
+    },
+    {
+     "t": 1792536497.503,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341243,
+     "mc": 27874.802176897254,
+     "usd": 36.63872404907202
+    },
+    {
+     "t": 1792536487.706,
+     "side": "buy",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341219,
+     "mc": 27722.585235264327,
+     "usd": 554.5489250427813
+    },
+    {
+     "t": 1792536487.706,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341219,
+     "mc": 25426.081391564036,
+     "usd": 23.572924538903127
+    },
+    {
+     "t": 1792536462.509,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341156,
+     "mc": 25326.642730571093,
+     "usd": 385.7147762901776
+    },
+    {
+     "t": 1792536425.798,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341064,
+     "mc": 23801.69099653716,
+     "usd": 65.82013157660117
+    },
+    {
+     "t": 1792536423.23,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341058,
+     "mc": 24065.642349788108,
+     "usd": 16.17215295978395
+    },
+    {
+     "t": 1792536414.113,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341035,
+     "mc": 24123.879223272234,
+     "usd": 5.35276966603468
+    },
+    {
+     "t": 1792536406.838,
+     "side": "sell",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341017,
+     "mc": 24089.200550966314,
+     "usd": 106.58936448137926
+    },
+    {
+     "t": 1792536395.782,
+     "side": "buy",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481340989,
+     "mc": 24536.94680791652,
+     "usd": 355.64656203820914
+    },
+    {
+     "t": 1792536382.017,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481340955,
+     "mc": 23144.94532055292,
+     "usd": 2.5070315905480642
+    },
+    {
+     "t": 1792536375.499,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481340938,
+     "mc": 23171.62221067377,
+     "usd": 5.507226930846798
+    },
+    {
+     "t": 1792536368.486,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481340921,
+     "mc": 23155.817070604277,
+     "usd": 2.558043427940168
+    },
+    {
+     "t": 1792536361.957,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481340904,
+     "mc": 23153.77300180193,
+     "usd": 64.61894215390456
+    },
+    {
+     "t": 1792536348.761,
+     "side": "sell",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340871,
+     "mc": 22884.07677351714,
+     "usd": 2.916063837261101
+    },
+    {
+     "t": 1792536333.933,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340834,
+     "mc": 22887.02642195133,
+     "usd": 7.646770768507819
+    },
+    {
+     "t": 1792536330.179,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481340825,
+     "mc": 22861.10414263756,
+     "usd": 15.632918571210563
+    },
+    {
+     "t": 1792536325.854,
+     "side": "sell",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481340814,
+     "mc": 22790.99882291097,
+     "usd": 254.81491014178258
+    },
+    {
+     "t": 1792536305.46649,
+     "side": "buy",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340763,
+     "mc": 23811.284911664847,
+     "usd": 344.9653566251842
+    },
+    {
+     "t": 1792536290.956,
+     "side": "buy",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481340727,
+     "mc": 22491.711242975336,
+     "usd": 99.79490172004381
+    },
+    {
+     "t": 1792536290.156,
+     "side": "buy",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481340725,
+     "mc": 22113.2357461154,
+     "usd": 241.75998644863762
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 21209.66661858514,
+     "usd": 1304.630784538237
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 16658.9390114902,
+     "usd": 934.6593325735868
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 13736.177714523512,
+     "usd": 563.1958589973997
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 12111.02889287732,
+     "usd": 710.617694006233
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 10206.42912983974,
+     "usd": 317.49411113691616
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 9408.109969502757,
+     "usd": 375.82815919407
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340724,
+     "mc": 8505.12593754331,
+     "usd": 318.9166748142939
+    },
+    {
+     "t": 1792536289.756,
+     "side": "buy",
+     "tags": [
+      "dev",
+      "fresh"
+     ],
+     "isDev": true,
+     "block": 4481340724,
+     "mc": 7774.60403862666,
+     "usd": 1221.5938832239412
+    }
+   ]
+  },
+  {
+   "n": 4,
+   "file": "watch-gerry",
+   "peakMc": 54665.86726848676,
+   "mc0": 16389.687821902,
+   "symbol": "GERRY",
+   "address": "KGWkReM6efypK8DREMtmR2Aeyqr2yg69GtLqq31zupit",
+   "createdAt": 1792536399.289,
+   "lapseStart": 1792536400.917677,
+   "rtStart": 1792536641.940139,
+   "end": 1792536660.280436,
+   "devSellAt": 1792536649.82,
+   "dumpAt": 1792536649.82,
+   "security": {
+    "renouncedMint": true,
+    "renouncedFreeze": true,
+    "isOpenSource": null,
+    "isRenounced": null,
+    "isHoneypot": null,
+    "buyTax": 0,
+    "sellTax": 0,
+    "lpBurnedRate": null,
+    "top10HolderRate": 0.15367791756944138,
+    "top100HolderRate": 0.23164488577616388,
+    "devHoldRate": 0,
+    "devStatus": "sold_all",
+    "insiderHoldRate": 0,
+    "sniperHoldRate": 0,
+    "sniperCount": 1,
+    "bundlerRate": 0.23751527238191622,
+    "ratTraderRate": 0.23794906688770656,
+    "freshWalletRate": 0.1346153846153846,
+    "botDegenRate": 0.11538461538461539,
+    "isWashTrading": false,
+    "rugRatio": 0.8956,
+    "riskLevel": "high",
+    "checks": [
+     {
+      "key": "mint",
+      "label": "Mint authority",
+      "value": "Renounced",
+      "level": "good"
+     },
+     {
+      "key": "freeze",
+      "label": "Freeze authority",
+      "value": "Renounced",
+      "level": "good"
+     },
+     {
+      "key": "tax",
+      "label": "Buy / sell tax",
+      "value": "0% / 0%",
+      "level": "good"
+     },
+     {
+      "key": "lp",
+      "label": "LP burned",
+      "value": "On curve",
+      "level": "info"
+     },
+     {
+      "key": "top10",
+      "label": "Top 10 holders",
+      "value": "15%",
+      "level": "good"
+     },
+     {
+      "key": "dev",
+      "label": "Dev holding",
+      "value": "Sold all",
+      "level": "good",
+      "hint": "Dev no longer holds this token"
+     },
+     {
+      "key": "insiders",
+      "label": "Insiders",
+      "value": "0%",
+      "level": "good"
+     },
+     {
+      "key": "snipers",
+      "label": "Snipers",
+      "value": "1 (0%)",
+      "level": "good"
+     },
+     {
+      "key": "bundlers",
+      "label": "Bundlers",
+      "value": "24%",
+      "level": "warn",
+      "hint": "Share of volume from launch-block bundles"
+     },
+     {
+      "key": "fresh",
+      "label": "Fresh wallets",
+      "value": "13%",
+      "level": "warn",
+      "hint": "Share of holders that are brand-new wallets"
+     },
+     {
+      "key": "bots",
+      "label": "Bot degens",
+      "value": "12%",
+      "level": "good"
+     },
+     {
+      "key": "wash",
+      "label": "Wash trading",
+      "value": "No",
+      "level": "good"
+     },
+     {
+      "key": "smart",
+      "label": "Smart money",
+      "value": "0",
+      "level": "warn"
+     },
+     {
+      "key": "rug",
+      "label": "Rug ratio",
+      "value": "90%",
+      "level": "bad",
+      "hint": "Composite rug likelihood from holder, dev and contract signals"
+     }
+    ]
+   },
+   "athMarketCapUsd": 54665.86726848676,
+   "trades": [
+    {
+     "t": 1792536787.376,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341968,
+     "mc": 8578.603090011993,
+     "usd": 5
+    },
+    {
+     "t": 1792536780.087,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341950,
+     "mc": 8573.643495288157,
+     "usd": 11.078472410293204
+    },
+    {
+     "t": 1792536777.576,
+     "side": "sell",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341943,
+     "mc": 8547.609685749914,
+     "usd": 89.57356401401859
+    },
+    {
+     "t": 1792536773.805,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341934,
+     "mc": 8761.167925527605,
+     "usd": 16.38358383507367
+    },
+    {
+     "t": 1792536769.971,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341924,
+     "mc": 8799.22970303509,
+     "usd": 17.561691317490425
+    },
+    {
+     "t": 1792536759.882,
+     "side": "sell",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341899,
+     "mc": 8834.606429706158,
+     "usd": 22.947092898553866
+    },
+    {
+     "t": 1792536756.874,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341892,
+     "mc": 8890.624225033262,
+     "usd": 5
+    },
+    {
+     "t": 1792536756.122,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341890,
+     "mc": 8878.646396193126,
+     "usd": 6.214370457165839
+    },
+    {
+     "t": 1792536750.549,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341876,
+     "mc": 8896.901347541745,
+     "usd": 180.14949020498932
+    },
+    {
+     "t": 1792536739.576,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341848,
+     "mc": 8467.156391840273,
+     "usd": 3.8619423334031313
+    },
+    {
+     "t": 1792536737.57,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341843,
+     "mc": 8476.373992944698,
+     "usd": 124.69786278613934
+    },
+    {
+     "t": 1792536734.287,
+     "side": "sell",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341835,
+     "mc": 8779.213411458371,
+     "usd": 3.7195526587657306
+    },
+    {
+     "t": 1792536732.099,
+     "side": "sell",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341830,
+     "mc": 8788.251844416955,
+     "usd": 231.48698536966194
+    },
+    {
+     "t": 1792536718.398,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341795,
+     "mc": 9360.470406594692,
+     "usd": 12.631431321489714
+    },
+    {
+     "t": 1792536714.091,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341785,
+     "mc": 9388.900531447855,
+     "usd": 32.079287423307754
+    },
+    {
+     "t": 1792536707.968,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341769,
+     "mc": 9467.141524941992,
+     "usd": 2.521960760124
+    },
+    {
+     "t": 1792536706.207,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341765,
+     "mc": 9473.50661703629,
+     "usd": 67.04110489245966
+    },
+    {
+     "t": 1792536703.925,
+     "side": "sell",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341759,
+     "mc": 9642.449320024056,
+     "usd": 147.74389648845593
+    },
+    {
+     "t": 1792536701.296,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341753,
+     "mc": 10022.39985514711,
+     "usd": 6.193481814401025
+    },
+    {
+     "t": 1792536692.909,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341732,
+     "mc": 10049.043945024297,
+     "usd": 11.50672634105336
+    },
+    {
+     "t": 1792536687.369,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341718,
+     "mc": 10075.989655672289,
+     "usd": 12.083388403654798
+    },
+    {
+     "t": 1792536680.829,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341702,
+     "mc": 10053.171254796736,
+     "usd": 2.2351111124049363
+    },
+    {
+     "t": 1792536680.829,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341702,
+     "mc": 10058.980027470663,
+     "usd": 11.343845884472453
+    },
+    {
+     "t": 1792536668.289,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341670,
+     "mc": 10085.32894659554,
+     "usd": 20.434543927881016
+    },
+    {
+     "t": 1792536668.038,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341670,
+     "mc": 10033.262522348281,
+     "usd": 1.8998463767437588
+    },
+    {
+     "t": 1792536667.788,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341669,
+     "mc": 10038.195758860202,
+     "usd": 3.7001598048630404
+    },
+    {
+     "t": 1792536659.874,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341649,
+     "mc": 10033.916535123719,
+     "usd": 5.321747789803535
+    },
+    {
+     "t": 1792536650.821,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341627,
+     "mc": 10015.975924242044,
+     "usd": 4.799108346080957
+    },
+    {
+     "t": 1792536650.57,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341626,
+     "mc": 10028.428678576796,
+     "usd": 206.2036524195295
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 9510.714940533147,
+     "usd": 1.7719269021478101
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 9515.194412435987,
+     "usd": 2.4577022270049125
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 9521.409286004828,
+     "usd": 574.3339477295725
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 11029.384505080465,
+     "usd": 437.1552179368705
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 12251.44718044634,
+     "usd": 434.328896480147
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 13529.18074993774,
+     "usd": 770.3999617258671
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 15951.46802667634,
+     "usd": 596.1229855272402
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341624,
+     "mc": 17962.611399118498,
+     "usd": 945.1639148340081
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "dev",
+      "bundler",
+      "fresh"
+     ],
+     "isDev": true,
+     "block": 4481341624,
+     "mc": 21395.98409790798,
+     "usd": 662.1381832619263
+    },
+    {
+     "t": 1792536649.82,
+     "side": "sell",
+     "tags": [
+      "dev"
+     ],
+     "isDev": true,
+     "block": 4481341624,
+     "mc": 23979.99095976106,
+     "usd": 6037.0746866603695
+    },
+    {
+     "t": 1792536648.299,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341620,
+     "mc": 54319.1061418983,
+     "usd": 10.485846744745455
+    },
+    {
+     "t": 1792536648.299,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341620,
+     "mc": 54257.03317061047,
+     "usd": 67.58134279037108
+    },
+    {
+     "t": 1792536646.794,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341616,
+     "mc": 54665.86726848676,
+     "usd": 635.1789136341363
+    },
+    {
+     "t": 1792536646.794,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341616,
+     "mc": 50957.85032453121,
+     "usd": 118.10168335265921
+    },
+    {
+     "t": 1792536645.293,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341613,
+     "mc": 50282.758425543776,
+     "usd": 32.18527164239086
+    },
+    {
+     "t": 1792536643.792,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341609,
+     "mc": 50099.56180343365,
+     "usd": 260.67741299336467
+    },
+    {
+     "t": 1792536643.541,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341608,
+     "mc": 48628.12144297815,
+     "usd": 68.65653967629363
+    },
+    {
+     "t": 1792536640.029,
+     "side": "buy",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341600,
+     "mc": 49010.591731976674,
+     "usd": 502.6041474428427
+    },
+    {
+     "t": 1792536638.523,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341596,
+     "mc": 46224.106013123994,
+     "usd": 245.78241979087701
+    },
+    {
+     "t": 1792536638.022,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341595,
+     "mc": 44880.685800833635,
+     "usd": 85.00260495847583
+    },
+    {
+     "t": 1792536635.239,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341588,
+     "mc": 44424.22994473375,
+     "usd": 20.612465407050337
+    },
+    {
+     "t": 1792536634.986,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341587,
+     "mc": 44313.894446069135,
+     "usd": 9.63667620869563
+    },
+    {
+     "t": 1792536634.735,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341586,
+     "mc": 44262.357796329205,
+     "usd": 630.5581254918994
+    },
+    {
+     "t": 1792536633.983,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341584,
+     "mc": 40955.32523876699,
+     "usd": 70.3623922370084
+    },
+    {
+     "t": 1792536633.727,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341584,
+     "mc": 41325.364969418,
+     "usd": 570.3988097475367
+    },
+    {
+     "t": 1792536629.708,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341574,
+     "mc": 38437.20068641423,
+     "usd": 22.19117105480359
+    },
+    {
+     "t": 1792536627.198,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341567,
+     "mc": 38553.239054584476,
+     "usd": 134.40735958755553
+    },
+    {
+     "t": 1792536622.375,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341555,
+     "mc": 37882.11455287002,
+     "usd": 16.029310376676698
+    },
+    {
+     "t": 1792536621.61,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341554,
+     "mc": 37802.879341227985,
+     "usd": 42.09320821993834
+    },
+    {
+     "t": 1792536619.856,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341549,
+     "mc": 37595.20142632711,
+     "usd": 16.125218013249036
+    },
+    {
+     "t": 1792536619.856,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341549,
+     "mc": 37515.79496375379,
+     "usd": 22.547665692084987
+    },
+    {
+     "t": 1792536617.579,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341543,
+     "mc": 37632.40004218598,
+     "usd": 32.44959304640485
+    },
+    {
+     "t": 1792536617.579,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341543,
+     "mc": 37472.61981011376,
+     "usd": 157.01901916999435
+    },
+    {
+     "t": 1792536614.041,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341535,
+     "mc": 36704.26768936916,
+     "usd": 29.482515101811522
+    },
+    {
+     "t": 1792536613.541,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341533,
+     "mc": 36560.88635713154,
+     "usd": 10.440341496176675
+    },
+    {
+     "t": 1792536610.523,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341526,
+     "mc": 36503.958293138916,
+     "usd": 22.962582537855578
+    },
+    {
+     "t": 1792536609.517,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341523,
+     "mc": 36392.556919102935,
+     "usd": 9.49431708631188
+    },
+    {
+     "t": 1792536609.01,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341522,
+     "mc": 36346.54564710343,
+     "usd": 17.73685242213896
+    },
+    {
+     "t": 1792536608.259,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341520,
+     "mc": 36260.66744960191,
+     "usd": 85.11887391883621
+    },
+    {
+     "t": 1792536606.253,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341515,
+     "mc": 35858.82438627098,
+     "usd": 16.656314662130598
+    },
+    {
+     "t": 1792536599.451,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341498,
+     "mc": 35938.789257125674,
+     "usd": 25.599208382650556
+    },
+    {
+     "t": 1792536596.2,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341490,
+     "mc": 35822.045300739905,
+     "usd": 74.36348998062151
+    },
+    {
+     "t": 1792536592.932,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341482,
+     "mc": 35460.493757492244,
+     "usd": 8.037441612932039
+    },
+    {
+     "t": 1792536591.66,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341479,
+     "mc": 35422.04768110928,
+     "usd": 499.4934760138881
+    },
+    {
+     "t": 1792536590.909,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341477,
+     "mc": 33073.700213156044,
+     "usd": 17.958129345031146
+    },
+    {
+     "t": 1792536587.641,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341469,
+     "mc": 33143.74544399992,
+     "usd": 46.61592317788207
+    },
+    {
+     "t": 1792536585.864,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341464,
+     "mc": 33364.17035282297,
+     "usd": 57.84319895921532
+    },
+    {
+     "t": 1792536584.863,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341462,
+     "mc": 33096.19584474949,
+     "usd": 5.5112638368369895
+    },
+    {
+     "t": 1792536584.863,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341462,
+     "mc": 33070.71978045869,
+     "usd": 20.220493599765486
+    },
+    {
+     "t": 1792536581.342,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341453,
+     "mc": 32974.16828490477,
+     "usd": 75.37147291244041
+    },
+    {
+     "t": 1792536579.087,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341447,
+     "mc": 32627.236894986494,
+     "usd": 8.859569936681897
+    },
+    {
+     "t": 1792536578.585,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341446,
+     "mc": 32586.577214526973,
+     "usd": 68.10067118236834
+    },
+    {
+     "t": 1792536575.575,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341438,
+     "mc": 32262.8807805941,
+     "usd": 15.53953638676595
+    },
+    {
+     "t": 1792536574.07,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341435,
+     "mc": 32191.96741261256,
+     "usd": 17.789030789098828
+    },
+    {
+     "t": 1792536573.571,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341433,
+     "mc": 32110.88444354755,
+     "usd": 15.184548325845011
+    },
+    {
+     "t": 1792536572.567,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341431,
+     "mc": 32051.846082846885,
+     "usd": 47.54995313659286
+    },
+    {
+     "t": 1792536571.314,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341428,
+     "mc": 31835.846946022513,
+     "usd": 12.906907921835796
+    },
+    {
+     "t": 1792536569.002,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341422,
+     "mc": 31777.342389618498,
+     "usd": 109.44481730618845
+    },
+    {
+     "t": 1792536566.741,
+     "side": "sell",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341416,
+     "mc": 31286.343572815967,
+     "usd": 409.2705095140136
+    },
+    {
+     "t": 1792536565.945,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341414,
+     "mc": 33191.68189640047,
+     "usd": 47.31692427941443
+    },
+    {
+     "t": 1792536564.443,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341411,
+     "mc": 32972.9548571129,
+     "usd": 155.42559402415617
+    },
+    {
+     "t": 1792536559.915,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341399,
+     "mc": 32247.95969372722,
+     "usd": 8.799299870556172
+    },
+    {
+     "t": 1792536558.143,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341395,
+     "mc": 32207.80551332561,
+     "usd": 791.7175233040425
+    },
+    {
+     "t": 1792536557.893,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341394,
+     "mc": 28697.3105743542,
+     "usd": 28.074093542210598
+    },
+    {
+     "t": 1792536555.862,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341389,
+     "mc": 28572.79147106933,
+     "usd": 49.67456721528141
+    },
+    {
+     "t": 1792536553.105,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341382,
+     "mc": 28359.73541354435,
+     "usd": 16.660078341488806
+    },
+    {
+     "t": 1792536550.579,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341376,
+     "mc": 28304.483309976673,
+     "usd": 280.29662291534476
+    },
+    {
+     "t": 1792536549.481,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341373,
+     "mc": 27118.724959453117,
+     "usd": 680.0110589986422
+    },
+    {
+     "t": 1792536548.981,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341372,
+     "mc": 24347.468135354924,
+     "usd": 186.95686408049397
+    },
+    {
+     "t": 1792536546.73,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341366,
+     "mc": 23617.24035704922,
+     "usd": 33.79007941208473
+    },
+    {
+     "t": 1792536543.459,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341358,
+     "mc": 23485.46978424565,
+     "usd": 63.55698671128398
+    },
+    {
+     "t": 1792536542.706,
+     "side": "buy",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341356,
+     "mc": 23238.616510881497,
+     "usd": 346.06618922458523
+    },
+    {
+     "t": 1792536539.951,
+     "side": "sell",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341349,
+     "mc": 21923.86927973786,
+     "usd": 138.75553177374312
+    },
+    {
+     "t": 1792536536.437,
+     "side": "buy",
+     "tags": [
+      "kol"
+     ],
+     "isDev": false,
+     "block": 4481341341,
+     "mc": 22462.984824261748,
+     "usd": 340.3170657984828
+    },
+    {
+     "t": 1792536534.936,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341337,
+     "mc": 21185.857080979036,
+     "usd": 14.296839158872565
+    },
+    {
+     "t": 1792536534.436,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341336,
+     "mc": 21239.83234142749,
+     "usd": 124.61259207233786
+    },
+    {
+     "t": 1792536532.932,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341332,
+     "mc": 21713.193442825323,
+     "usd": 146.6261368367346
+    },
+    {
+     "t": 1792536529.896,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341324,
+     "mc": 21168.57300035284,
+     "usd": 6.495453810307997
+    },
+    {
+     "t": 1792536527.887,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341319,
+     "mc": 21144.570887225378,
+     "usd": 9.826242532552074
+    },
+    {
+     "t": 1792536526.383,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341315,
+     "mc": 21104.382573975534,
+     "usd": 430.09267813302824
+    },
+    {
+     "t": 1792536524.104,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341310,
+     "mc": 19546.763643917922,
+     "usd": 647.1896336658967
+    },
+    {
+     "t": 1792536520.59,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341301,
+     "mc": 21939.479017977632,
+     "usd": 116.05293781267461
+    },
+    {
+     "t": 1792536516.556,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341291,
+     "mc": 21504.632291020163,
+     "usd": 29.482946313841637
+    },
+    {
+     "t": 1792536504.27,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341260,
+     "mc": 21414.43209204097,
+     "usd": 24.712223271942026
+    },
+    {
+     "t": 1792536502.265,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341255,
+     "mc": 21505.170252492833,
+     "usd": 647.15275823952
+    },
+    {
+     "t": 1792536494.746,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341236,
+     "mc": 19165.77588126237,
+     "usd": 11.804906908242902
+    },
+    {
+     "t": 1792536490.212,
+     "side": "sell",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341225,
+     "mc": 19121.7943006684,
+     "usd": 25.197804443896075
+    },
+    {
+     "t": 1792536487.706,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341219,
+     "mc": 19212.2356006583,
+     "usd": 8.57433942425535
+    },
+    {
+     "t": 1792536486.704,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341216,
+     "mc": 19178.020418384844,
+     "usd": 22.48496032097359
+    },
+    {
+     "t": 1792536482.412,
+     "side": "buy",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341206,
+     "mc": 19098.97276951795,
+     "usd": 120.50109350766185
+    },
+    {
+     "t": 1792536480.397,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341200,
+     "mc": 18676.597339143435,
+     "usd": 12.827751636014266
+    },
+    {
+     "t": 1792536477.386,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341193,
+     "mc": 18632.072614042638,
+     "usd": 32.078025493890806
+    },
+    {
+     "t": 1792536476.387,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341190,
+     "mc": 18512.344934483714,
+     "usd": 5.605712064343429
+    },
+    {
+     "t": 1792536464.566,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341161,
+     "mc": 18504.034678668042,
+     "usd": 363.41195734819973
+    },
+    {
+     "t": 1792536459.253,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341148,
+     "mc": 17269.240733582752,
+     "usd": 30.077254577410855
+    },
+    {
+     "t": 1792536455.997,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341139,
+     "mc": 17173.238053821005,
+     "usd": 71.51887168491791
+    },
+    {
+     "t": 1792536448.933,
+     "side": "sell",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341122,
+     "mc": 16942.02003813351,
+     "usd": 392.5135778207147
+    },
+    {
+     "t": 1792536448.432,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341121,
+     "mc": 18292.132105660097,
+     "usd": 18.960793947103653
+    },
+    {
+     "t": 1792536443.887,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341109,
+     "mc": 18364.074952283856,
+     "usd": 4.090484946971481
+    },
+    {
+     "t": 1792536431.328,
+     "side": "sell",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341078,
+     "mc": 18361.674761062102,
+     "usd": 30.354129351922964
+    },
+    {
+     "t": 1792536431.328,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341078,
+     "mc": 18468.47352426058,
+     "usd": 19.461375370287765
+    },
+    {
+     "t": 1792536425.6250398,
+     "side": "buy",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341064,
+     "mc": 18409.801379883153,
+     "usd": 3.497573639546133
+    },
+    {
+     "t": 1792536423.23,
+     "side": "buy",
+     "tags": [
+      "bot"
+     ],
+     "isDev": false,
+     "block": 4481341058,
+     "mc": 18397.746777899873,
+     "usd": 24.620741259750304
+    },
+    {
+     "t": 1792536422.397,
+     "side": "buy",
+     "tags": [
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341055,
+     "mc": 18313.00159456413,
+     "usd": 99.9691203369215
+    },
+    {
+     "t": 1792536414.548785,
+     "side": "buy",
+     "tags": [
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481341036,
+     "mc": 17965.82183411237,
+     "usd": 4.73098661035871
+    },
+    {
+     "t": 1792536413.613,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341034,
+     "mc": 17949.712707342573,
+     "usd": 72.34411411181367
+    },
+    {
+     "t": 1792536406.838,
+     "side": "buy",
+     "tags": [],
+     "isDev": false,
+     "block": 4481341017,
+     "mc": 17694.3201729992,
+     "usd": 8.026270042677048
+    },
+    {
+     "t": 1792536400.489,
+     "side": "buy",
+     "tags": [
+      "sniper"
+     ],
+     "isDev": false,
+     "block": 4481341001,
+     "mc": 17673.51198391749,
+     "usd": 387.18302203301323
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 16389.687821902,
+     "usd": 857.4556121024964
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 13718.82537171225,
+     "usd": 497.96101182923695
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 12276.706354260648,
+     "usd": 403.0413276719566
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 11168.105652446411,
+     "usd": 557.5149661560089
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 9721.067902180153,
+     "usd": 334.25071613189
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "bundler",
+      "insider",
+      "fresh"
+     ],
+     "isDev": false,
+     "block": 4481340998,
+     "mc": 8901.637222468898,
+     "usd": 413.4968427165337
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "dev",
+      "bundler",
+      "fresh"
+     ],
+     "isDev": true,
+     "block": 4481340998,
+     "mc": 7937.8476446874665,
+     "usd": 229.0177593856267
+    },
+    {
+     "t": 1792536399.289,
+     "side": "buy",
+     "tags": [
+      "dev"
+     ],
+     "isDev": true,
+     "block": 4481340998,
+     "mc": 7427.802675046461,
+     "usd": 1067.970279399228
+    }
+   ]
+  }
+ ]
+}

@@ -544,6 +544,20 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 ```
 
 - `#1`: the warm-up retired its simulator-era autopsy, so the series (BRAND_GUIDE §14.3) starts here.
+- **As built (`launch-13`), filled from the clip** · `261/280`. The dev and the bundlers sold in the same second, and there was no earlier bundler sell, so those lines merge. The speed is labelled, and the times are since mint, as on screen:
+
+```text
+rug autopsy #1. demo data, mint to floor, 14× speed.
+
+0:00 bundlers: creation block
+0:01 snipers: blocks 1–3
+4:11 dev + bundlers sell, same second
+
+audit: red at 0:02.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
+```
+
 - **Fill every timestamp from the actual clip** and drop the brackets (the count only goes down). If the events come in a different order, rewrite the lines to match. Never stage it. If the clip runs faster than real time, label the speed on screen and in the post.
 - "audit: red at [0:03]" goes in only if the audit panel is red at that moment in the clip. It describes this one launch, not a detection rate (MNC-06).
 - "blocks 1–3" is the sniper rule: the 1st to 3rd block after the creation block (`SNIPER_BLOCKS = 3`). Don't convert blocks to seconds.
@@ -832,10 +846,10 @@ our links live in the bio and the pinned post's first reply. nowhere else. repor
 | `launch-7` | T6 | 1200 × 1200 PNG | Capture mode: a Market buy sized so the impact row turns amber or red (FB-09). The footer fee line hidden (capture mode) or cropped. **Blur the Fees value and the Route venue name** (`TrenchSwap` or a demo launchpad; T6 notes). Or capture on the live build after the Fees check | `the bill, before the meal` · DEMO | **READY** (`x/posts/launch/launch-7.png`; the Fees amount blurred, the route reads the capture-mode "launchpad · bonding curve"). Gate: Fees check |
 | `launch-8` | T7 | 1920 × 1080 MP4, 12–15 s, silent or a light bed | Capture mode, keyboard only, a different sequence from the warm-up's `peek-keys`: `/` → paste a demo token address → `Enter` → `B` (buy panel) → `S` (sell panel) → back to the board → `3` (Migrated) → `J` `K`. Keycap overlay bottom-left, no cursor | Frame 0: `hands off the mouse.` · one caption per key · end slate `your mouse can finally retire.` + mark · DEMO throughout. `/` search results carry chain marks: F-7 or crop | **READY** (`x/posts/launch/launch-8.mp4`). The pasted address and the browser's Back are labelled as such: there is no in-app hotkey back to the board |
 | `launch-9` | T8 | 1600 × 900 PNG, 2 × 2 | Capture mode: a copy-trade task card (FB-18), a migration sniper task (FB-19), the Signals feed with the "Hit 2x+" tile out of frame (FB-14), Hot by smart money (FB-15). The copy-trade and sniper form footers and any KOL rows out of frame | `the surveillance wing` · `copy · snipe · signals · monitor` · DEMO | **READY** (`x/posts/launch/launch-9.png`; the copy target's 30-day PnL and the task footers are out of frame). Gate K-2 |
-| `launch-10` | QT-1 | 1920 × 1080 MP4, 18–25 s, burned-in captions | Capture mode on demo data: one token's 1 s candles + its audit panel, the bundler and dev sell rows, the collapse, at real speed (FB-13). A different token from the trailer's dev-sell shot | `SCREEN RECORDING. NOT AI.` · one caption per moment · DEMO | **NEW** |
+| `launch-10` | QT-1 | 1920 × 1080 MP4, 18–25 s, burned-in captions | Capture mode on demo data: one token's 1 s candles + its audit panel, the bundler and dev sell rows, the collapse, at real speed (FB-13). A different token from the trailer's dev-sell shot | `SCREEN RECORDING. NOT AI.` · one caption per moment · DEMO | **READY** (`x/posts/launch/launch-10.mp4`, 23.9 s, real speed, jump cuts only). The audit is red (high risk, 84% rug ratio) for the whole clip before the dump, so QT-1's main copy ("the audit was red before the chart was") is true for it; QT-1-b is not needed. A different token from the trailer |
 | `launch-11` | QT-2 | 1600 × 900 PNG | Card (`tools/cards.py`) from three real frames: keyframe `s05.jpg` → a frame of `c05.mp4` → the final trailer frame with its title card | `how the trailer got made` · `[N] stills · [N] clips · [N] voice takes` (real counts only) · AI label | **READY** (`x/posts/launch/launch-11.png`): real counts for the cut are **10 stills · 10 clips · 10 kept · 2 voice takes**, plus **1 AI music score** (vidIQ), shown on the card. Fill QT-2 with those numbers and add the score to "the species: AI" line |
 | `launch-12` | COMM-1 (optional) | 1600 × 900 PNG | A frame grab of `c11.mp4` (0 credits) with the plates mid-air, a different moment from the warm-up's `fg-dev` | `reply with your worst rug.` · AI label | **READY** (`x/posts/launch/launch-12.png`, `c11` at 0.9 s) |
-| `launch-13` | L1-A | 1080 × 1350 MP4 (4:5), 15–25 s | Capture mode: chart + audit crop of one demo launch from mint to floor. A different token from `launch-10` and the trailer | `RUG AUTOPSY #1` · timestamped captions · DEMO | **NEW** |
+| `launch-13` | L1-A | 1080 × 1350 MP4 (4:5), 15–25 s | Capture mode: chart + audit crop of one demo launch from mint to floor. A different token from `launch-10` and the trailer | `RUG AUTOPSY #1` · timestamped captions · DEMO | **READY** (`x/posts/launch/launch-13.mp4`, 4:5, 20.5 s, 14× speed, labelled). Timestamps come from the token's own trades; the filled L1-A copy is under L1-A |
 | `launch-14` | L1-B (owner-approved exception only) | 1600 × 900 PNG | Capture mode: one demo launch at 2 minutes old, recorded through its outcome first. Ticker, name, socials and theme chip blurred | `GUESS THE FATE` · `graduates, rugs or goes quiet?` · DEMO | **NOT BUILT** (owner-approved exception only; the default is the POV meme in L1-B's slot) |
 | `launch-15` | L1-Br (only with L1-B) | 1080 × 1350 MP4, 15–25 s | The same launch through its outcome; speed labelled if accelerated | `THE REVEAL` · `[n]× speed` if sped up · DEMO | **NOT BUILT** (only with L1-B) |
 | `launch-16` | L2-A1 | 1600 × 900 PNG | Card (`tools/cards.py`, stat template), no UI, no AI | `the life of a launch, by the clock` · four marks (0:00 · ~5 min · ~9 h · 24 h) with the hedged stats exactly as in L2-A1 to L2-A4 · `real-market figures: secondary lifecycle data, approximate` · `high risk · nfa` | **READY** (`x/posts/launch/launch-16.png`). Re-verify each stat the day before (S-1) |
