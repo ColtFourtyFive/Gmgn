@@ -1463,8 +1463,8 @@ export interface MetaResponse {
   platformFeeRate: number;
   chains: ChainMarketInfo[];
   launchpads: { id: string; chain: ChainId; name: string; color: string }[];
-  /** Simulation status (demo mode). */
-  sim: { seed: string; startedAt: number; speed: number; tradesPerSecond: number };
+  /** Simulation status (demo mode); `scenario` = the simulator preset (SIM_SCENARIO), absent in live mode. */
+  sim: { seed: string; startedAt: number; speed: number; tradesPerSecond: number; scenario?: string };
   /** Live stack health (live mode). */
   live?: LiveStatus;
   /** Where the other mode runs (e.g. the demo site), when configured. */

@@ -18,6 +18,7 @@ import { loadSnapshot, saveSnapshot, saveSnapshotAsync, SNAPSHOT_VERSION, type S
 import { congestionOf, priorityFeeTiers } from './sim/congestion';
 import { Engine } from './sim/engine';
 import { MarketSim } from './sim/market';
+import { parseScenario } from './sim/scenarios';
 import { World } from './sim/world';
 import { Trading, registerTradingRoutes } from './trading';
 import { Hub } from './ws/hub';
@@ -49,6 +50,7 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     host: process.env.HOST ?? '0.0.0.0',
     dataDir: process.env.DATA_DIR ?? '.data',
     seed: process.env.SIM_SEED ?? 'trenchscope',
+    simScenario: scenarioFromEnv(mode),
     warmupMinutes: Number(process.env.WARMUP_MINUTES ?? 90),
     snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 900000),
     webDist: process.env.WEB_DIST ?? null,
@@ -297,6 +299,18 @@ export function connectionCapAddress(clientIp: string, peerIp: string | undefine
   return isLoopback(clientIp) && isLoopback(peerIp ?? '') ? null : clientIp;
 }
 
+/** SIM_SCENARIO (demo mode only): a preset id; blank or unknown (with a warning) = normal. */
+function scenarioFromEnv(mode: AppMode): AppConfig['simScenario'] {
+  const raw = process.env.SIM_SCENARIO;
+  if (mode === 'live') {
+    if (raw?.trim()) console.warn('[app] SIM_SCENARIO is ignored in live mode');
+    return undefined;
+  }
+  const id = parseScenario(raw);
+  if (id === null) console.warn(`[app] unknown SIM_SCENARIO "${raw}", running the normal market`);
+  return id ?? 'normal';
+}
+
 /** TRUST_PROXY: `1` / `true` trusts the one proxy in front, `N` a chain of N proxies; anything else is off. */
 function proxyHops(raw: string | undefined): number {
   if (raw === 'true') return 1;
@@ -361,7 +375,7 @@ export function buildMeta(ctx: AppContext): MetaResponse {
       };
     }),
     launchpads: (live ? LIVE_LAUNCHPADS : LAUNCHPADS).map((l) => ({ id: l.id, chain: l.chain, name: l.name, color: l.color })),
-    sim: { seed: world.seed, startedAt: world.startedAt, speed: 1, tradesPerSecond: engine.tps },
+    sim: { seed: world.seed, startedAt: world.startedAt, speed: 1, tradesPerSecond: engine.tps, ...(live ? {} : { scenario: config.simScenario ?? 'normal' }) },
     ...(live ? { live: ctx.market.liveStatus() ?? undefined } : {}),
     demoUrl: config.demoUrl,
   };

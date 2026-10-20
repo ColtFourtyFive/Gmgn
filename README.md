@@ -51,6 +51,7 @@ pnpm start          # http://localhost:8787
 |---|---|---|
 | `PORT` / `HOST` | `8787` / `0.0.0.0` | Listen address |
 | `SIM_SEED` | `trenchscope` | Seed of the deterministic simulator |
+| `SIM_SCENARIO` | `normal` | Demo mode only: simulator preset `normal`, `rug_wave`, `cto_pump`, `bundle_launch`, `honeypot_evm` or `quiet` (unknown = `normal` with a warning; ignored in live mode) |
 | `WARMUP_MINUTES` | `90` | History fast-forwarded on a fresh start |
 | `DATA_DIR` | `.data` | Where snapshots are written |
 | `SNAPSHOT_EVERY_MS` | `900000` | Periodic snapshot cadence; snapshots are also written on shutdown and restored at boot (`0` = persistence off: nothing is restored or saved, not even on shutdown) |
@@ -80,5 +81,6 @@ pnpm typecheck                      # all packages
 pnpm test                           # server + web unit/integration tests
 (cd apps/server && npx tsx scripts/sim-report.ts 120)                 # simulator realism report
 (cd apps/server && node --expose-gc --import tsx scripts/soak.ts 360)  # memory / snapshot soak
+(cd apps/server && npx tsx scripts/ground-truth.ts --minutes 60 --scenario rug_wave)  # ground-truth export + label report
 pnpm e2e                            # builds the web app, then runs the Playwright end-to-end suite (desktop + mobile)
 ```

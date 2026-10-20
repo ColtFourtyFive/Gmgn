@@ -90,12 +90,13 @@ const MEAN_LAUNCH_REP = 0.32;
 
 /**
  * Ruggers skew bad, builders skew good; the adjustment is centred on the average
- * launch so the overall mix stays at the base distribution.
+ * launch so the overall mix stays at the base distribution. A scenario
+ * (sim/scenarios.ts) scales individual fates on top.
  */
-export function pickFate(rng: Rng, rep: number): TokenFate {
+export function pickFate(rng: Rng, rep: number, mult: Partial<Record<TokenFate, number>> = {}): TokenFate {
   const bad = (0.2 + 2 * (1 - rep)) / (0.2 + 2 * (1 - MEAN_LAUNCH_REP));
   const good = (0.2 + 2 * rep) / (0.2 + 2 * MEAN_LAUNCH_REP);
-  const w = BASE_WEIGHTS.map((b, i) => (i >= 1 && i <= 3 ? b * bad : i >= 4 ? b * good : b));
+  const w = BASE_WEIGHTS.map((b, i) => (i >= 1 && i <= 3 ? b * bad : i >= 4 ? b * good : b) * (mult[FATES[i]] ?? 1));
   return rng.weighted(FATES, w);
 }
 

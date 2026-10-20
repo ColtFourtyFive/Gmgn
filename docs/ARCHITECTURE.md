@@ -34,6 +34,7 @@ with **paper trading**.
 │             market.ts     agent market: launches, fates, rugs, migrations, pruning     │
 │             behaviors/    roster, launch, fate, trader, scheduler                      │
 │             congestion.ts per-chain network congestion                                 │
+│             scenarios.ts  SIM_SCENARIO presets; groundTruth.ts offline truth export    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
                  packages/shared: types (API contract), chains, math, formatters
 ```
@@ -80,6 +81,11 @@ with **paper trading**.
   a fate drawn from observable launch quality and are never rugged on the user's behalf.
 - Congestion rises with throughput and periodic launch rushes; it scales fee suggestions and makes
   under-priced transactions fail to land.
+- Scenario presets (`sim/scenarios.ts`, env `SIM_SCENARIO`, demo mode only): `normal` (default),
+  `rug_wave`, `cto_pump`, `bundle_launch`, `honeypot_evm`, `quiet`. A preset only rescales the hidden
+  mix (launch rate, order flow, fate weights, bundle rate and size, EVM honeypots, CTO and revival
+  odds, the seeded population, address poisoning); agents behave the same. `/api/meta` names the
+  running preset (`sim.scenario`), never its parameters.
 
 ## Persistence
 
@@ -100,7 +106,10 @@ tokens and wallets tracked. Without a snapshot the server seeds a population and
   and determinism, classifier evaluations, money/PnL math, order triggers, auth and hub behaviour.
 - `apps/web/src/**/*.test.*`: component and hook tests (vitest + jsdom).
 - `apps/web/e2e`: Playwright end-to-end suite against the real server serving the built app.
-- `apps/server/scripts`: `sim-report.ts` (market realism report) and `soak.ts` (memory/snapshot soak).
+- `apps/server/scripts`: `sim-report.ts` (market realism report), `soak.ts` (memory/snapshot soak) and
+  `ground-truth.ts` (runs a seed + scenario and writes JSON with wallet archetypes, token fates and
+  true launch cohorts next to what analytics derived, plus the label precision / recall report; offline
+  only, no HTTP route).
 
 ## Swapping in real data
 

@@ -6,6 +6,7 @@ import { CHAINS, cpIn, getLaunchpad, launchpadsFor, type ChainId, type Socials }
 import type { TokenFate, TokenState, WalletState, World } from '../world';
 import type { Rng } from '../rng';
 import { NARRATIVES, copycatMeta, generateTokenMeta, makeSocials, narrativeByName } from '../names';
+import type { Scenario } from '../scenarios';
 import { anchorLaunch, isBadFate, isGoodFate, pickAdoptedFate, pickFate, planLaunch, simOf, type TokenSim } from './fate';
 import { memOf, type Roster } from './roster';
 import type { Scheduler } from './scheduler';
@@ -42,6 +43,8 @@ export interface LaunchHooks {
   narrativeWeights(chain: ChainId): number[];
   /** Currently hottest token on the chain (copycat target). */
   hotToken(chain: ChainId): TokenState | undefined;
+  /** The running scenario preset (sim/scenarios.ts). */
+  scenario(): Scenario;
 }
 
 export class Launcher {
@@ -64,8 +67,9 @@ export class Launcher {
     if (rng.chance(0.6)) dev = boss = roster.pickSerialDev(chain);
     else ({ dev, boss } = roster.spawnFreshDev(chain));
 
+    const sc = this.hooks.scenario();
     const hot = rng.chance(0.08) ? this.hooks.hotToken(chain) : undefined;
-    const fate = hot ? rng.weighted(COPYCAT_FATES, COPYCAT_WEIGHTS) : pickFate(rng, memOf(dev).rep ?? 0.5);
+    const fate = hot ? rng.weighted(COPYCAT_FATES, COPYCAT_WEIGHTS) : pickFate(rng, memOf(dev).rep ?? 0.5, sc.fateWeights);
     const weights = this.hooks.narrativeWeights(chain);
     const narrative = (hot && narrativeByName(hot.narrative)) || rng.weighted(NARRATIVES, weights);
     const meta = hot ? copycatMeta(rng, hot) : generateTokenMeta(rng, narrative, CHAINS[chain].name);
@@ -83,8 +87,8 @@ export class Launcher {
 
     // launch-block allocations (shares of supply)
     const devShare = bad ? rng.float(0.05, 0.2) : rng.chance(0.2) ? 0 : rng.float(0.003, 0.05);
-    const bundled = bad ? rng.chance(0.85) : rng.chance(fate === 'dud' ? 0.12 : 0.05);
-    const bundleShares = bundled ? splitShare(rng, rng.int(2, 8), bad ? rng.float(0.1, 0.4) : rng.float(0.04, 0.15)) : [];
+    const bundled = rng.chance(Math.min(1, (bad ? 0.85 : fate === 'dud' ? 0.12 : 0.05) * sc.bundleRate));
+    const bundleShares = bundled ? splitShare(rng, rng.int(2, 8), (bad ? rng.float(0.1, 0.4) : rng.float(0.04, 0.15)) * sc.bundleShare) : [];
     const insiderShares = Array.from({ length: bad ? rng.int(1, 6) : rng.chance(0.3) ? rng.int(1, 2) : 0 }, () => rng.float(0.005, 0.03));
     capShares(devShare, bundleShares, insiderShares, 0.55);
 
@@ -167,7 +171,7 @@ export class Launcher {
         const vt = lp.virtualTokens - p * lp.curveTokens;
         return Math.log((k / (vt * vt)) * supplyUsd);
       },
-      act: CHAIN_ACTIVITY[t.chain] * Math.min(2, Math.max(0.5, Math.sqrt(heat))),
+      act: CHAIN_ACTIVITY[t.chain] * Math.min(2, Math.max(0.5, Math.sqrt(heat))) * this.hooks.scenario().activity,
     });
     t.sim = sim as unknown as Record<string, unknown>;
     t.hype = sim.path[2];
@@ -272,6 +276,7 @@ export class Launcher {
       return { renouncedMint: !kept, renouncedFreeze: !(kept && rng.chance(0.6)), isOpenSource: null, isRenounced: null, isHoneypot: null, buyTax: 0, sellTax: 0 };
     }
     const r = EVM_SECURITY[chain];
+    const sc = this.hooks.scenario();
     const taxed = rng.chance(r.tax * (bad ? 1.5 : 0.8));
     const buyTax = taxed ? rng.float(0.01, 0.05) : 0;
     return {
@@ -279,7 +284,7 @@ export class Launcher {
       renouncedFreeze: null,
       isOpenSource: !rng.chance(r.closedSource * (bad ? 2 : 0.5)),
       isRenounced: !rng.chance(r.ownerKept * (bad ? 1.6 : 0.6)),
-      isHoneypot: fate === 'rug' && rng.chance(r.honeypot),
+      isHoneypot: sc.honeypotFates.includes(fate) && rng.chance(Math.min(1, r.honeypot * sc.honeypotRate)),
       buyTax,
       sellTax: taxed ? rng.float(buyTax, 0.1) : 0,
     };

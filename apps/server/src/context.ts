@@ -40,6 +40,7 @@ import type {
 import type { Connection, VersionedTransaction } from '@solana/web3.js';
 import type { LiveConfig } from './live/config';
 import type { Engine } from './sim/engine';
+import type { ScenarioId } from './sim/scenarios';
 import type { TokenState, WalletState, World } from './sim/world';
 import type { Hub } from './ws/hub';
 
@@ -57,6 +58,8 @@ export interface AppConfig {
   /** Directory for snapshots. */
   dataDir: string;
   seed: string;
+  /** Demo mode: simulator scenario preset (SIM_SCENARIO, sim/scenarios.ts); absent = normal. */
+  simScenario?: ScenarioId;
   /** Minutes of history to fast-forward at boot when no snapshot exists. */
   warmupMinutes: number;
   /** Persist snapshots periodically (ms); 0 disables. */

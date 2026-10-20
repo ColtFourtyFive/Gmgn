@@ -21,6 +21,7 @@ import { Poisoner } from './behaviors/phishing';
 import { CHAIN_SCALE, Roster, memOf, type Role } from './behaviors/roster';
 import { Scheduler, type Action, type SchedulerState } from './behaviors/scheduler';
 import { CHECKED_ROLES, Desk, buySizeUsd, checkIntervalMs, informedExit, retailSellFraction } from './behaviors/trader';
+import { SCENARIOS, type Scenario, type ScenarioId } from './scenarios';
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -94,6 +95,8 @@ interface MarketSnapshot {
 export interface MarketOptions {
   /** Token cap per chain: beyond it the oldest dormant tokens no human launched or traded are deleted. */
   maxTokensPerChain?: number;
+  /** Scenario preset (default: the app config's simScenario, else normal). */
+  scenario?: ScenarioId;
 }
 
 function emptyStats(): ChainSimStats {
@@ -120,6 +123,8 @@ export class MarketSim implements MarketSource {
   private active = {} as Record<ChainId, TokenState[]>;
   private chains = {} as Record<ChainId, ChainState>;
   private readonly maxTokensPerChain: number;
+  /** The scenario preset shaping launches, flow and population (sim/scenarios.ts). */
+  readonly scenario: Scenario;
   /** Counters since boot (persisted), used by diagnostics and the sim report. */
   stats = {} as Record<ChainId, ChainSimStats>;
 
@@ -129,11 +134,14 @@ export class MarketSim implements MarketSource {
   ) {
     this.world = ctx.world;
     this.maxTokensPerChain = opts.maxTokensPerChain ?? MAX_TOKENS_PER_CHAIN;
+    // (sim-only contexts, e.g. scripts, have no app config)
+    this.scenario = SCENARIOS[opts.scenario ?? ctx.config?.simScenario ?? 'normal'];
     this.roster = new Roster(this.world);
     this.desk = new Desk(this.world);
     this.launcher = new Launcher(this.world, this.roster, this.desk, this.scheduler, {
       narrativeWeights: (chain) => this.chains[chain].heat.map(Math.exp),
       hotToken: (chain) => this.hottest(chain),
+      scenario: () => this.scenario,
     });
     this.poisoner = new Poisoner(this.world, this.roster);
     CHAIN_IDS.forEach((c, i) => {
@@ -170,7 +178,7 @@ export class MarketSim implements MarketSource {
 
   seedPopulation(): void {
     const rng = this.world.rng;
-    this.roster.seed();
+    this.roster.seed(this.scenario.population);
     for (const c of CHAIN_IDS) {
       this.chains[c] = {
         cyclePhase: rng.float(0, 2 * Math.PI),
@@ -218,7 +226,7 @@ export class MarketSim implements MarketSource {
       const c = this.chains[chain];
       // a launch rush (see sim/congestion.ts) brings a wave of new launches with it
       const rushBoost = 1 + 2 * c.congestion.rush;
-      const rate = rushBoost * CHAINS[chain].launchesPerMinute * (1 + 0.2 * Math.sin((2 * Math.PI * (now - this.world.startedAt)) / c.cyclePeriodMs + c.cyclePhase));
+      const rate = rushBoost * CHAINS[chain].launchesPerMinute * this.scenario.launchRate * (1 + 0.2 * Math.sin((2 * Math.PI * (now - this.world.startedAt)) / c.cyclePeriodMs + c.cyclePhase));
       const n = this.world.rng.poisson((rate * dtMs) / MIN);
       for (let i = 0; i < n; i++) this.launch(chain);
       const list = this.active[chain];
@@ -715,7 +723,7 @@ export class MarketSim implements MarketSource {
       }
       for (let i = rng.poisson((1.5 * scale * dt) / 60); i > 0; i--) this.roster.spawnFresh(chain);
       this.roster.maintain(chain, rng.poisson(10 * scale * (dt / 5)));
-      this.poisoner.step(chain, dtMs, PHISH_CAMPAIGNS_PER_MIN * scale);
+      this.poisoner.step(chain, dtMs, PHISH_CAMPAIGNS_PER_MIN * scale * this.scenario.phishing);
     }
   }
 
@@ -738,13 +746,14 @@ export class MarketSim implements MarketSource {
           t.version++;
         }
         // abandoned but still alive: occasionally the holders take it over
-        if (!t.cto && t.hype > 0.01 && now - t.createdAt > 20 * MIN && t.holders.size >= 40 && this.devSoldAll(t) && rng.chance(0.03)) this.cto(t, now);
+        const sc = this.scenario;
+        if (!t.cto && t.hype > 0.01 && now - t.createdAt > 20 * MIN && t.holders.size >= sc.ctoMinHolders && this.devSoldAll(t) && rng.chance(Math.min(1, 0.03 * sc.ctoRate))) this.cto(t, now);
         if (t.status !== 'migrating' && now - t.lastTradeAt > DORMANT_AFTER_MS && t.hype < 0.05) this.sleep(t);
         else keep.push(t);
       }
       this.active[chain] = keep;
       this.prune(chain);
-      if (rng.chance(0.04 * CHAIN_SCALE[chain])) this.reviveRandom(chain, now);
+      if (rng.chance(Math.min(1, 0.04 * CHAIN_SCALE[chain] * this.scenario.reviveRate))) this.reviveRandom(chain, now);
     }
   }
 

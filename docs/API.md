@@ -14,7 +14,7 @@ JSON-encoded strings (`?filters=%7B...%7D`).
 | Method | Path | Query / body | Response |
 |---|---|---|---|
 | GET | `/api/health` | | `{ ok, now, tokens, clients, tps }` |
-| GET | `/api/meta` | | `MetaResponse` (`chains[].congestion` and congestion-scaled `chains[].priorityFee`, see below) |
+| GET | `/api/meta` | | `MetaResponse` (`chains[].congestion` and congestion-scaled `chains[].priorityFee`, see below; demo mode: `sim.scenario` = the `SIM_SCENARIO` preset id) |
 | GET | `/api/search` | `q` (name, symbol, token address, wallet address, KOL label), `chain?` (a chain or `all`) | `SearchResult` (max 20 tokens, 10 wallets) |
 
 ### Network congestion
