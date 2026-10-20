@@ -26,6 +26,6 @@ ffmpeg -y -loglevel error -i "$VO" -i "$SCORE" -filter_complex "
 [voice]asplit=2[vside][vmix];
 [1:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:36.6[score];
 [score][vside]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=300:makeup=1[ducked];
-[ducked][vmix]amix=inputs=2:normalize=0:weights=1 1.15,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000[out]
+[ducked][vmix]amix=inputs=2:normalize=0:weights=1 1.15,loudnorm=I=-14:TP=-1:LRA=11,aresample=48000,apad=whole_dur=36.6,atrim=0:36.6[out]
 " -map "[out]" -ar 48000 -c:a pcm_s16le "$OUT"
 echo "wrote $OUT"
