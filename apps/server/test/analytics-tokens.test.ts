@@ -1660,8 +1660,8 @@ describe('performance', () => {
     fx = await setup();
     const { world } = fx;
     const rng = world.rng;
-    const perChain: Record<ChainId, number> = { sol: 1000, bsc: 450, base: 350, eth: 200 };
-    const wallets: Record<ChainId, WalletState[]> = { sol: [], bsc: [], base: [], eth: [] };
+    const perChain: Record<ChainId, number> = { sol: 1000, base: 350, robinhood: 250, bsc: 450, eth: 200 };
+    const wallets: Record<ChainId, WalletState[]> = { sol: [], base: [], robinhood: [], bsc: [], eth: [] };
     for (const c of CHAIN_IDS) for (let i = 0; i < 600; i++) wallets[c].push(wallet(fx, c, { native: 1e7 }, i % 17 === 0 ? ['smart'] : i % 11 === 0 ? ['bot'] : []));
     const start = world.now;
     world.now = start - 3 * 3600_000;

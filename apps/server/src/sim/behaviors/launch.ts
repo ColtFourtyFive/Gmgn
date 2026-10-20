@@ -15,7 +15,7 @@ const SEC = 1000;
 const MIN = 60 * SEC;
 
 /** Trades per second a token sees at unit activity, per chain. */
-export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.47, bsc: 0.31, base: 0.33, eth: 0.58 };
+export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.47, base: 0.33, robinhood: 0.4, bsc: 0.31, eth: 0.58 };
 
 const COPYCAT_FATES: TokenFate[] = ['dud', 'rug', 'pump_dump'];
 const COPYCAT_WEIGHTS = [70, 20, 10];
@@ -31,6 +31,7 @@ interface SecurityRates {
 const EVM_SECURITY: Record<Exclude<ChainId, 'sol'>, SecurityRates> = {
   bsc: { honeypot: 0.3, tax: 0.1, closedSource: 0.05, ownerKept: 0.1 },
   base: { honeypot: 0.12, tax: 0.05, closedSource: 0.02, ownerKept: 0.05 },
+  robinhood: { honeypot: 0.1, tax: 0.06, closedSource: 0.02, ownerKept: 0.05 },
   eth: { honeypot: 0.12, tax: 0.06, closedSource: 0.02, ownerKept: 0.06 },
 };
 

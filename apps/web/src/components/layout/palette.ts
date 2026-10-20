@@ -26,8 +26,11 @@ export interface PaletteCommand {
  */
 const MIN_SCORE_PER_CHAR = 3;
 
+/** Extra names people type for a chain. */
+const CHAIN_ALIASES: Partial<Record<ChainId, string[]>> = { robinhood: ['rh', 'hood'] };
+
 function chainTerms(chain: ChainId): string[] {
-  return [chain, CHAIN_SHORT[chain].toLowerCase(), CHAINS[chain].name.toLowerCase()];
+  return [chain, CHAIN_SHORT[chain].toLowerCase(), CHAINS[chain].name.toLowerCase(), ...(CHAIN_ALIASES[chain] ?? [])];
 }
 
 /** Chains a query names by prefix ("bs", "bnb", "base", "solana"); one-letter terms name none. */

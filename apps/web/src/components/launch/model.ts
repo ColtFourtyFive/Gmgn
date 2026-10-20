@@ -34,11 +34,12 @@ export const DEV_BUY_PRESETS: Record<ChainId, number[]> = {
   sol: [0, 0.5, 1, 2, 5],
   bsc: [0, 0.1, 0.3, 1, 2],
   base: [0, 0.01, 0.05, 0.1, 0.3],
+  robinhood: [0, 0.01, 0.05, 0.1, 0.3],
   eth: [0, 0.01, 0.05, 0.1, 0.3],
 };
 
 /** Starting buy per bundle wallet (native). */
-export const BUNDLE_BUY_DEFAULT: Record<ChainId, number> = { sol: 0.5, bsc: 0.1, base: 0.02, eth: 0.02 };
+export const BUNDLE_BUY_DEFAULT: Record<ChainId, number> = { sol: 0.5, base: 0.02, robinhood: 0.02, bsc: 0.1, eth: 0.02 };
 
 export interface LaunchForm {
   launchpad: string;

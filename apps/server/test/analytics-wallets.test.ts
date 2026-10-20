@@ -6,6 +6,7 @@ import { deserialize, serialize } from 'node:v8';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import {
+  CHAIN_IDS,
   launchpadsFor,
   type AuthResponse,
   type ChainId,
@@ -829,11 +830,11 @@ describe('leaderboard', () => {
     lbInternal().clear();
     const whole = vi.spyOn(wa, 'refreshLeaderboards');
     const oneChain = vi.spyOn(wa, 'refreshLeaderboard');
-    for (let i = 0; i < 40 && lbInternal().size < 4; i++) {
+    for (let i = 0; i < 50 && lbInternal().size < CHAIN_IDS.length; i++) {
       world.now += 1_000;
       wa.leaderboardTick();
     }
-    expect(lbInternal().size).toBe(4);
+    expect(lbInternal().size).toBe(CHAIN_IDS.length);
     expect(whole).not.toHaveBeenCalled();
     expect(oneChain).not.toHaveBeenCalled();
     whole.mockRestore();
@@ -846,9 +847,9 @@ describe('leaderboard', () => {
       world.now += 1_000;
       wa.leaderboardTick();
     }
-    for (const c of ['sol', 'bsc', 'base', 'eth']) expect(lbInternal().get(c)!.at).toBeGreaterThan(builtAt);
+    for (const c of CHAIN_IDS) expect(lbInternal().get(c)!.at).toBeGreaterThan(builtAt);
     expect(lbInternal().get('sol')?.entries.length).toBeGreaterThanOrEqual(4);
-    expect(lbInternal().size).toBe(4);
+    expect(lbInternal().size).toBe(CHAIN_IDS.length);
 
     const byWin = wa.leaderboard('sol', { tag: 'smart', sort: 'winRate' }, { accountId: null });
     const wr = byWin.map((r) => r.stats.winRate);
@@ -869,7 +870,7 @@ describe('leaderboard at boot', () => {
     const live = await buildApp(defaultConfig({ warmupMinutes: 5, snapshotEveryMs: 0 }), { start: true, persist: false });
     try {
       const lw = (live.ctx.analytics as Analytics).wallets as unknown as { lb: Map<string, unknown> };
-      expect(lw.lb.size).toBe(4);
+      expect(lw.lb.size).toBe(CHAIN_IDS.length);
     } finally {
       await live.close();
     }
@@ -1482,7 +1483,7 @@ describe('evaluation (simulated market)', () => {
         tagScores,
         tagsByChainArchetype: byArch,
         signalsByKind: Object.fromEntries(
-          (['sol', 'bsc', 'base', 'eth'] as const).map((c) => {
+          CHAIN_IDS.map((c) => {
             const counts: Record<string, number> = {};
             for (const sg of ewa.signals(c, { limit: 500 })) counts[sg.kind] = (counts[sg.kind] ?? 0) + 1;
             return [c, counts];

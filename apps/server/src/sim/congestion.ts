@@ -32,7 +32,7 @@ const RUSH_MEAN_GAP_S = 30 * 60;
  * Suggested medium priority fee (native) at calm; low = 0.5x, high = 3x. Every chain's default
  * Standard preset (accounts/settings.ts) stays above the 'low' tier at full congestion.
  */
-const BASE_PRIORITY_FEE: Record<ChainId, number> = { sol: 0.0001, bsc: 0.0001, base: 0.00001, eth: 0.0008 };
+const BASE_PRIORITY_FEE: Record<ChainId, number> = { sol: 0.0001, base: 0.00001, robinhood: 0.000006, bsc: 0.0001, eth: 0.0008 };
 
 /** Model state per chain (persisted by the market module). */
 export interface CongestionModel {

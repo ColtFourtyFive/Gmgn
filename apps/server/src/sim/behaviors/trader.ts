@@ -11,7 +11,7 @@ const SEC = 1000;
 const MIN = 60 * SEC;
 
 /** Gas is expensive on Ethereum mainnet, so nobody trades dust there. */
-const CHAIN_SIZE: Record<ChainId, number> = { sol: 1, bsc: 1, base: 1, eth: 2.5 };
+const CHAIN_SIZE: Record<ChainId, number> = { sol: 1, base: 1, robinhood: 1, bsc: 1, eth: 2.5 };
 /**
  * Agents size single swaps to at most this share of the venue's native reserve:
  * the crowd tolerates ~12% price impact, size-aware players split into smaller fills.

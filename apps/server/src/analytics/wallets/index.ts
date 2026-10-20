@@ -99,7 +99,7 @@ const FEED_TAGS: WalletTag[] = ['smart', 'kol', 'whale', 'sniper'];
  */
 export const SMART_RULE = {
   /** Entries (first buys) in the 7d window. */
-  minEntries: { sol: 3, bsc: 3, base: 3, eth: 3 } as Record<ChainId, number>,
+  minEntries: { sol: 3, base: 3, robinhood: 3, bsc: 3, eth: 3 } as Record<ChainId, number>,
   /** Share of entries followed by a >= 2x run in market cap. */
   minHitRate: 0.6,
   /**
@@ -109,7 +109,7 @@ export const SMART_RULE = {
    */
   minHitZ: 1.5,
   /** Floor for realized + unrealized PnL over 7d (USD), scaled per chain. */
-  minTotalPnl: { sol: 2000, bsc: 2000, base: 1200, eth: 2500 } as Record<ChainId, number>,
+  minTotalPnl: { sol: 2000, base: 1200, robinhood: 1200, bsc: 2000, eth: 2500 } as Record<ChainId, number>,
   minWinRate: 0.55,
   keepHitRate: 0.5,
   /** One-sided hit z-score an existing tag must keep (off by default). */
@@ -220,9 +220,9 @@ export class WalletAnalytics {
   private classifyRuns = 0;
   private entries = new EntryWatch();
   /** Current bot trade-rate threshold per chain (trades/day equivalent). */
-  readonly botRate: Record<ChainId, number> = { sol: BOT_MIN_TRADES_PER_DAY, bsc: BOT_MIN_TRADES_PER_DAY, base: BOT_MIN_TRADES_PER_DAY, eth: BOT_MIN_TRADES_PER_DAY };
+  readonly botRate: Record<ChainId, number> = { sol: BOT_MIN_TRADES_PER_DAY, base: BOT_MIN_TRADES_PER_DAY, robinhood: BOT_MIN_TRADES_PER_DAY, bsc: BOT_MIN_TRADES_PER_DAY, eth: BOT_MIN_TRADES_PER_DAY };
   /** Chain base rate of entries that run 2x (median over active wallets, 7d). */
-  readonly hitBase: Record<ChainId, number> = { sol: HIT_BASE_DEFAULT, bsc: HIT_BASE_DEFAULT, base: HIT_BASE_DEFAULT, eth: HIT_BASE_DEFAULT };
+  readonly hitBase: Record<ChainId, number> = { sol: HIT_BASE_DEFAULT, base: HIT_BASE_DEFAULT, robinhood: HIT_BASE_DEFAULT, bsc: HIT_BASE_DEFAULT, eth: HIT_BASE_DEFAULT };
   readonly signalEngine: SignalEngine;
   /** Diagnostics (cheap counters; timings only when `profiling` is on). */
   readonly perf = { trades: 0, tradeMs: 0, classifyRuns: 0, classifyMs: 0, lastClassifyMs: 0, leaderboardMs: 0, profiling: false };
@@ -398,8 +398,8 @@ export class WalletAnalytics {
   refreshBotRates(): void {
     const now = this.ctx.world.now;
     const from = hourStart(now) - 23 * HOUR_MS;
-    const rates: Record<ChainId, number[]> = { sol: [], bsc: [], base: [], eth: [] };
-    const hits: Record<ChainId, number[]> = { sol: [], bsc: [], base: [], eth: [] };
+    const rates: Record<ChainId, number[]> = { sol: [], base: [], robinhood: [], bsc: [], eth: [] };
+    const hits: Record<ChainId, number[]> = { sol: [], base: [], robinhood: [], bsc: [], eth: [] };
     for (const tr of this.tracks.values()) {
       const n = tr.tradesSinceHours(from);
       if (n >= BOT_RATE_MIN_TRADES) rates[tr.chain].push(perDayRate(n, tr, now, DAY_MS, BOT_MIN_SPAN_MS));

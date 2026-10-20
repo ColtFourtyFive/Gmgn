@@ -80,7 +80,7 @@ export default function AlertsPage() {
         icon={<BellRing size={22} />}
         title="Never miss the move"
         description="Set alerts on prices, market caps, sudden pumps or dumps, smart-money buying, wallet trades and new launches matching a keyword."
-        features={['Six alert types across all four chains', 'Toasts in the app plus a full notification history', 'One-shot or repeating alerts with notes']}
+        features={['Six alert types across every supported chain', 'Toasts in the app plus a full notification history', 'One-shot or repeating alerts with notes']}
       >
         <Panel padded={false}>
           <Tabs

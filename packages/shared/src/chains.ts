@@ -2,9 +2,10 @@
 // Launchpads and DEX names are fictional stand-ins for the real venues
 // (bonding-curve launchpads and constant-product AMMs).
 
-export type ChainId = 'sol' | 'bsc' | 'base' | 'eth';
+export type ChainId = 'sol' | 'base' | 'robinhood' | 'bsc' | 'eth';
 
-export const CHAIN_IDS: ChainId[] = ['sol', 'bsc', 'base', 'eth'];
+/** Display order: the core chains (Solana, Base, Robinhood Chain) first. */
+export const CHAIN_IDS: ChainId[] = ['sol', 'base', 'robinhood', 'bsc', 'eth'];
 
 export interface ChainConfig {
   id: ChainId;
@@ -77,6 +78,22 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerName: 'SimScan',
     color: '#0052FF',
   },
+  robinhood: {
+    id: 'robinhood',
+    name: 'Robinhood Chain',
+    nativeSymbol: 'ETH',
+    nativeUsdStart: 3400,
+    addressStyle: 'evm',
+    // Arbitrum Orbit rollup: ~105 ms blocks, gas at a few hundredths of a gwei.
+    blockTimeMs: 105,
+    nativeDecimals: 18,
+    starterBalance: 3,
+    quickBuyAmounts: [0.01, 0.05, 0.1, 0.25],
+    baseNetworkFee: 0.000006,
+    launchesPerMinute: 2,
+    explorerName: 'SimScan',
+    color: '#C3F53C',
+  },
   eth: {
     id: 'eth',
     name: 'Ethereum',
@@ -126,6 +143,9 @@ export const LAUNCHPADS: LaunchpadConfig[] = [
   // Base: clanker-style direct pools are modeled as short curves
   { id: 'clawlab', chain: 'base', name: 'ClawLab', totalSupply: 1e11, virtualNative: 1.6, virtualTokens: 1.073e11, curveTokens: 8e10, feeRate: 0.01, migrationFeeNative: 0.05, weight: 0.7, color: '#7AA2FF' },
   { id: 'basedrop', chain: 'base', name: 'BaseDrop', totalSupply: 1e9, virtualNative: 1.6, virtualTokens: 1_073_000_000, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0.05, weight: 0.3, color: '#4F7BFF' },
+  // Robinhood Chain: pons-style curves (~4.2 ETH to graduate) into v4 pools
+  { id: 'sherwood', chain: 'robinhood', name: 'Sherwood', totalSupply: 1e9, virtualNative: 1.68, virtualTokens: 1_073_000_000, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0.05, weight: 0.65, color: '#C3F53C' },
+  { id: 'quiver', chain: 'robinhood', name: 'Quiver', totalSupply: 1e9, virtualNative: 1.6, virtualTokens: 1_073_000_000, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0.05, weight: 0.35, color: '#8FD14F' },
   // Ethereum
   { id: 'etherforge', chain: 'eth', name: 'EtherForge', totalSupply: 1e9, virtualNative: 1.8, virtualTokens: 1_073_000_000, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0.08, weight: 1, color: '#9DA8FF' },
 ];
@@ -164,6 +184,7 @@ export const DEXES: DexConfig[] = [
   { id: 'trenchswap-sol', chain: 'sol', name: 'TrenchSwap', feeRate: 0.0025 },
   { id: 'trenchswap-bsc', chain: 'bsc', name: 'TrenchSwap', feeRate: 0.0025 },
   { id: 'trenchswap-base', chain: 'base', name: 'TrenchSwap', feeRate: 0.003 },
+  { id: 'trenchswap-robinhood', chain: 'robinhood', name: 'TrenchSwap', feeRate: 0.003 },
   { id: 'trenchswap-eth', chain: 'eth', name: 'TrenchSwap', feeRate: 0.003 },
 ];
 
@@ -209,6 +230,7 @@ export function explorerTokenUrl(chain: ChainId, address: string): string {
 const EVM_EXPLORERS: Record<Exclude<ChainId, 'sol'>, string> = {
   bsc: 'https://bscscan.com',
   base: 'https://basescan.org',
+  robinhood: 'https://robinhoodchain.blockscout.com',
   eth: 'https://etherscan.io',
 };
 

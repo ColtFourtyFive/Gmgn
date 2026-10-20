@@ -3,10 +3,10 @@ import clsx from 'clsx';
 import { contrastText, tint } from './color';
 
 /** Letter marks for chains (original, not the chains' logos). */
-const CHAIN_MARK: Record<ChainId, string> = { sol: 'S', bsc: 'B', base: 'b', eth: 'Ξ' };
+const CHAIN_MARK: Record<ChainId, string> = { sol: 'S', base: 'b', robinhood: 'R', bsc: 'B', eth: 'Ξ' };
 
-/** Short unambiguous chain labels (Base and Ethereum share the ETH symbol). */
-export const CHAIN_SHORT: Record<ChainId, string> = { sol: 'SOL', bsc: 'BSC', base: 'Base', eth: 'ETH' };
+/** Short unambiguous chain labels (Base, Robinhood Chain and Ethereum share the ETH symbol). */
+export const CHAIN_SHORT: Record<ChainId, string> = { sol: 'SOL', base: 'Base', robinhood: 'Robinhood', bsc: 'BSC', eth: 'ETH' };
 
 export interface ChainIconProps {
   chain: ChainId;

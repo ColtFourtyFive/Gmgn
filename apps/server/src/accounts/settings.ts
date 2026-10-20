@@ -21,6 +21,7 @@ const FEES: Record<ChainId, { priorityFee: Tiers; tip: Tiers; max: number }> = {
   sol: { priorityFee: { P1: 0.0001, P2: 0.0008, P3: 0.003 }, tip: { P1: 0.001, P2: 0.002, P3: 0.004 }, max: 0.1 },
   bsc: { priorityFee: { P1: 0.00005, P2: 0.00015, P3: 0.0005 }, tip: { P1: 0.00001, P2: 0.00003, P3: 0.0001 }, max: 0.01 },
   base: { priorityFee: { P1: 0.000005, P2: 0.00002, P3: 0.0001 }, tip: { P1: 0.000002, P2: 0.000005, P3: 0.00002 }, max: 0.005 },
+  robinhood: { priorityFee: { P1: 0.000003, P2: 0.00001, P3: 0.00005 }, tip: { P1: 0.000001, P2: 0.000003, P3: 0.00001 }, max: 0.005 },
   eth: { priorityFee: { P1: 0.0005, P2: 0.0015, P3: 0.004 }, tip: { P1: 0.0002, P2: 0.0005, P3: 0.001 }, max: 0.05 },
 };
 
@@ -118,7 +119,7 @@ const displayPatch = z
 
 export const settingsPatchSchema = z
   .object({
-    trade: z.object({ sol: chainPatch, bsc: chainPatch, base: chainPatch, eth: chainPatch } satisfies Record<ChainId, typeof chainPatch>).partial(),
+    trade: z.object({ sol: chainPatch, base: chainPatch, robinhood: chainPatch, bsc: chainPatch, eth: chainPatch } satisfies Record<ChainId, typeof chainPatch>).partial(),
     display: displayPatch,
   })
   .partial();

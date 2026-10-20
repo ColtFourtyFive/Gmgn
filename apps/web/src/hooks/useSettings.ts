@@ -29,6 +29,7 @@ const FEES: Record<ChainId, { priorityFee: Tiers; tip: Tiers }> = {
   sol: { priorityFee: { P1: 0.0001, P2: 0.0008, P3: 0.003 }, tip: { P1: 0.001, P2: 0.002, P3: 0.004 } },
   bsc: { priorityFee: { P1: 0.00005, P2: 0.00015, P3: 0.0005 }, tip: { P1: 0.00001, P2: 0.00003, P3: 0.0001 } },
   base: { priorityFee: { P1: 0.000005, P2: 0.00002, P3: 0.0001 }, tip: { P1: 0.000002, P2: 0.000005, P3: 0.00002 } },
+  robinhood: { priorityFee: { P1: 0.000003, P2: 0.00001, P3: 0.00005 }, tip: { P1: 0.000001, P2: 0.000003, P3: 0.00001 } },
   eth: { priorityFee: { P1: 0.0005, P2: 0.0015, P3: 0.004 }, tip: { P1: 0.0002, P2: 0.0005, P3: 0.001 } },
 };
 

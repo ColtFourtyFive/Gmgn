@@ -47,6 +47,8 @@ describe('palette command ranking', () => {
   it('detects chain names by prefix', () => {
     expect(mentionedChains('trending bs')).toEqual(['bsc']);
     expect(mentionedChains('ethereum')).toEqual(['eth']);
+    expect(mentionedChains('trending rh')).toEqual(['robinhood']);
+    expect(mentionedChains('hood')).toEqual(['robinhood']);
     expect(mentionedChains('b sniper')).toEqual([]);
   });
 });

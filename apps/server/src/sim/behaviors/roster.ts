@@ -42,7 +42,7 @@ export function memOf(w: WalletState): AgentMemory {
 }
 
 /** Relative activity of each chain (population counts, launch side effects). */
-export const CHAIN_SCALE: Record<ChainId, number> = { sol: 1, bsc: 0.5, base: 0.4, eth: 0.25 };
+export const CHAIN_SCALE: Record<ChainId, number> = { sol: 1, base: 0.4, robinhood: 0.35, bsc: 0.5, eth: 0.25 };
 
 const DAY = 86_400_000;
 const FUNDERS_PER_CHAIN = 4;

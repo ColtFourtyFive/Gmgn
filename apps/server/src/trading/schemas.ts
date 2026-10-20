@@ -221,8 +221,8 @@ export const LAUNCH_LIMITS = {
   descriptionMaxLength: 280,
   maxBundleWallets: 4,
   /** Creation-block buy caps (native): the dev buy plus every bundle stay far below what any curve needs to graduate. */
-  maxDevBuyNative: { sol: 10, bsc: 3, base: 0.6, eth: 0.6 } as Record<ChainId, number>,
-  maxBundleBuyNative: { sol: 5, bsc: 1.5, base: 0.3, eth: 0.3 } as Record<ChainId, number>,
+  maxDevBuyNative: { sol: 10, base: 0.6, robinhood: 0.6, bsc: 3, eth: 0.6 } as Record<ChainId, number>,
+  maxBundleBuyNative: { sol: 5, base: 0.3, robinhood: 0.3, bsc: 1.5, eth: 0.3 } as Record<ChainId, number>,
 };
 
 /** Control, zero-width, bidi-override, lone-surrogate and line / paragraph separator characters (invisible, broken or direction-flipping text). */

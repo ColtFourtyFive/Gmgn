@@ -2,6 +2,7 @@
 // SOAK_MINUTES of market history, then report heap after GC and list-query cost.
 // Usage: node --expose-gc --import tsx scripts/soak.ts [minutes]
 
+import { CHAIN_IDS } from '@trenchscope/shared';
 import { buildApp, defaultConfig } from '../src/app';
 
 const minutes = Number(process.argv[2] ?? process.env.SOAK_MINUTES ?? 360);
@@ -23,12 +24,12 @@ for (const t of ctx.world.tokens.values()) {
 console.log(`heap ${mb(heap.heapUsed)} rss ${mb(heap.rss)} | tokens ${ctx.world.tokens.size} wallets ${ctx.world.wallets.size} | trade rows ${trades} candles ${candles}`);
 
 const q0 = performance.now();
-for (const chain of ['sol', 'bsc', 'base', 'eth'] as const) {
+for (const chain of CHAIN_IDS) {
   ctx.analytics.trenches({ chain });
   ctx.analytics.trending({ chain, window: '1h' });
 }
 const q1 = performance.now();
-for (const chain of ['sol', 'bsc', 'base', 'eth'] as const) {
+for (const chain of CHAIN_IDS) {
   ctx.analytics.trenches({ chain });
   ctx.analytics.trending({ chain, window: '1h' });
 }

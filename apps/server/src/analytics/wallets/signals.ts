@@ -39,7 +39,7 @@ export const SIGNAL_KINDS: SignalKind[] = [
 /** Market cap levels that fire `mcap_level` once each per token. */
 export const MCAP_LEVELS = [100_000, 500_000, 1_000_000, 5_000_000, 10_000_000, 50_000_000];
 /** Large buy: USD size per chain (with >= 2% of supply). */
-export const LARGE_BUY_USD: Record<ChainId, number> = { sol: 5_000, bsc: 4_000, base: 3_000, eth: 8_000 };
+export const LARGE_BUY_USD: Record<ChainId, number> = { sol: 5_000, base: 3_000, robinhood: 3_000, bsc: 4_000, eth: 8_000 };
 export const LARGE_BUY_SUPPLY = 0.02;
 /** ATH signals need >= 2x from launch and at least this market cap. */
 export const ATH_MIN_MCAP = 25_000;

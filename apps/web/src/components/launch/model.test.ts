@@ -30,8 +30,8 @@ const MOONPIT: LaunchpadCurve = {
 };
 
 const CFG: LaunchConfig = {
-  launchpads: { sol: [MOONPIT], bsc: [], base: [], eth: [] },
-  launchFeeNative: { sol: 0.02, bsc: 0.006, base: 0.0011, eth: 0.0011 },
+  launchpads: { sol: [MOONPIT], base: [], robinhood: [], bsc: [], eth: [] },
+  launchFeeNative: { sol: 0.02, base: 0.0011, robinhood: 0.0011, bsc: 0.006, eth: 0.0011 },
   glyphs: ['🚀', '🐸'],
   glyphNarratives: { '🚀': 'Space', '🐸': 'Frogs' },
   defaultGlyph: '🚀',
@@ -40,9 +40,9 @@ const CFG: LaunchConfig = {
     nameMaxLength: 32,
     symbolMaxLength: 10,
     descriptionMaxLength: 280,
-    maxDevBuyNative: { sol: 10, bsc: 3, base: 0.6, eth: 0.6 },
+    maxDevBuyNative: { sol: 10, base: 0.6, robinhood: 0.6, bsc: 3, eth: 0.6 },
     maxBundleWallets: 4,
-    maxBundleBuyNative: { sol: 5, bsc: 1.5, base: 0.3, eth: 0.3 },
+    maxBundleBuyNative: { sol: 5, base: 0.3, robinhood: 0.3, bsc: 1.5, eth: 0.3 },
     launchesPerHour: 5,
   },
 };

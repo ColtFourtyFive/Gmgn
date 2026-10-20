@@ -30,7 +30,7 @@ import { fillReceipt, networkFeeOf, type Executor, type Fill, type Ticket } from
 import { LAUNCH_LIMITS, type LaunchInput } from './schemas';
 
 /** Flat launch fee: 0.02 SOL, and about the same USD value on the other chains at their reference prices. */
-export const LAUNCH_FEE_NATIVE: Record<ChainId, number> = { sol: 0.02, bsc: 0.006, base: 0.0011, eth: 0.0011 };
+export const LAUNCH_FEE_NATIVE: Record<ChainId, number> = { sol: 0.02, base: 0.0011, robinhood: 0.0011, bsc: 0.006, eth: 0.0011 };
 export const LAUNCHES_PER_HOUR = 5;
 
 /** A launchpad's fresh curve: where it starts and where it graduates, at the given native price. */
