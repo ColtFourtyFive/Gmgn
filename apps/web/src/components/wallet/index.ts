@@ -27,6 +27,7 @@ export {
   useWalletCalls,
   useWalletHoldings,
   useWalletProfileQuery,
+  useWalletRisk,
   walletKeys,
   type ActivityType,
   type HoldingsSort,
@@ -35,6 +36,7 @@ export {
   type LeaderboardTag,
   type SortOrder,
 } from './queries';
+export { RiskCard } from './RiskCard';
 export { CopyScoreGauge, CopyScoreMeter, StyleBadges, StyleTitle } from './StyleBits';
 export { WalletCell, WalletPreview, type WalletCellProps } from './WalletCell';
 export { WalletHeader, XMark } from './WalletHeader';

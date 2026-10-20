@@ -10,6 +10,7 @@ import { Alerts, type StoredAlert } from './alerts';
 import { balanceOf, Jobs } from './common';
 import { CopyTrader, type StoredCopyTask } from './copytrade';
 import { Executor, latencyFromEnv, type Fill } from './execution';
+import { Initials } from './initials';
 import { Launches } from './launch';
 import { OrderBook, type EntryRefs } from './orders';
 import { Portfolio, type EquityPoint } from './portfolio';
@@ -38,6 +39,8 @@ function isSnapshot(data: unknown): data is TradingSnapshot {
 export class Trading implements TradingApi {
   private readonly jobs = new Jobs();
   readonly executor: Executor;
+  /** "Sell initials" sizing (read-only). */
+  readonly initials: Initials;
   readonly orders: OrderBook;
   readonly copyTrade: CopyTrader;
   readonly sniper: Sniper;
@@ -52,6 +55,7 @@ export class Trading implements TradingApi {
   constructor(ctx: AppContext, opts: TradingOptions = {}) {
     this.world = ctx.world;
     this.executor = new Executor(ctx, (fill) => this.onFill(fill), opts.latencyMs === undefined ? latencyFromEnv() : opts.latencyMs);
+    this.initials = new Initials(ctx, this.executor);
     this.orders = new OrderBook(ctx, this.executor, this.jobs);
     this.copyTrade = new CopyTrader(ctx, this.executor, this.jobs);
     this.sniper = new Sniper(ctx, this.executor, this.jobs);

@@ -68,7 +68,7 @@ export default function AlertsPage() {
     <Page className="max-w-[1280px]">
       <PageHeader
         title="Alerts"
-        subtitle="Price, market-cap and wallet alerts, plus your notification history"
+        subtitle="Price, market-cap, wallet and holding alerts, signal subscriptions, plus your notification history"
         icon={<Bell size={16} />}
         actions={
           <Button variant="primary" size="sm" icon={<BellPlus size={14} />} onClick={openNew}>
@@ -79,8 +79,8 @@ export default function AlertsPage() {
       <AccountGate
         icon={<BellRing size={22} />}
         title="Never miss the move"
-        description="Set alerts on prices, market caps, sudden pumps or dumps, smart-money buying, wallet trades and new launches matching a keyword."
-        features={['Six alert types across every supported chain', 'Toasts in the app plus a full notification history', 'One-shot or repeating alerts with notes']}
+        description="Set alerts on prices, market caps, sudden pumps or dumps, smart-money buying, wallet trades, new launches matching a keyword, your own holdings, and the signals you subscribe to."
+        features={['Eight alert types across every supported chain', 'Toasts in the app plus a full notification history', 'One-shot or repeating alerts with notes']}
       >
         <Panel padded={false}>
           <Tabs

@@ -8,6 +8,7 @@ import { LogIn, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, Native, Pct, Price, StatTile, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
+import { SellInitialsButton } from '@/components/trade/sellInitials';
 import { useQuickTrade } from '@/components/trade/useQuickTrade';
 import { Button, DataTable, EmptyState, ErrorState, Heading, Skeleton, type Column } from '@/components/ui';
 import { useIsLive } from '@/hooks/useMode';
@@ -172,6 +173,7 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
                     {pct}%
                   </Button>
                 ))}
+                <SellInitialsButton chain={token.chain} token={token.address} symbol={token.symbol} underWater={unrealized <= 0} />
               </>
             )}
             <SharePnlButton variant="button" getData={() => shareDataFromPosition(p, token, null, serverNow())} className="ml-auto" />

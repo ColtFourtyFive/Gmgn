@@ -6,6 +6,8 @@
 //                             'trades'    Trade[] (oldest first) batched every engine tick (~250ms)
 //                             'candle'    { resolution, candle } when the last candle of the
 //                                         subscription's params.resolution changed
+//                             'signals'   Signal[] when the token fires a signal (published by the
+//                                         signal engine, analytics/wallets/signals.ts)
 //
 // Broadcast payloads are shared by every subscriber, so viewer-relative tags
 // ('you' / 'following') and private remarks are NOT applied here; the web adds

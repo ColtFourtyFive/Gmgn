@@ -20,6 +20,7 @@ import {
   type Trade,
   type WalletCalls,
   type WalletProfile,
+  type WalletRiskReport,
   type WsClientMessage,
   type WsServerMessage,
 } from '@trenchscope/shared';
@@ -40,6 +41,8 @@ import {
 } from '../src/analytics/wallets/metrics';
 import { EntryWatch, type PendingEntry } from '../src/analytics/wallets/entries';
 import { Ring } from '../src/analytics/wallets/ring';
+import { looksAlike, riskReport, washCycles } from '../src/analytics/wallets/risk';
+import { lookalikeAddress } from '../src/sim/rng';
 import { dayStart } from '../src/analytics/wallets/tracker';
 import type { TokenState, WalletState, World } from '../src/sim/world';
 
@@ -1334,6 +1337,148 @@ describe('realtime channels', () => {
     const pushed = c.data('signals', 'signals:sol');
     expect(pushed).toHaveLength(2);
     expect((pushed[1].data as Signal[])[0].kind).toBe('migration');
+  });
+
+  it('carries token-level context for the grouped feed and filters low-quality tokens and by time on request', async () => {
+    const s = mkWallet();
+    s.tags.add('smart');
+    const t = mkToken();
+    buy(s, t, 0.5);
+    const firstMc = world.marketCapUsd(t);
+    world.emit('tokenFlag', t, 'boost');
+    buy(pumper, t, 5);
+    world.emit('tokenFlag', t, 'boost');
+    const [latest] = wa.signals('sol', { limit: 500 }).filter((x) => x.token.address === t.address);
+    expect(latest).toMatchObject({ kind: 'boost', timesFired: 3, timesFiredByKind: { smart_buy: 1, boost: 2 }, lowQuality: false });
+    expect(latest.firstTriggerMcUsd).toBeCloseTo(firstMc, 6);
+    expect(latest.cur).toEqual({ holders: t.holders.size, top10: expect.any(Number), liquidityUsd: world.liquidityUsd(t) });
+
+    // a honeypot fails the quality pre-filter
+    const bscDev = mkWallet('bsc', { native: 100 });
+    const hp = mkToken('bsc', bscDev);
+    hp.isHoneypot = true;
+    world.emit('tokenFlag', hp, 'boost');
+    const all = (await call<Signal[]>('/api/bsc/signals')).body;
+    expect(all.find((x) => x.token.address === hp.address)?.lowQuality).toBe(true);
+    expect((await call<Signal[]>('/api/bsc/signals?quality=1')).body.some((x) => x.token.address === hp.address)).toBe(false);
+    const older = (await call<Signal[]>(`/api/sol/signals?before=${latest.createdAt}`)).body;
+    expect(older.length).toBeGreaterThan(0);
+    expect(older.every((x) => x.createdAt < latest.createdAt)).toBe(true);
+  });
+
+  it("serves a token's signals newest first and pushes new ones on its token channel (chart markers)", async () => {
+    const s = mkWallet();
+    s.tags.add('smart');
+    const k = mkWallet('sol', { label: 'Caller' });
+    k.tags.add('kol');
+    const t = mkToken();
+    const other = mkToken();
+    buy(s, t, 0.5);
+    buy(s, other, 0.5);
+    world.now += 1_000;
+    world.emit('kolCall', t, k);
+
+    const res = await call<Signal[]>(`/api/sol/tokens/${t.address}/signals`);
+    expect(res.status).toBe(200);
+    expect(res.body.map((x) => x.kind)).toEqual(['kol_call', 'smart_buy']);
+    expect(res.body.every((x) => x.token.address === t.address)).toBe(true);
+    expect((await call<Signal[]>(`/api/sol/tokens/${t.address}/signals?limit=1`)).body).toHaveLength(1);
+    expect((await call(`/api/sol/tokens/${t.address}/signals?limit=0`)).status).toBe(400);
+    expect((await call(`/api/bsc/tokens/${t.address}/signals`)).status).toBe(404);
+
+    const c = fakeClient();
+    await c.msg({ op: 'sub', ch: `token:sol:${t.address}` });
+    world.emit('tokenFlag', t, 'boost');
+    world.emit('tokenFlag', other, 'boost');
+    const pushed = c.data('signals', `token:sol:${t.address}`);
+    expect(pushed).toHaveLength(1);
+    expect((pushed[0].data as Signal[]).map((x) => [x.kind, x.token.address])).toEqual([['boost', t.address]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Risk check
+// ---------------------------------------------------------------------------
+
+describe('wallet risk check', () => {
+  const flagOf = (r: WalletRiskReport, key: WalletRiskReport['flags'][number]['key']) => r.flags.find((f) => f.key === key)!;
+  const dust = (from: WalletState, to: WalletState) => world.transferNative(from, to, 0.00001);
+
+  it('matches look-alikes on the first and last 4 characters (EVM case-insensitive) and counts wash round trips', () => {
+    expect(looksAlike('AbCdXXXXXXXXwxyz', 'AbCdYYYYYYYYwxyz')).toBe(true);
+    expect(looksAlike('AbCdXXXXXXXXwxyz', 'AbCdXXXXXXXXwxyz')).toBe(false);
+    expect(looksAlike('AbCdXXXXXXXXwxyz', 'abCdYYYYYYYYwxyz')).toBe(false);
+    expect(looksAlike('0xABCD111111111111111111111111111111119999', '0xabcd222222222222222222222222222222229999')).toBe(true);
+    const fake = lookalikeAddress(world.rng, dev.address);
+    expect(looksAlike(fake, dev.address)).toBe(true);
+    const tr = (token: string, side: 'buy' | 'sell', timestamp: number) => ({ token, side, timestamp });
+    expect(washCycles([tr('A', 'buy', 0), tr('A', 'sell', 10_000), tr('A', 'buy', 20_000), tr('A', 'sell', 30_000), tr('B', 'buy', 0), tr('B', 'sell', 90_000)])).toEqual({ tokens: 2, washTokens: 1 });
+  });
+
+  it('flags dust from look-alikes of its funder, a rugger funder, wash round trips, fast flips and new size', async () => {
+    const funder = mkWallet('sol', { native: 10_000 });
+    const victim = mkWallet('sol', { createdAt: world.now - 2 * HOUR_MS });
+    world.transferNative(funder, victim, 50);
+    expect(victim.fundedBy).toBe(funder.address);
+
+    const clean = (await call<WalletRiskReport>(`/api/sol/wallets/${victim.address}/risk`)).body;
+    expect(clean.flags.map((f) => f.key)).toEqual(['phishing', 'wash', 'flagged_funder', 'new_large', 'serial_rugger', 'honeypot', 'fast_trades']);
+    expect(flagOf(clean, 'phishing')).toMatchObject({ level: 'ok', count: 0 });
+    expect(flagOf(clean, 'wash').level).toBe('unknown'); // no trades yet: never shown as a pass
+    expect(clean.flags.every((f) => f.definition.length > 40)).toBe(true);
+
+    // address poisoning: dust from a look-alike of its funder (a random dust sender is no look-alike)
+    const phisher = world.createWallet('sol', 'phisher', { address: lookalikeAddress(world.rng, funder.address), native: 1 });
+    dust(phisher, victim);
+    dust(mkWallet('sol', { native: 1 }), victim);
+    let r = (await call<WalletRiskReport>(`/api/sol/wallets/${victim.address}/risk`)).body;
+    expect(flagOf(r, 'phishing')).toMatchObject({ level: 'warn', count: 1, addresses: [phisher.address] });
+    expect(r.level).toBe('medium');
+    const phisher2 = world.createWallet('sol', 'phisher', { address: lookalikeAddress(world.rng, funder.address), native: 1 });
+    dust(phisher2, victim);
+    r = (await call<WalletRiskReport>(`/api/sol/wallets/${victim.address}/risk`)).body;
+    expect(flagOf(r, 'phishing')).toMatchObject({ level: 'bad', count: 2 });
+    expect(r.level).toBe('high');
+
+    // the funder launches a token and rugs it: the dev dumps its bag early and the price collapses
+    const rug = mkToken('sol', funder);
+    buy(funder, rug, 2);
+    buy(pumper, rug, 50);
+    sellFrac(funder, rug, 1);
+    sellFrac(pumper, rug, 1);
+    // wash: two round trips inside 60s on one token; both close within 5s too
+    const t = mkToken();
+    buy(victim, t, 0.5);
+    sellFrac(victim, t, 1, 2_000);
+    buy(victim, t, 0.5);
+    sellFrac(victim, t, 1, 2_000);
+    r = (await call<WalletRiskReport>(`/api/sol/wallets/${victim.address}/risk`)).body;
+    expect(flagOf(r, 'flagged_funder')).toMatchObject({ level: 'warn', count: 1, addresses: [funder.address] });
+    expect(flagOf(r, 'wash')).toMatchObject({ level: 'warn', count: 1, value: '1 of 1 token' });
+    expect(flagOf(r, 'fast_trades')).toMatchObject({ level: 'bad', count: 1, rate: 1 });
+    expect(flagOf(r, 'new_large').level).toBe('ok');
+    expect(flagOf(r, 'honeypot')).toMatchObject({ level: 'ok', count: 0 });
+    // the rugger itself
+    expect(flagOf((await call<WalletRiskReport>(`/api/sol/wallets/${funder.address}/risk`)).body, 'serial_rugger')).toMatchObject({ level: 'warn', count: 1, value: '1 of 1 launch' });
+
+    // a wallet funded minutes ago putting real size in
+    const fresh = mkWallet('sol', { native: 200, createdAt: world.now });
+    buy(fresh, mkToken(), 30);
+    expect(flagOf((await call<WalletRiskReport>(`/api/sol/wallets/${fresh.address}/risk`)).body, 'new_large').level).toBe('warn');
+    expect((await call(`/api/bsc/wallets/${victim.address}/risk`)).status).toBe(404);
+  });
+
+  it('keeps the transfer index through a snapshot and reports untracked transfers as unknown in live mode', () => {
+    const funder = mkWallet('sol', { native: 100 });
+    const victim = mkWallet();
+    world.transferNative(funder, victim, 5);
+    dust(world.createWallet('sol', 'phisher', { address: lookalikeAddress(world.rng, funder.address), native: 1 }), victim);
+    const copy = new WalletAnalytics(built.ctx);
+    copy.restore(deserialize(serialize(wa.serialize())));
+    expect(copy.risk(victim).flags[0]).toMatchObject({ key: 'phishing', level: 'warn' });
+    const live = riskReport('sol', victim.address, { now: world.now, transfersTracked: false, createdAt: 0, dustIn: [], counterparties: [], trades: [], funder: null, boughtUsd: 0, launches: 0, rugged: 0, tokensTraded: 0, honeypotTokens: 0, roundTrips: [] });
+    expect(live.flags.filter((f) => f.level === 'unknown').map((f) => f.key)).toEqual(['phishing', 'wash', 'flagged_funder', 'new_large', 'honeypot', 'fast_trades']);
+    expect(live.level).toBe('low');
   });
 });
 

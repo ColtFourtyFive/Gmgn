@@ -1,13 +1,15 @@
-// Market order: buy a native amount or sell a percent / token amount now.
+// Market order: buy a native amount or sell a percent / token amount now,
+// or "sell initials" (just enough to get the position's cost back).
 
 import { useEffect, useState } from 'react';
-import { formatCompact, formatNative, type SwapRequest, PRESET_LABELS } from '@trenchscope/shared';
+import { formatCompact, formatNative, formatPercent, type SellInitialsQuote, type SwapRequest, PRESET_LABELS } from '@trenchscope/shared';
 import { Button } from '@/components/ui';
 import { nativeSymbol } from '@/lib/chain';
 import { Compact, Native, Pct, Usd } from '@/components/common';
 import { slippageLabel } from './PresetBar';
 import { BuyAmount, SellAmount, type SellUnit } from './AmountFields';
 import { QuotePreview, useLiveQuote } from './QuotePreview';
+import { SellInitialsRow } from './SellInitials';
 import { StartTradingCta, SummaryRow, TradeResultLine, type TradeFormProps } from './shared';
 import { useTradeExecutor } from './useTradeExecutor';
 
@@ -63,6 +65,30 @@ export function MarketForm(props: TradeFormProps) {
     );
   };
 
+  const sellInitials = (q: SellInitialsQuote) => {
+    if (q.tokens === null) return;
+    exec.submit(
+      { chain: token.chain, token: token.address, side: 'sell', amount: q.tokens, amountKind: 'tokens', presetId },
+      <>
+        <SummaryRow label="Sell initials">
+          <Compact value={q.tokens} suffix={` ${token.symbol}`} /> ({formatPercent(q.sellRate ?? 0, { sign: false, digits: 1 })})
+        </SummaryRow>
+        <SummaryRow label="Receive ≈">
+          <Native value={q.expectedOutNative} chain={token.chain} />
+        </SummaryRow>
+        <SummaryRow label="Cost basis">
+          <Native value={q.targetNative} chain={token.chain} />
+        </SummaryRow>
+        <SummaryRow label="Keeps">
+          <Compact value={q.balance - q.tokens} suffix={` ${token.symbol}`} />
+        </SummaryRow>
+        <SummaryRow label={`Preset ${PRESET_LABELS[presetId]}`}>
+          {slippageLabel(preset)} slippage · {preset.antiMev ? 'anti-MEV' : 'public'}
+        </SummaryRow>
+      </>,
+    );
+  };
+
   return (
     <div className="flex flex-col gap-2.5">
       {buy ? (
@@ -91,6 +117,7 @@ export function MarketForm(props: TradeFormProps) {
           signedIn={signedIn}
         />
       )}
+      {!buy && signedIn && held > 0 && <SellInitialsRow token={token} presetId={presetId} balance={held} onSell={sellInitials} pending={exec.pending} />}
       {!buy && signedIn && held <= 0 ? (
         <p className="rounded bg-panel-2 px-2 py-1.5 text-xs text-muted">You don’t hold {token.symbol} yet. Buy first, or set a limit buy.</p>
       ) : (

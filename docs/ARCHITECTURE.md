@@ -36,6 +36,7 @@ TP / SL / trailing orders, token launches). It runs in one of two modes per depl
 │             market.ts     agent market (demo): launches, fates, rugs, migrations       │
 │             behaviors/    roster, launch, fate, trader, scheduler                      │
 │             congestion.ts per-chain network congestion                                 │
+│             scenarios.ts  SIM_SCENARIO presets; groundTruth.ts offline truth export    │
 │ live/       config.ts · services.ts (RPC connection, signer) · market.ts (LiveMarket)  │
 │             feed/       PumpPortal client, message schemas, ingest, tracked-token cap  │
 │             enrich/     metadata (SSRF-guarded), prices, on-chain security, lookup     │
@@ -84,11 +85,17 @@ TP / SL / trailing orders, token launches). It runs in one of two modes per depl
   the remaining liquidity into a constant-product AMM pool with burned LP.
 - Launchpads, DEXes and chain parameters live in `packages/shared/src/chains.ts`.
 - Agents: retail, bots, snipers, smart money, KOLs (with calls), whales, sandwich bots, serial devs,
-  bundlers and insiders funded by devs, fresh wallets, exchange funders. Each launch draws a hidden
+  bundlers and insiders funded by devs, fresh wallets, exchange funders, address poisoners (dust from
+  look-alikes of the exchange wallets). Each launch draws a hidden
   fate (dud, rug, slow rug, pump & dump, runner, moon); user launches are adopted by the market with
   a fate drawn from observable launch quality and are never rugged on the user's behalf.
 - Congestion rises with throughput and periodic launch rushes; it scales fee suggestions and makes
   under-priced transactions fail to land.
+- Scenario presets (`sim/scenarios.ts`, env `SIM_SCENARIO`, demo mode only): `normal` (default),
+  `rug_wave`, `cto_pump`, `bundle_launch`, `honeypot_evm`, `quiet`. A preset only rescales the hidden
+  mix (launch rate, order flow, fate weights, bundle rate and size, EVM honeypots, CTO and revival
+  odds, the seeded population, address poisoning); agents behave the same. `/api/meta` names the
+  running preset (`sim.scenario`), never its parameters.
 
 ## Persistence
 
@@ -117,6 +124,9 @@ tokens and wallets tracked. Without a snapshot the server seeds a population and
   `fake-pumpportal.ts` (dev/test: a local stand-in for the PumpPortal feed).
 - Live mode: `live-*.test.ts`, `store.test.ts`, `security.test.ts`, `accounts-live.test.ts` and
   `live-integration.test.ts`, all offline (fixtures, fake RPC, local feed server).
+  `ground-truth.ts` (runs a seed + scenario and writes JSON with wallet archetypes, token fates and
+  true launch cohorts next to what analytics derived, plus the label precision / recall report; offline
+  only, no HTTP route).
 
 ## Live mode
 

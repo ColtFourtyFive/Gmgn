@@ -19,7 +19,8 @@ export type Role =
   | 'funder' //     exchange hot wallet: funds new wallets, receives cash-outs
   | 'serialDev' //  long-lived launcher with a hidden reputation
   | 'freshDev' //   single-use launcher wallet
-  | 'crew'; //      bundler / insider wallet controlled by a dev
+  | 'crew' //       bundler / insider wallet controlled by a dev
+  | 'phisher'; //   address-poisoning sender (behaviors/phishing.ts)
 
 /** Per-agent scratch state (wallet.memory) owned by the market simulator. */
 export interface AgentMemory {
@@ -35,6 +36,8 @@ export interface AgentMemory {
   dumper?: boolean;
   /** Tokens with a pending informed-exit check for this wallet. */
   watching?: Set<string>;
+  /** Phishers: the address this one imitates. */
+  mimics?: string;
 }
 
 export function memOf(w: WalletState): AgentMemory {
@@ -175,8 +178,8 @@ export class Roster {
     return this.world.transferNative(from, to, usd / this.world.nativeUsd(to.chain));
   }
 
-  /** Seed the initial agent population on every chain. */
-  seed(): void {
+  /** Seed the initial agent population on every chain (`mult` scales roles, see sim/scenarios.ts). */
+  seed(mult: Partial<Record<Role, number>> = {}): void {
     const { world } = this;
     const rng = world.rng;
     const now = world.now;
@@ -188,7 +191,8 @@ export class Roster {
       }
       const handles = rng.shuffle([...KOL_HANDLES]);
       for (const spec of POPULATION) {
-        const n = spec.role === 'sandwich' ? Math.max(2, Math.round(spec.count * scale)) : Math.round(spec.count * scale);
+        const count = spec.count * (mult[spec.role] ?? 1);
+        const n = spec.role === 'sandwich' ? Math.max(2, Math.round(count * scale)) : Math.round(count * scale);
         for (let i = 0; i < n; i++) {
           const bank = Math.max(20, rng.lognormal(spec.bank[0], spec.bank[1]));
           const mem: AgentMemory = { role: spec.role, bank };

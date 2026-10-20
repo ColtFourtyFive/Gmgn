@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { Candle } from '@trenchscope/shared';
-import { AXIS_TICK_PX, axisResolution, chartScale, formatAxis, minMoveFor, readableRange, toBar, type ChartCurrency } from './chartUtils';
+import type { UTCTimestamp } from 'lightweight-charts';
+import type { Candle, Signal } from '@trenchscope/shared';
+import {
+  AXIS_TICK_PX,
+  axisResolution,
+  bucketTime,
+  buildSignalMarkers,
+  chartScale,
+  formatAxis,
+  mergeMarkers,
+  minMoveFor,
+  readableRange,
+  SIGNAL_MARKER_PREFIX,
+  toBar,
+  type ChartCurrency,
+} from './chartUtils';
 import type { ChartUnit } from './store';
 
 const candle: Candle = { time: 1_700_000_000, open: 0.00001, high: 0.00002, low: 0.000005, close: 0.000015, volume: 1200 };
@@ -91,5 +105,44 @@ describe('price axis labels', () => {
     expect(repeats(axisLabels(0.0000058701, 0.0000058722, 'price', 'usd'))).toBe(0);
     const wide = { minValue: 4_000, maxValue: 60_000 };
     expect(readableRange(wide, 'mcap', 'usd', 360)).toBe(wide);
+  });
+});
+
+describe('signal markers', () => {
+  const colors = { bullish: 'B', bearish: 'R', neutral: 'N' };
+  const at = 1_700_000_100_000;
+  const sig = (id: string, kind: Signal['kind'], createdAt: number): Signal => ({ id, kind, createdAt, title: id, detail: '', marketCapAtTrigger: 1 }) as unknown as Signal;
+  const range = { from: bucketTime(at - 3_600_000, '1m'), to: bucketTime(at + 3_600_000, '1m') };
+
+  it('draws one circle per candle, labelled by its top kind, and maps the marker id back to its signals', () => {
+    const signals = [sig('a', 'smart_buy', at), sig('b', 'smart_buy', at + 5_000), sig('c', 'ath', at + 10_000), sig('d', 'kol_buy', at + 180_000)];
+    const { markers, groups } = buildSignalMarkers({ signals, resolution: '1m', range, colors, barPx: 200 });
+    expect(markers.map((m) => [m.text, m.color, m.shape, m.position])).toEqual([
+      ['SM ×2 +1', 'B', 'circle', 'aboveBar'],
+      ['KOL', 'B', 'circle', 'aboveBar'],
+    ]);
+    expect(groups.get(String(markers[0].id))!.map((s) => s.id)).toEqual(['c', 'b', 'a']);
+    expect(String(markers[0].id).startsWith(SIGNAL_MARKER_PREFIX)).toBe(true);
+  });
+
+  it('lets a warning label and colour its candle, keeps warning labels when crowded and skips migration (it has its own marker)', () => {
+    const signals = [sig('a', 'smart_buy', at), sig('b', 'dev_sell', at + 1_000), sig('m', 'migration', at + 60_000), sig('c', 'kol_buy', at + 60_000), sig('d', 'bundler_sell', at + 120_000)];
+    const { markers } = buildSignalMarkers({ signals, resolution: '1m', range, colors, barPx: 4 });
+    expect(markers.map((m) => [m.text, m.color])).toEqual([
+      ['Dev↓ +1', 'R'],
+      [undefined, 'B'],
+      ['Bnd↓', 'R'],
+    ]);
+  });
+
+  it('drops signals outside the bars on the chart and draws nothing without bars', () => {
+    const far = sig('x', 'ath', at + 10 * 3_600_000);
+    expect(buildSignalMarkers({ signals: [far], resolution: '1m', range, colors }).markers).toEqual([]);
+    expect(buildSignalMarkers({ signals: [sig('y', 'ath', at)], resolution: '1m', range: null, colors }).markers).toEqual([]);
+  });
+
+  it('merges marker sets in time order', () => {
+    const m = (time: number) => ({ time: time as UTCTimestamp, position: 'aboveBar' as const, shape: 'circle' as const, color: 'x' });
+    expect(mergeMarkers([m(3), m(1)], [m(2)]).map((x) => x.time)).toEqual([1, 2, 3]);
   });
 });

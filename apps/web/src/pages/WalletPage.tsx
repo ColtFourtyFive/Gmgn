@@ -1,6 +1,7 @@
 // Wallet page (/:chain/address/:address): identity header with follow / copy
 // trade / share, period stats cards (PnL + daily calendar, Analysis, PnL
-// distribution) and tabs (Recent PnL, Holdings, live Activity, Created tokens,
+// distribution), the risk check (address poisoning, wash trading, flagged
+// funder, ...) and tabs (Recent PnL, Holdings, live Activity, Created tokens,
 // Calls for wallets that call tokens).
 
 import { useEffect, useMemo, useState } from 'react';
@@ -22,6 +23,7 @@ import {
   normAddress,
   PnlCard,
   RecentPnlTab,
+  RiskCard,
   sameWallet,
   useWalletCalls,
   useWalletLive,
@@ -175,6 +177,7 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
         <AnalysisCard stats={stats} style={profile.style} period={period} />
         <DistributionCard stats={stats} period={period} className="md:col-span-2 xl:col-span-1" />
       </div>
+      <RiskCard chain={chain} address={profile.address} />
       <section className="panel min-w-0" aria-label="Wallet trades">
         <Tabs
           aria-label="Wallet sections"

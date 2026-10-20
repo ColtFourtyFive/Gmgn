@@ -60,6 +60,7 @@ const schemas = {
     limit: intParam(1, 500),
   }),
   search: z.object({ q: z.string().max(200).optional(), chain: z.string().optional() }),
+  signals: z.object({ limit: intParam(1, 500) }),
 };
 
 type ChainParams = { chain: string };
@@ -195,6 +196,13 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/dev', async (req) => {
     return ta().devInfo(await tokenOf(req.params));
+  });
+
+  // The token's signals (chart markers); new ones are also pushed on its `token` channel ('signals').
+  app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/signals', async (req) => {
+    const t = await tokenOf(req.params);
+    const q = parseQuery(schemas.signals, req);
+    return ctx.analytics.tokenSignals(t, q.limit ?? 200);
   });
 
   app.get('/api/search', async (req) => {

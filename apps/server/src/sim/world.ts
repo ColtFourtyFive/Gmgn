@@ -40,7 +40,8 @@ import { Rng, base58Address, evmAddress, txHash } from './rng';
 
 /**
  * Behavioural archetype of a simulated wallet. 'user' = an account's own wallet;
- * 'external' = a real on-chain wallet observed in live mode (no simulated behaviour).
+ * 'external' = a real on-chain wallet observed in live mode (no simulated behaviour);
+ * 'phisher' = an address-poisoning sender (dust from a look-alike address).
  */
 export type Archetype =
   | 'retail'
@@ -55,7 +56,8 @@ export type Archetype =
   | 'bot'
   | 'sandwich'
   | 'user'
-  | 'external';
+  | 'external'
+  | 'phisher';
 
 export interface PositionState {
   token: string;
@@ -323,6 +325,8 @@ export interface WorldEvents {
   curveCompleted: [token: TokenState];
   tokenMigrated: [token: TokenState];
   walletCreated: [wallet: WalletState];
+  /** Native moved between two wallets (funding links, cash-outs, dust); minting into a wallet is not a transfer. */
+  nativeTransfer: [from: WalletState, to: WalletState, amount: number];
   /** A KOL publicly "calls" (shills) a token; analytics turns these into call signals. */
   kolCall: [token: TokenState, wallet: WalletState];
   /** Off-chain flag changes: community takeover, paid boost, socials updated. */
@@ -556,6 +560,7 @@ export class World extends EventEmitter {
       to.fundedBy = from.address;
       to.fundAmount = amount;
     }
+    if (from) this.emit('nativeTransfer', from, to, amount);
     return true;
   }
 

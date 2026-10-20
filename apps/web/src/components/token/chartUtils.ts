@@ -1,9 +1,10 @@
 // lightweight-charts glue: theme colors from CSS tokens, local-time shift,
 // unit (price / MC) and currency (USD / native) scaling, tiny-price
-// formatting and the trade-marker aggregation.
+// formatting, the trade-marker aggregation and the signal markers.
 
 import type { SeriesMarker, UTCTimestamp } from 'lightweight-charts';
-import { formatCompact, formatPrice, formatSmall, formatUsd, RESOLUTION_SECONDS, type Candle, type Resolution, type Trade, type WalletTag } from '@trenchscope/shared';
+import { formatCompact, formatPrice, formatSmall, formatUsd, RESOLUTION_SECONDS, type Candle, type Resolution, type Signal, type SignalKind, type Trade, type WalletTag } from '@trenchscope/shared';
+import { SIGNAL_META, SIGNAL_ORDER } from '@/components/signals/meta';
 import { classifyTrade, markerPriority, MARKER_CLASSES, withViewerTags, type MarkerClass } from './model';
 import type { ChartUnit } from './store';
 
@@ -205,4 +206,78 @@ export function buildMarkers(opts: {
     if (time >= range.from && time <= range.to) markers.push({ time, position: 'aboveBar', shape: 'square', color: colors.info, text: barPx < 40 ? 'M' : 'Migrated', id: 'migration' });
   }
   return markers.sort((a, b) => a.time - b.time);
+}
+
+// ---------------------------------------------------------------------------
+// Signal markers (PRD TK-C8)
+// ---------------------------------------------------------------------------
+
+/** Ids of signal markers start with this, so a hovered marker maps back to its signals. */
+export const SIGNAL_MARKER_PREFIX = 'sig:';
+
+export interface SignalMarkerColors {
+  bullish: string;
+  bearish: string;
+  neutral: string;
+}
+
+/** Signals already drawn another way: the migration marker marks graduation. */
+const UNMARKED_SIGNALS = new Set<SignalKind>(['migration']);
+
+/** Warnings label a shared candle first, then the Signals page's chip order. */
+function signalPriority(kind: SignalKind): number {
+  return (SIGNAL_META[kind].sentiment === 'bearish' ? 0 : 100) + SIGNAL_ORDER.indexOf(kind);
+}
+
+/**
+ * One circle above each candle that holds signals, coloured by the strongest
+ * sentiment (a warning wins), labelled with the code of its highest-priority
+ * kind ("SM", "Dev↓ ×2", "KOL +1"); labels that would collide with the previous
+ * one are dropped. Returns the markers and the signals behind each marker id
+ * (newest first) for the hover tooltip.
+ */
+export function buildSignalMarkers(opts: {
+  signals: Signal[];
+  resolution: Resolution;
+  /** Bar time range present on the chart (signals outside it are dropped). */
+  range: { from: number; to: number } | null;
+  colors: SignalMarkerColors;
+  barPx?: number;
+}): { markers: SeriesMarker<UTCTimestamp>[]; groups: Map<string, Signal[]> } {
+  const { signals, resolution, range, colors, barPx = 30 } = opts;
+  const groups = new Map<string, Signal[]>();
+  const markers: SeriesMarker<UTCTimestamp>[] = [];
+  if (!range) return { markers, groups };
+  const res = RESOLUTION_SECONDS[resolution];
+  const byTime = new Map<number, Signal[]>();
+  for (const s of signals) {
+    if (UNMARKED_SIGNALS.has(s.kind) || !(s.kind in SIGNAL_META)) continue;
+    const time = bucketTime(s.createdAt, resolution);
+    if (time < range.from || time > range.to) continue;
+    const list = byTime.get(time);
+    if (list) list.push(s);
+    else byTime.set(time, [s]);
+  }
+  let lastLabel = -Infinity;
+  for (const time of [...byTime.keys()].sort((a, b) => a - b)) {
+    const list = byTime.get(time)!.sort((a, b) => b.createdAt - a.createdAt);
+    const top = list.reduce((best, s) => (signalPriority(s.kind) < signalPriority(best.kind) ? s : best), list[0]);
+    const same = list.filter((s) => s.kind === top.kind).length;
+    const others = list.length - same;
+    const sentiment = list.some((s) => SIGNAL_META[s.kind].sentiment === 'bearish') ? 'bearish' : SIGNAL_META[top.kind].sentiment;
+    let text: string | undefined = `${SIGNAL_META[top.kind].short}${same > 1 ? ` ×${same}` : ''}${others > 0 ? ` +${others}` : ''}`;
+    const needBars = (text.length * 6.5 + 6) / Math.max(1, barPx);
+    // warnings always keep their label
+    if (sentiment !== 'bearish' && (time - lastLabel) / res < needBars) text = undefined;
+    else lastLabel = time;
+    const id = `${SIGNAL_MARKER_PREFIX}${time}`;
+    groups.set(id, list);
+    markers.push({ time: time as UTCTimestamp, position: 'aboveBar', shape: 'circle', color: colors[sentiment], text, size: 1, id });
+  }
+  return { markers, groups };
+}
+
+/** Trade, migration and signal markers in the time order lightweight-charts requires. */
+export function mergeMarkers(...sets: SeriesMarker<UTCTimestamp>[][]): SeriesMarker<UTCTimestamp>[] {
+  return sets.flat().sort((a, b) => a.time - b.time);
 }

@@ -541,6 +541,38 @@ export interface WalletProfile {
   lastActiveAt: number;
 }
 
+/** GET /api/:chain/wallets/:address/risk flags (observable data only; definitions in docs/API.md). */
+export type WalletRiskKey = 'phishing' | 'wash' | 'flagged_funder' | 'new_large' | 'serial_rugger' | 'honeypot' | 'fast_trades';
+
+/** ok = nothing found, warn = amber, bad = red, unknown = no data to judge (never shown as ok). */
+export type WalletRiskFlagLevel = 'ok' | 'warn' | 'bad' | 'unknown';
+
+export interface WalletRiskFlag {
+  key: WalletRiskKey;
+  label: string;
+  level: WalletRiskFlagLevel;
+  /** Display value, e.g. "14 dust transfers from 2 look-alikes", "3 of 12 tokens". */
+  value: string;
+  /** Count behind the flag (transfers, tokens, launches, USD for new_large). */
+  count: number;
+  /** Share of the sample it was measured on (0..1), null when none applies. */
+  rate: number | null;
+  /** What the flag means and how it is measured (tooltip copy). */
+  definition: string;
+  /** Addresses involved (look-alike senders, the flagged funder), at most 5. */
+  addresses?: string[];
+}
+
+export interface WalletRiskReport {
+  chain: ChainId;
+  address: string;
+  /** high = any red flag, medium = any amber flag, else low. */
+  level: RiskLevel;
+  /** Fixed order: phishing, wash, flagged_funder, new_large, serial_rugger, honeypot, fast_trades. */
+  flags: WalletRiskFlag[];
+  updatedAt: number;
+}
+
 export interface LeaderboardRow {
   chain: ChainId;
   address: string;
@@ -600,6 +632,52 @@ export interface Signal {
   maxMultiple: number;
   wallets: string[];
   createdAt: number;
+  // Token-level context (PRD §6.12; the server always sets these, optional so clients' fixtures type-check):
+  /** Market cap at the token's first signal of any kind (USD). */
+  firstTriggerMcUsd?: number;
+  /** Signals the token has fired so far, in total and per kind. */
+  timesFired?: number;
+  timesFiredByKind?: Partial<Record<SignalKind, number>>;
+  /** The token now: holders, top-10 share of supply, liquidity (USD). */
+  cur?: { holders: number; top10: number; liquidityUsd: number };
+  /** Fails the quality pre-filter: rug ratio > 0.3, wash trading or honeypot (PRD §8.9). */
+  lowQuality?: boolean;
+}
+
+/**
+ * One AND-group of a signal subscription (a subscription matches when any group does). Bounds are inclusive;
+ * null / absent = open. MC bounds are the token's market cap now, trigger bounds its market cap at the signal.
+ */
+export interface SignalFilterGroup {
+  /** Signal kinds to match; empty = every kind. */
+  kinds: SignalKind[];
+  mcMin?: number | null;
+  mcMax?: number | null;
+  triggerMcMin?: number | null;
+  triggerMcMax?: number | null;
+  minLiquidityUsd?: number | null;
+  minHolders?: number | null;
+  /** Top-10 holders' share of supply (0..1). */
+  maxTop10?: number | null;
+  /** Smart-money wallets holding. */
+  minSmart?: number | null;
+  /** Token age in minutes. */
+  minAgeMin?: number | null;
+  maxAgeMin?: number | null;
+  /** Launchpad ids; empty = any. */
+  launchpads?: string[];
+  /** Skip low-quality tokens (Signal.lowQuality). */
+  excludeRisk: boolean;
+}
+
+/** AlertRule.signals for kind 'signal_subscription' (PRD §9.4). */
+export interface SignalSubscriptionSpec {
+  /** Display name (the rule list and notifications). */
+  name: string;
+  /** OR of AND-groups, 1-5. */
+  groups: SignalFilterGroup[];
+  /** Notifications per hour at most (signals past it are dropped until the hour rolls). */
+  maxPerHour: number;
 }
 
 /** A wallet's public calls (kol_call signals) and how they played out; a hit = maxMultiple >= 2. */
@@ -901,6 +979,41 @@ export interface SwapReceipt {
   orders: Order[];
 }
 
+/** POST /api/trade/initials: size a "sell initials" (recover what the bag cost, keep the rest as a free ride). */
+export interface SellInitialsRequest {
+  chain: ChainId;
+  token: string;
+  /** Sell preset whose fees the sale pays (default: the active sell preset). */
+  presetId?: PresetId;
+}
+
+/**
+ * ok = selling `tokens` returns `targetNative` (the bag's cost basis) after fees; under_water = even the
+ * whole bag returns less (`exitValueNative` < `targetNative`); no_position = nothing held;
+ * nothing_to_recover = the bag has no cost basis (it cost nothing).
+ */
+export type SellInitialsStatus = 'ok' | 'under_water' | 'no_position' | 'nothing_to_recover';
+
+export interface SellInitialsQuote {
+  chain: ChainId;
+  token: string;
+  status: SellInitialsStatus;
+  /** Tokens held. */
+  balance: number;
+  /** Cost basis of the tokens still held (USD, average cost incl. fees: what earlier sells left of it). */
+  costBasisUsd: number;
+  /** Native to take out: the cost basis at the native rate the position was bought at. */
+  targetNative: number;
+  /** Tokens to sell (status ok), else null. */
+  tokens: number | null;
+  /** tokens / balance (status ok), else null. */
+  sellRate: number | null;
+  /** Native that sale returns after tax, platform and network fees (>= targetNative when ok). */
+  expectedOutNative: number;
+  /** Native selling the whole bag would return now, after fees. */
+  exitValueNative: number;
+}
+
 export type OrderKind =
   | 'limit_buy' //       buy when price/mcap crosses trigger in `direction` (below = buy the dip, above = breakout)
   | 'limit_sell' //      sell when price/mcap crosses trigger in `direction` (above = take profit, below = stop loss)
@@ -981,6 +1094,13 @@ export interface PortfolioSummary {
   positions: TokenPositionRow[];
   /** Equity curve (ms, usd). */
   equity: { t: number; valueUsd: number }[];
+}
+
+/** GET /api/portfolio/calendar: the account's daily realized PnL (the wallet page's calendar, all its wallets summed). */
+export interface PortfolioCalendar {
+  chain: ChainId | 'all';
+  /** The last 30 UTC days, oldest first (day = UTC midnight, ms); zero on days without sells. */
+  days: { day: number; pnlUsd: number }[];
 }
 
 export interface FollowedWallet {
@@ -1114,7 +1234,30 @@ export type AlertKind =
   | 'change' //       token 5m price change exceeds value (pct)
   | 'wallet_trade' // any trade by wallet
   | 'new_token' //    new token matching keyword
-  | 'smart_buys'; //  token gets >= value smart buys within 5m
+  | 'smart_buys' //   token gets >= value smart buys within 5m
+  | 'signal_subscription' // signals matching AlertRule.signals (in-app notifications)
+  | 'holding'; //     the account's held positions move, see a dev sell or lose liquidity (AlertRule.holding)
+
+/**
+ * AlertRule.holding for kind 'holding' (PRD §9.4): watches every position the account's wallet holds on the
+ * rule's chain (or only AlertRule.token). At least one trigger must be on.
+ */
+export interface HoldingAlertSpec {
+  /** vs_cost = the position's value against its cost basis; 5m_change = the token's 5-minute price change. */
+  basis: 'vs_cost' | '5m_change';
+  /** Fire when up at least this many percent (null = off). */
+  upPct: number | null;
+  /** Fire when down at least this many percent (null = off). */
+  downPct: number | null;
+  /** Fire when the token's dev (or dev team) sells at least 20% of their bag in one trade. */
+  devSell: boolean;
+  /** Fire when liquidity falls this many percent below its high since the rule started watching the position (null = off). */
+  liquidityDropPct: number | null;
+  /** Positions worth less than this (USD) are ignored. */
+  minPositionUsd: number;
+  /** Per position and trigger, a repeating rule fires again after this many minutes. */
+  cooldownMin: number;
+}
 
 export interface AlertRule {
   id: string;
@@ -1130,6 +1273,10 @@ export interface AlertRule {
   createdAt: number;
   lastTriggeredAt: number | null;
   note: string;
+  /** signal_subscription rules: what to match (null for other kinds). */
+  signals?: SignalSubscriptionSpec | null;
+  /** holding rules: the triggers (null for other kinds). */
+  holding?: HoldingAlertSpec | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1221,6 +1368,7 @@ export type NotificationKind =
   | 'copytrade'
   | 'sniper'
   | 'follow_trade'
+  | 'signal' //   a signal subscription matched
   | 'system';
 
 export interface AppNotification {
@@ -1318,8 +1466,8 @@ export interface MetaResponse {
   platformFeeRate: number;
   chains: ChainMarketInfo[];
   launchpads: { id: string; chain: ChainId; name: string; color: string }[];
-  /** Simulation status (demo mode). */
-  sim: { seed: string; startedAt: number; speed: number; tradesPerSecond: number };
+  /** Simulation status (demo mode); `scenario` = the simulator preset (SIM_SCENARIO), absent in live mode. */
+  sim: { seed: string; startedAt: number; speed: number; tradesPerSecond: number; scenario?: string };
   /** Live stack health (live mode). */
   live?: LiveStatus;
   /** Where the other mode runs (e.g. the demo site), when configured. */
@@ -1339,6 +1487,7 @@ export interface MetaResponse {
  *   token:<chain>:<address>        -> 'token'     TokenDetail every 1s
  *                                   -> 'trades'    Trade[] batches (~250ms)
  *                                   -> 'candle'    { resolution, candle } (params: { resolution })
+ *                                   -> 'signals'   Signal[] when the token fires a signal
  *   feed:<chain>:<smart|kol|follow|all> -> 'feed' FeedItem[] batches
  *   signals:<chain>                -> 'signals'   Signal[] batches
  *   wallet:<chain>:<address>       -> 'trades'    Trade[] batches of that wallet

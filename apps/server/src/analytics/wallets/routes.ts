@@ -1,5 +1,5 @@
 // Wallet-side REST routes (docs/API.md): wallet profile / holdings / activity /
-// created tokens / calls, leaderboard, Monitor feed, signals and call-outs.
+// created tokens / calls / risk check, leaderboard, Monitor feed, signals and call-outs.
 // Inputs are zod-validated; unknown wallets (or a wallet on another chain) are 404.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -41,6 +41,8 @@ const FeedQuery = z.object({
 const SignalsQuery = z.object({
   kind: z.enum(SIGNAL_KINDS as [string, ...string[]]).optional(),
   limit: Limit,
+  quality: Bool,
+  before: z.coerce.number().finite().optional(),
 });
 const CalloutsQuery = z.object({
   filter: z.enum(['all', 'kol', 'hits']).optional(),
@@ -101,6 +103,8 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
     return ctx.analytics.walletCalls(w, parse(LimitQuery, req.query).limit);
   });
 
+  app.get('/api/:chain/wallets/:address/risk', async (req) => ctx.analytics.walletRisk(wallet(req)));
+
   app.get('/api/:chain/leaderboard', async (req) => {
     const { chain } = parse(ChainParams, req.params);
     const q = parse(LeaderboardQuery, req.query);
@@ -118,7 +122,7 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
   app.get('/api/:chain/signals', async (req) => {
     const { chain } = parse(ChainParams, req.params);
     const q = parse(SignalsQuery, req.query);
-    return ctx.analytics.signals(chain, { kind: q.kind, limit: q.limit });
+    return ctx.analytics.signals(chain, { kind: q.kind, limit: q.limit, quality: q.quality === '1' || q.quality === 'true', before: q.before });
   });
 
   app.get('/api/:chain/callouts', async (req) => {

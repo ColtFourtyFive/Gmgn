@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { formatNative, type ChainId, type SwapRequest } from '@trenchscope/shared';
+import { formatCompact, formatNative, type ChainId, type SwapRequest } from '@trenchscope/shared';
 import { ConfirmDialog } from '@/components/account/ConfirmDialog';
 import { Checkbox } from '@/components/ui';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
@@ -12,14 +12,21 @@ import { requireAuth } from '@/store/session';
 import { checkTradeGates, GateReasons, hasGates, type TradeGates } from './gates';
 import { ensureLiveTradeAck } from './LiveTradeAck';
 
-/** A one-click market order: buy a native amount or sell a percent of the position. */
-export type QuickOrder = { side: 'buy'; amount: number } | { side: 'sell'; percent: number };
+/**
+ * A one-click market order: buy a native amount, sell a percent of the position, or sell an
+ * exact token amount (e.g. "sell initials", with its own label and spinner key).
+ */
+export type QuickOrder =
+  | { side: 'buy'; amount: number }
+  | { side: 'sell'; percent: number }
+  | { side: 'sell'; tokens: number; label?: string; key?: string };
 
 /** Stable id of an order (which button shows the spinner). */
-export const quickOrderKey = (o: QuickOrder) => (o.side === 'buy' ? `buy:${o.amount}` : `sell:${o.percent}`);
+export const quickOrderKey = (o: QuickOrder) => (o.side === 'buy' ? `buy:${o.amount}` : 'percent' in o ? `sell:${o.percent}` : (o.key ?? `sell-tokens:${o.tokens}`));
 
 export function quickOrderLabel(o: QuickOrder, chain: ChainId): string {
-  return o.side === 'buy' ? `Buy ${formatNative(o.amount, nativeSymbol(chain))}` : `Sell ${o.percent}%`;
+  if (o.side === 'buy') return `Buy ${formatNative(o.amount, nativeSymbol(chain))}`;
+  return 'percent' in o ? `Sell ${o.percent}%` : (o.label ?? `Sell ${formatCompact(o.tokens)}`);
 }
 
 /** An order waiting for confirmation, with the token it was placed on and its gate reasons. */
@@ -62,7 +69,9 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
   const request = (o: QuickOrder, address: string): SwapRequest =>
     o.side === 'buy'
       ? { chain, token: address, side: 'buy', amount: o.amount, amountKind: 'native', presetId: trade.activeBuyPreset }
-      : { chain, token: address, side: 'sell', amount: o.percent, amountKind: 'percent', presetId: trade.activeSellPreset };
+      : 'percent' in o
+        ? { chain, token: address, side: 'sell', amount: o.percent, amountKind: 'percent', presetId: trade.activeSellPreset }
+        : { chain, token: address, side: 'sell', amount: o.tokens, amountKind: 'tokens', presetId: trade.activeSellPreset };
 
   const run = ({ order: o, token: address, symbol: sym }: Held) => {
     setConfirm(null);

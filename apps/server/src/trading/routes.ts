@@ -10,6 +10,7 @@ import {
   alertSchema,
   copyTaskSchema,
   createOrderSchema,
+  initialsSchema,
   launchSchema,
   ordersQuerySchema,
   patchSchema,
@@ -39,6 +40,11 @@ export async function registerTradingRoutes(app: FastifyInstance, ctx: AppContex
     return trading.executor.swap(id, parse(swapSchema, req.body));
   });
 
+  app.post('/api/trade/initials', async (req) => {
+    const id = auth(req);
+    return trading.initials.quote(id, parse(initialsSchema, req.body));
+  });
+
   // ---- orders ----
 
   app.get('/api/orders', async (req) => {
@@ -58,6 +64,11 @@ export async function registerTradingRoutes(app: FastifyInstance, ctx: AppContex
   app.get('/api/portfolio', async (req) => {
     const id = auth(req);
     return trading.portfolio.summary(id, parse(portfolioQuerySchema, req.query).chain);
+  });
+
+  app.get('/api/portfolio/calendar', async (req) => {
+    const id = auth(req);
+    return trading.portfolio.calendar(id, parse(portfolioQuerySchema, req.query).chain);
   });
 
   app.get('/api/portfolio/activity', async (req) => {

@@ -1,11 +1,13 @@
 // Portfolio: per-account summary over the paper wallets (the open positions
 // list comes from the analytics module's holdings rows; totals, PnL and win
 // rate from one pass over the ledger), an equity curve sampled every 5 minutes
-// and after each fill (kept for 7 days), and the merged activity feed across
-// chains. The bundle wallets of the account's launches count as its own: their
-// rows (walletRole 'bundle') and balances join the summary and the curve.
+// and after each fill (kept for 7 days), the merged activity feed across
+// chains and the daily realized-PnL calendar (the wallet page's, summed over
+// the account's wallets). The bundle wallets of the account's launches count
+// as its own: their rows (walletRole 'bundle') and balances join the summary,
+// the curve and the calendar.
 
-import { CHAIN_IDS, type ChainId, type FeedItem, type PortfolioSummary, type TokenPositionRow } from '@trenchscope/shared';
+import { CHAIN_IDS, type ChainId, type FeedItem, type PortfolioCalendar, type PortfolioSummary, type TokenPositionRow } from '@trenchscope/shared';
 import type { AppContext, Viewer } from '../context';
 import type { WalletState, World } from '../sim/world';
 import { HOUR_MS } from './common';
@@ -116,6 +118,20 @@ export class Portfolio {
       positions,
       equity,
     };
+  }
+
+  /** Daily realized PnL over the last 30 UTC days: each wallet's profile series (30D period), summed by day. */
+  calendar(accountId: string, chain: ChainId | 'all'): PortfolioCalendar {
+    const { accounts, analytics } = this.ctx;
+    const viewer: Viewer = { accountId };
+    const byDay = new Map<number, number>();
+    for (const c of chain === 'all' ? CHAIN_IDS : [chain]) {
+      for (const w of [accounts.walletFor(accountId, c), ...this.launches.bundleWallets(accountId, c)]) {
+        for (const d of analytics.walletProfile(w, viewer).stats['30d'].dailyPnl) byDay.set(d.day, (byDay.get(d.day) ?? 0) + d.pnlUsd);
+      }
+    }
+    const days = [...byDay].sort((a, b) => a[0] - b[0]).map(([day, pnlUsd]) => ({ day, pnlUsd }));
+    return { chain, days };
   }
 
   /** The account's trades across its wallets, newest first. */

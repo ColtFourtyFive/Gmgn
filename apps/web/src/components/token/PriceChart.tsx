@@ -2,8 +2,9 @@
 // live `candle` updates from the page feed, Price/MCap unit, USD/native
 // currency (settings.display.currency, see useValueCurrency; native divides
 // by the chain's native USD price when the bars are drawn, see chartScale), trade markers by wallet
-// class, migration marker and price lines for the viewer's average buy price
-// and open orders.
+// class, the token's signals as markers with hover tooltips (toggle "Signals",
+// which also lists them for keyboard and screen-reader users), migration marker
+// and price lines for the viewer's average buy price and open orders.
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,20 +21,35 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
-import { CHAINS, formatCompact, formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Resolution, type TokenDetail } from '@trenchscope/shared';
-import { CandlestickChart, Eye, MoveHorizontal } from 'lucide-react';
+import { CHAINS, formatCompact, formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Resolution, type Signal, type TokenDetail } from '@trenchscope/shared';
+import { CandlestickChart, Eye, MoveHorizontal, Radio } from 'lucide-react';
 import clsx from 'clsx';
-import { withSubscript, WALLET_TAG_META } from '@/components/common';
-import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Select, Skeleton } from '@/components/ui';
+import { Age, Usd, withSubscript, WALLET_TAG_META } from '@/components/common';
+import { SIGNAL_META } from '@/components/signals/meta';
+import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Select, Skeleton, Toggle } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { api } from '@/lib/api';
 import { useUi } from '@/store/ui';
 import { useViewerTags } from '@/components/discovery';
 import { useTokenFeed } from './feed';
-import { buildMarkers, chartScale, cssColor, formatAxis, minMoveFor, readableRange, safeLocale, toBar, toChartTime, type Bar } from './chartUtils';
+import {
+  buildMarkers,
+  buildSignalMarkers,
+  chartScale,
+  cssColor,
+  formatAxis,
+  mergeMarkers,
+  minMoveFor,
+  readableRange,
+  safeLocale,
+  SIGNAL_MARKER_PREFIX,
+  toBar,
+  toChartTime,
+  type Bar,
+} from './chartUtils';
 import { DEFAULT_MARKER_CLASSES, MARKER_CLASSES, type MarkerClass } from './model';
-import { tokenKeys, useChartUnit, useOnReconnect, useValueCurrency } from './queries';
+import { tokenKeys, useChartUnit, useOnReconnect, useTokenSignals, useValueCurrency } from './queries';
 import type { ChartUnit } from './store';
 import { useMarkerTrades } from './useMarkerTrades';
 import { useSession } from '@/store/session';
@@ -62,6 +78,55 @@ const NATIVE_REDRAW_DRIFT = 0.005;
 interface Legend {
   bar: Bar;
   volume: number;
+}
+
+/** Signals under the hovered marker and where to show them (chart pixels). */
+interface SignalHover {
+  signals: Signal[];
+  x: number;
+  y: number;
+}
+
+/** Signals listed in the toolbar popover (the chart shows every one in view). */
+const SIGNAL_LIST_MAX = 30;
+const TOOLTIP_SIGNALS_MAX = 4;
+
+/** Hover card for a signal marker: what fired on that candle. */
+function SignalTooltip({ hover, width }: { hover: SignalHover; width: number }) {
+  const shown = hover.signals.slice(0, TOOLTIP_SIGNALS_MAX);
+  const more = hover.signals.length - shown.length;
+  const left = Math.max(4, Math.min(hover.x + 12, width - 264));
+  return (
+    <div role="tooltip" className="pointer-events-none absolute z-[4] w-[260px] rounded border border-line bg-panel-2 p-2 text-xs shadow-lg" style={{ left, top: Math.max(4, hover.y - 8) }}>
+      <ul className="flex flex-col gap-1.5">
+        {shown.map((s) => (
+          <SignalLine key={s.id} signal={s} />
+        ))}
+      </ul>
+      {more > 0 && <p className="mt-1 text-faint">+{more} more on this candle</p>}
+    </div>
+  );
+}
+
+/** One signal: kind (icon + title), age and what happened. */
+function SignalLine({ signal: s, mc }: { signal: Signal; mc?: boolean }) {
+  const meta = SIGNAL_META[s.kind];
+  const Icon = meta.icon;
+  return (
+    <li className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-1.5 font-semibold" style={{ color: `rgb(var(--${meta.token}))` }}>
+        <Icon size={12} aria-hidden />
+        {s.title || meta.label}
+        <Age ts={s.createdAt} suffix=" ago" className="ml-auto font-normal text-faint" />
+      </span>
+      <span className="text-muted">{s.detail}</span>
+      {mc && (
+        <span className="text-2xs text-faint">
+          MC at signal <Usd value={s.marketCapAtTrigger} />
+        </span>
+      )}
+    </li>
+  );
 }
 
 /** Price (or MC) at which an open order fires, in USD price terms; null when not price-like. */
@@ -98,6 +163,9 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   const [classList, setClassList] = useLocalStorage<MarkerClass[]>('ts.token.markers', DEFAULT_MARKER_CLASSES);
   const enabled = useMemo(() => new Set(classList), [classList]);
   const markerTrades = useMarkerTrades(chain, address, enabled);
+  const [showSignals, setShowSignals] = useLocalStorage<boolean>('ts.token.signalMarkers', true);
+  const signals = useTokenSignals(chain, address);
+  const signalList = useMemo(() => signals.data ?? [], [signals.data]);
   const roomy = useBreakpoint('sm');
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,6 +192,9 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   /** Pixels per bar (rounded) — marker labels that would overlap are dropped. */
   const [barPx, setBarPx] = useState(30);
   const [lastLegend, setLastLegend] = useState<Legend | null>(null);
+  /** Signals behind each signal marker id (read by the crosshair handler). */
+  const signalGroupsRef = useRef(new Map<string, Signal[]>());
+  const [signalHover, setSignalHover] = useState<SignalHover | null>(null);
 
   const candles = useQuery({
     queryKey: tokenKeys.candles(chain, address, resolution),
@@ -134,8 +205,11 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     retry: 1,
   });
 
-  // The stream only sends the latest candle: refetch history after a reconnect to fill the gap.
-  useOnReconnect(() => void candles.refetch());
+  // The stream only sends the latest candle (and new signals): refetch after a reconnect to fill the gap.
+  useOnReconnect(() => {
+    void candles.refetch();
+    void signals.refetch();
+  });
 
   const colors = () => ({ up: cssColor('up'), down: cssColor('down'), upVol: cssColor('up', 0.35), downVol: cssColor('down', 0.35) });
 
@@ -202,6 +276,9 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
       const bar = param.seriesData.get(series) as Bar | undefined;
       const v = param.seriesData.get(vol) as { value?: number } | undefined;
       setLegend(bar && 'open' in bar ? { bar, volume: v?.value ?? 0 } : null);
+      const id = typeof param.hoveredObjectId === 'string' && param.hoveredObjectId.startsWith(SIGNAL_MARKER_PREFIX) ? param.hoveredObjectId : null;
+      const group = id ? signalGroupsRef.current.get(id) : undefined;
+      setSignalHover(group && param.point ? { signals: group, x: param.point.x, y: param.point.y } : null);
     };
     chart.subscribeCrosshairMove(onMove);
     const onRange = (range: { from: number; to: number } | null) => {
@@ -303,25 +380,29 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     [feed],
   );
 
-  // Markers.
+  // Markers: trades by wallet class, migration, and the token's signals.
   useEffect(() => {
     const series = candleRef.current;
     if (!series) return;
     const raw = rawRef.current;
     const range = raw.length ? { from: toChartTime(raw[0].time), to: toChartTime(raw[raw.length - 1].time) } : null;
-    series.setMarkers(
-      buildMarkers({
-        trades: markerTrades,
-        enabled,
-        viewerTags,
-        resolution,
-        range,
-        migratedAt: token.migratedAt,
-        colors: { up: cssColor('up'), down: cssColor('down'), mine: cssColor('accent'), info: cssColor('info') },
-        barPx,
-      }),
-    );
-  }, [markerTrades, enabled, viewerTags, resolution, token.migratedAt, dataVersion, theme, barPx]);
+    const trades = buildMarkers({
+      trades: markerTrades,
+      enabled,
+      viewerTags,
+      resolution,
+      range,
+      migratedAt: token.migratedAt,
+      colors: { up: cssColor('up'), down: cssColor('down'), mine: cssColor('accent'), info: cssColor('info') },
+      barPx,
+    });
+    const sig = showSignals
+      ? buildSignalMarkers({ signals: signalList, resolution, range, colors: { bullish: cssColor('accent'), bearish: cssColor('down'), neutral: cssColor('info') }, barPx })
+      : { markers: [], groups: new Map<string, Signal[]>() };
+    signalGroupsRef.current = sig.groups;
+    if (!showSignals) setSignalHover(null);
+    series.setMarkers(mergeMarkers(trades, sig.markers));
+  }, [markerTrades, enabled, viewerTags, resolution, token.migratedAt, dataVersion, theme, barPx, showSignals, signalList]);
 
   // Price lines: average buy and open order triggers.
   const avgBuy = position && position.balance > 0 && position.avgBuyPriceUsd > 0 ? position.avgBuyPriceUsd : null;
@@ -415,10 +496,41 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
             })}
           </ul>
         </Popover>
+        <Popover
+          placement="bottom-end"
+          aria-label="Signals"
+          className="w-72 p-2"
+          trigger={
+            <button type="button" className="btn-ghost btn-xs" aria-label={`Signals (${signalList.length})`}>
+              <Radio size={12} aria-hidden className={showSignals ? 'text-accent' : undefined} />
+              <span className="hidden sm:inline">Signals</span>
+              <span className="num rounded bg-panel-3 px-1 text-2xs text-muted">{signalList.length}</span>
+            </button>
+          }
+        >
+          <Toggle
+            size="sm"
+            className="px-1"
+            checked={showSignals}
+            onChange={setShowSignals}
+            label="Show signals on the chart"
+            description="Smart / KOL buys, spikes, highs, milestones, dev and bundler sells"
+          />
+          {signalList.length === 0 ? (
+            <p className="mt-2 px-1 text-xs text-muted">{signals.isPending ? 'Loading signals…' : 'No signals for this token yet.'}</p>
+          ) : (
+            <ul className="mt-2 flex max-h-72 flex-col gap-2 overflow-y-auto border-t border-line px-1 pt-2 text-xs" aria-label="Signals for this token, newest first">
+              {signalList.slice(0, SIGNAL_LIST_MAX).map((s) => (
+                <SignalLine key={s.id} signal={s} mc />
+              ))}
+            </ul>
+          )}
+        </Popover>
         {roomy && <IconButton size="sm" label="Reset zoom" icon={<MoveHorizontal size={14} />} onClick={fitBars} />}
       </div>
       <div className="relative min-w-0" style={{ height }}>
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" onMouseLeave={() => setSignalHover(null)} />
+        {signalHover && <SignalTooltip hover={signalHover} width={containerRef.current?.clientWidth ?? 600} />}
         {shown && (
           <div className="pointer-events-none absolute left-2 right-[84px] top-1.5 z-[2] flex flex-wrap items-center gap-x-2 text-2xs text-muted">
             <span>

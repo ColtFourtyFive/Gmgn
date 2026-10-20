@@ -32,6 +32,7 @@ import type {
   WalletCalls,
   WalletPeriod,
   WalletProfile,
+  WalletRiskReport,
   WalletTag,
   WalletTransfer,
   WatchlistItem,
@@ -39,6 +40,7 @@ import type {
 import type { Connection, VersionedTransaction } from '@solana/web3.js';
 import type { LiveConfig } from './live/config';
 import type { Engine } from './sim/engine';
+import type { ScenarioId } from './sim/scenarios';
 import type { TokenState, WalletState, World } from './sim/world';
 import type { Hub } from './ws/hub';
 
@@ -56,6 +58,8 @@ export interface AppConfig {
   /** Directory for snapshots. */
   dataDir: string;
   seed: string;
+  /** Demo mode: simulator scenario preset (SIM_SCENARIO, sim/scenarios.ts); absent = normal. */
+  simScenario?: ScenarioId;
   /** Minutes of history to fast-forward at boot when no snapshot exists. */
   warmupMinutes: number;
   /** Persist snapshots periodically (ms); 0 disables. */
@@ -138,9 +142,15 @@ export interface AnalyticsApi {
   createdTokens(w: WalletState, limit?: number): DevToken[];
   /** The wallet's kol_call signals with hit rates. */
   walletCalls(w: WalletState, limit?: number): WalletCalls;
+  /** Risk check flags (address poisoning, wash trading, flagged funder, ...). */
+  walletRisk(w: WalletState): WalletRiskReport;
   leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): LeaderboardRow[];
   feed(chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit: number, viewer: Viewer): FeedItem[];
-  signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[];
+  signals(chain: ChainId, opts: { kind?: string; limit?: number; quality?: boolean; before?: number }): Signal[];
+  /** One token's signals newest first (chart markers). */
+  tokenSignals(t: TokenState, limit?: number): Signal[];
+  /** Every signal fired once the engine is live (never during warmup); returns an unsubscribe. */
+  onSignal(listener: (signal: Signal) => void): () => void;
   /** Global call-out feed: kol_call signals newest first. */
   callouts(chain: ChainId, filter: CalloutFilter, limit?: number): Signal[];
   narratives(chain: ChainId): Narrative[];

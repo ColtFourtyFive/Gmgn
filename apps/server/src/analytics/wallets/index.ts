@@ -1,7 +1,7 @@
 // Wallet-side analytics: classification tags (smart / sniper / whale / fresh /
 // bot / sandwich), wallet profiles with period stats + style, holdings,
-// activity, leaderboards, Monitor feeds and token signals, plus the 'feed',
-// 'signals' and 'wallet' realtime channels.
+// activity, the risk check (risk.ts), leaderboards, Monitor feeds and token
+// signals, plus the 'feed', 'signals' and 'wallet' realtime channels.
 //
 // Everything here is derived from observable data only (trades, balances,
 // funding links, timestamps, blocks, labels/tags and token cohorts). Hidden
@@ -20,20 +20,24 @@ import {
   type SignalKind,
   type TokenPositionRow,
   type TokenRef,
+  type TokenSummary,
   type Trade,
   type WalletCalls,
   type WalletPeriod,
   type WalletPeriodStats,
   type WalletProfile,
+  type WalletRiskReport,
   type WalletStyle,
   type WalletTag,
 } from '@trenchscope/shared';
 import type { AppContext, Viewer } from '../../context';
 import type { PositionState, TokenState, WalletState } from '../../sim/world';
+import { tokenAnalyticsFor } from '../tokens';
 import { viewerLabel, viewerTags } from '../viewer';
 import { EntryWatch, type PendingEntry } from './entries';
 import { DAY_MS, HOUR_MS, median } from './metrics';
 import { Ring } from './ring';
+import { TransferBook, riskReport } from './risk';
 import {
   CALL_HIT_MULTIPLE,
   CALL_RING,
@@ -199,9 +203,18 @@ interface Persisted {
   tracks: WalletTrackData[];
   feeds: Record<string, { smart: ActEntry[]; kol: ActEntry[]; all: ActEntry[] }>;
   signals: SignalEngineData;
+  /** Native transfers index (risk check); absent in snapshots written before it existed. */
+  transfers?: ReturnType<TransferBook['dump']>;
 }
 
 const ANON: Viewer = { accountId: null };
+
+/** Rug ratio above this, wash trading or a honeypot: the signal quality pre-filter (PRD §8.9). */
+export const SIGNAL_QUALITY_MAX_RUG = 0.3;
+
+export function isLowQuality(s: Pick<TokenSummary, 'security'>): boolean {
+  return s.security.rugRatio > SIGNAL_QUALITY_MAX_RUG || s.security.isWashTrading || s.security.isHoneypot === true;
+}
 
 function hasFeedTag(tags: readonly WalletTag[]): boolean {
   for (const t of tags) if (FEED_TAGS.includes(t)) return true;
@@ -219,6 +232,8 @@ export class WalletAnalytics {
   private seq = 0;
   private classifyRuns = 0;
   private entries = new EntryWatch();
+  /** Dust received and transfer partners per wallet (address-poisoning check). */
+  private transfers = new TransferBook();
   /** Current bot trade-rate threshold per chain (trades/day equivalent). */
   readonly botRate: Record<ChainId, number> = { sol: BOT_MIN_TRADES_PER_DAY, base: BOT_MIN_TRADES_PER_DAY, robinhood: BOT_MIN_TRADES_PER_DAY, bsc: BOT_MIN_TRADES_PER_DAY, eth: BOT_MIN_TRADES_PER_DAY };
   /** Chain base rate of entries that run 2x (median over active wallets, 7d). */
@@ -248,6 +263,7 @@ export class WalletAnalytics {
       }
     });
     world.on('positionPruned', (w, pos) => this.onPositionPruned(w, pos));
+    world.on('nativeTransfer', (from, to, amount) => this.transfers.record(from, to, amount * world.nativeUsd(to.chain), world.now));
     world.on('tokenMigrated', (t) => this.signalEngine.onMigrated(t));
     world.on('tokenFlag', (t, flag) => this.signalEngine.onFlag(t, flag));
     world.on('kolCall', (t, w) => this.signalEngine.onKolCall(t, w));
@@ -496,6 +512,7 @@ export class WalletAnalytics {
     }
     this.entries.prune(now - 8 * DAY_MS, (tok) => world.tokens.has(tok));
     this.signalEngine.prune();
+    this.transfers.prune((a) => world.wallets.has(a));
   }
 
   // -------------------------------------------------------------------------
@@ -559,6 +576,49 @@ export class WalletAnalytics {
       style: base.style,
       lastActiveAt: w.lastActiveAt,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Risk check
+  // -------------------------------------------------------------------------
+
+  /** Risk flags of a wallet (risk.ts), from transfers, its own trades, positions and launches. */
+  risk(w: WalletState): WalletRiskReport {
+    const { world } = this.ctx;
+    const tr = this.tracks.get(w.address);
+    const trades: Trade[] = [];
+    if (tr) for (let i = tr.act.size - 1; i >= 0; i--) trades.push(tr.act.at(i)!.trade);
+    let boughtUsd = w.pruned?.boughtUsd ?? 0;
+    let honeypotTokens = 0;
+    for (const pos of w.positions.values()) {
+      boughtUsd += pos.boughtUsd;
+      if (world.tokens.get(pos.token)?.isHoneypot) honeypotTokens++;
+    }
+    const own = this.launchRecord(w);
+    return riskReport(w.chain, w.address, {
+      now: world.now,
+      // live mode does not index native transfers yet: say so instead of reporting none
+      transfersTracked: this.ctx.config?.mode !== 'live',
+      createdAt: w.createdAt,
+      dustIn: this.transfers.dustIn(w.address),
+      counterparties: [...(w.fundedBy ? [w.fundedBy] : []), ...this.transfers.peers(w.address)],
+      trades,
+      funder: w.fundedBy ? { address: w.fundedBy, ...this.launchRecord(world.wallets.get(w.fundedBy)) } : null,
+      boughtUsd,
+      launches: own.launches,
+      rugged: own.rugged,
+      tokensTraded: w.positions.size + (w.pruned?.tokens ?? 0),
+      honeypotTokens,
+      roundTrips: tr ? tr.recentCopyWindows(100) : [],
+    });
+  }
+
+  /** Launches of a wallet and how many of those still listed are classed as rugged. */
+  private launchRecord(w: WalletState | undefined): { launches: number; rugged: number } {
+    if (!w || w.createdTokens.length === 0) return { launches: 0, rugged: 0 };
+    let rugged = 0;
+    for (const t of this.ctx.analytics.createdTokens(w, 500)) if (t.rugged) rugged++;
+    return { launches: w.createdTokens.length, rugged };
   }
 
   // -------------------------------------------------------------------------
@@ -946,10 +1006,20 @@ export class WalletAnalytics {
   // Signals
   // -------------------------------------------------------------------------
 
+  /** The token's recent summary (holder / risk context of signal rows); null where token analytics is not installed. */
+  private recentSummary(t: TokenState): TokenSummary | null {
+    try {
+      return tokenAnalyticsFor(this.ctx)?.recentSummary(t) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private signalDto(s: StoredSignal): Signal | null {
     const t = this.ctx.world.tokens.get(s.token);
     if (!t) return null;
-    return {
+    const stats = this.signalEngine.tokenStats(s.token);
+    const dto: Signal = {
       id: s.id,
       chain: s.chain,
       kind: s.kind,
@@ -960,16 +1030,40 @@ export class WalletAnalytics {
       maxMultiple: maxMultipleOf(s),
       wallets: s.wallets,
       createdAt: s.createdAt,
+      firstTriggerMcUsd: stats?.firstTriggerMcUsd ?? s.marketCapAtTrigger,
+      timesFired: stats?.timesFired ?? 1,
+      timesFiredByKind: stats?.timesFiredByKind ?? { [s.kind]: 1 },
     };
+    const sum = this.recentSummary(t);
+    if (sum) {
+      dto.cur = { holders: sum.holderCount, top10: sum.security.top10HolderRate, liquidityUsd: sum.liquidityUsd };
+      dto.lowQuality = isLowQuality(sum);
+    }
+    return dto;
   }
 
-  /** Signals newest first (all kinds: ring of 500 per chain; one kind: ring of 150 per kind). */
-  signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[] {
+  /**
+   * Signals newest first (all kinds: ring of 500 per chain; one kind: ring of 150 per kind). `quality`
+   * leaves out low-quality tokens (Signal.lowQuality); `before` (ms) keeps signals strictly older.
+   */
+  signals(chain: ChainId, opts: { kind?: string; limit?: number; quality?: boolean; before?: number }): Signal[] {
     const kind = SIGNAL_KINDS.includes(opts.kind as SignalKind) ? (opts.kind as SignalKind) : undefined;
     const limit = Math.max(1, Math.min(500, Math.floor(opts.limit ?? 100)));
     const out: Signal[] = [];
     for (const s of this.signalEngine.list(chain, kind, 500)) {
       if (out.length >= limit) break;
+      if (opts.before !== undefined && s.createdAt >= opts.before) continue;
+      const dto = this.signalDto(s);
+      if (dto && !(opts.quality && dto.lowQuality)) out.push(dto);
+    }
+    return out;
+  }
+
+  /** One token's signals newest first (whatever the chain rings still hold for it; chart markers). */
+  tokenSignals(t: TokenState, limit = 200): Signal[] {
+    const lim = Math.max(1, Math.min(500, Math.floor(limit)));
+    const out: Signal[] = [];
+    for (const s of this.signalEngine.forToken(t.address, lim)) {
       const dto = this.signalDto(s);
       if (dto) out.push(dto);
     }
@@ -1041,6 +1135,7 @@ export class WalletAnalytics {
       feeds,
       signals: this.signalEngine.dump(),
       entries: this.entries.dump(),
+      transfers: this.transfers.dump(),
     };
     return data;
   }
@@ -1063,6 +1158,7 @@ export class WalletAnalytics {
     }
     this.signalEngine.load(d.signals);
     this.entries.load(d.entries);
+    this.transfers.load(d.transfers);
     this.baseCache.clear();
     this.lb.clear();
   }

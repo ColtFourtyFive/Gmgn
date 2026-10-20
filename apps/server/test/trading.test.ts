@@ -10,8 +10,12 @@ import {
   type CopyTradeTask,
   type FeedItem,
   type Order,
+  type PortfolioCalendar,
   type PortfolioSummary,
   type Quote,
+  type SellInitialsQuote,
+  type Signal,
+  type SignalFilterGroup,
   type SniperTask,
   type SwapReceipt,
   type SwapRequest,
@@ -23,6 +27,7 @@ import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
 import type { AnalyticsApi } from '../src/context';
 import type { PositionState, TokenState, WalletState } from '../src/sim/world';
 import { Trading } from '../src/trading';
+import { HOUR_MS, matchesGroup, matchesSubscription } from '../src/trading/signalSubs';
 import { SNIPE_DELAY_MS } from '../src/trading/sniper';
 
 let built: BuiltApp;
@@ -356,6 +361,73 @@ describe('swaps', () => {
 // ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
+
+describe('sell initials', () => {
+  const initials = (user: User, token: TokenState) =>
+    call<SellInitialsQuote>('POST', '/api/trade/initials', { auth: user.auth, body: { chain: token.chain, token: token.address } });
+
+  it('sells exactly what takes out the native the bag cost, fees included, and keeps the rest', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const start = user.wallet().native;
+    await swap(user, token, { amount: 1 });
+    const spent = start - user.wallet().native;
+    pumpTo(token, whale(), price(token) * 2);
+
+    const q = (await initials(user, token)).body;
+    expect(q.status).toBe('ok');
+    expect(q.targetNative).toBeCloseTo(spent, 9);
+    expect(q.costBasisUsd).toBeCloseTo(user.wallet().positions.get(token.address)!.costBasisUsd, 9);
+    expect(q.sellRate).toBeGreaterThan(0.4);
+    expect(q.sellRate).toBeLessThan(0.65);
+    expect(q.expectedOutNative).toBeGreaterThanOrEqual(q.targetNative);
+    expect(q.exitValueNative).toBeGreaterThan(q.expectedOutNative);
+
+    const before = user.wallet().native;
+    const r = await swap(user, token, { side: 'sell', amount: q.tokens!, amountKind: 'tokens' });
+    expect(r.ok).toBe(true);
+    // the initial investment is back in the wallet, the rest of the bag is a free ride
+    expect(user.wallet().native - before).toBeCloseTo(spent, 6);
+    expect(user.wallet().native).toBeCloseTo(start, 6);
+    expect(balance(user.wallet(), token)).toBeCloseTo(q.balance - q.tokens!, 3);
+  });
+
+  it('recovers only what earlier sells left of the cost basis', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const start = user.wallet().native;
+    await swap(user, token, { amount: 1 });
+    const spent = start - user.wallet().native;
+    pumpTo(token, whale(), price(token) * 3);
+    await swap(user, token, { side: 'sell', amount: 50, amountKind: 'percent' });
+
+    const q = (await initials(user, token)).body;
+    expect(q.status).toBe('ok');
+    // average cost: half the bag sold takes half the cost basis with it
+    expect(q.targetNative).toBeCloseTo(spent / 2, 6);
+    const before = user.wallet().native;
+    await swap(user, token, { side: 'sell', amount: q.tokens!, amountKind: 'tokens' });
+    expect(user.wallet().native - before).toBeCloseTo(spent / 2, 6);
+  });
+
+  it('refuses an under-water bag and explains with the exit value; nothing held or unknown tokens', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const bag = whale();
+    world().executeSwap(bag, token, 'buy', 20);
+    await swap(user, token, { amount: 1 });
+    dumpTo(token, [bag], price(token) * 0.7);
+    const q = (await initials(user, token)).body;
+    expect(q).toMatchObject({ status: 'under_water', tokens: null, sellRate: null });
+    expect(q.exitValueNative).toBeGreaterThan(0);
+    expect(q.exitValueNative).toBeLessThan(q.targetNative);
+
+    const other = launch({ devBuy: 1 }).token;
+    expect((await initials(user, other)).body).toMatchObject({ status: 'no_position', balance: 0, tokens: null });
+    expect((await call('POST', '/api/trade/initials', { auth: user.auth, body: { chain: 'sol', token: 'missing' } })).status).toBe(404);
+    expect((await call('POST', '/api/trade/initials', { auth: user.auth, body: { chain: 'sol' } })).status).toBe(400);
+  });
+});
 
 describe('orders', () => {
   it('fills a dip limit buy and a market-cap breakout limit sell', async () => {
@@ -1112,6 +1184,154 @@ describe('alerts', () => {
     expect(notifications(user)[0].title).toMatch(new RegExp(`^\\$${token.symbol} \\+\\d+(\\.\\d+)?% in 5m$`));
   });
 
+  it('signal subscriptions: matching signals notify in-app, a token merges within a minute, capped per hour', async () => {
+    const user = await signIn();
+    const sub = (signals: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'signal_subscription', repeat: true, signals, ...extra } });
+    const created = await sub({ name: 'Smart entries', groups: [{ kinds: ['smart_buy'], excludeRisk: false }] });
+    expect(created.status).toBe(200);
+    expect(created.body).toMatchObject({ kind: 'signal_subscription', token: null, signals: { name: 'Smart entries', maxPerHour: 30, groups: [{ kinds: ['smart_buy'], minLiquidityUsd: null, excludeRisk: false }] } });
+    // a kol_buy subscription whose liquidity floor no token meets
+    await sub({ groups: [{ kinds: ['kol_buy'], minLiquidityUsd: 1e12 }] });
+
+    const smart = () => world().createWallet('sol', 'smart', { native: 100, tags: ['smart'] });
+    const kol = world().createWallet('sol', 'kol', { native: 100, tags: ['kol'], label: 'Caller' });
+    const signalNotes = () => notifications(user).filter((n) => n.kind === 'signal');
+    const { token } = launch({ devBuy: 1 });
+
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().executeSwap(kol, token, 'buy', 0.5);
+    trading().alerts.evaluate();
+    expect(signalNotes().map((n) => [n.title, n.token, n.chain])).toEqual([[`$${token.symbol}: Smart money buy`, token.address, 'sol']]);
+    expect(signalNotes()[0].body).toMatch(/· Smart entries$/);
+
+    // two more within the minute: held, then sent together once it has passed
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().now += 30_000;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(1);
+    world().now += 31_000;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(2);
+    expect(signalNotes()[0].body).toMatch(/· 2 signals · Smart entries$/);
+
+    // maxPerHour: a third token in the hour is dropped
+    const capped = await sub({ groups: [{ kinds: ['smart_buy'], excludeRisk: false }], maxPerHour: 1 });
+    await call('PATCH', `/api/alerts/${created.body.id}`, { auth: user.auth, body: { enabled: false } });
+    for (const t of [launch({ devBuy: 1 }).token, launch({ devBuy: 1 }).token]) {
+      world().executeSwap(smart(), t, 'buy', 0.5);
+      trading().alerts.evaluate();
+    }
+    expect(signalNotes()).toHaveLength(3);
+    const rule = (await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body.find((r) => r.id === capped.body.id)!;
+    expect(rule.lastTriggeredAt).toBe(world().now);
+
+    // nothing while history fast-forwards
+    built.ctx.engine.warming = true;
+    world().executeSwap(smart(), launch({ devBuy: 1 }).token, 'buy', 0.5);
+    built.ctx.engine.warming = false;
+    world().now += HOUR_MS;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(3);
+  });
+
+  it('holding alerts: moves vs cost, liquidity drain and dev sells on held positions, with a per-trigger cooldown', async () => {
+    const user = await signIn();
+    const holding = (spec: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'holding', repeat: true, holding: spec, ...extra } });
+    const created = await holding({ upPct: 50, downPct: 20, devSell: true, liquidityDropPct: 40, cooldownMin: 10 });
+    expect(created.status).toBe(200);
+    expect(created.body).toMatchObject({ kind: 'holding', token: null, holding: { basis: 'vs_cost', upPct: 50, downPct: 20, devSell: true, liquidityDropPct: 40, minPositionUsd: 10, cooldownMin: 10 } });
+    const titles = () => notifications(user).filter((n) => n.kind === 'alert').map((n) => n.title);
+
+    const { token, dev } = launch({ devBuy: 5 });
+    const w = whale();
+    await swap(user, token, { amount: 1 });
+    trading().alerts.evaluate();
+    expect(titles()).toEqual([]);
+
+    // +50% vs the position's cost basis
+    pumpTo(token, w, price(token) * 1.7);
+    trading().alerts.evaluate();
+    expect(titles()).toEqual([expect.stringMatching(new RegExp(`^\\$${token.symbol} up \\d+% vs your cost$`))]);
+    trading().alerts.evaluate();
+    expect(titles()).toHaveLength(1); // cooling down
+
+    // the dev dumps its bag (the dev-sell trigger), the whale exits: liquidity drains and the bag goes under water
+    world().executeSwap(dev, token, 'sell', balance(dev, token));
+    expect(titles()[0]).toBe(`Dev sold 100% of their $${token.symbol}`);
+    world().executeSwap(w, token, 'sell', balance(w, token));
+    trading().alerts.evaluate();
+    expect(titles().slice(0, 2)).toEqual([expect.stringMatching(/ liquidity down \d+%$/), expect.stringMatching(/ down \d+% vs your cost$/)]);
+    const n = titles().length;
+    trading().alerts.evaluate();
+    expect(titles()).toHaveLength(n);
+    // after the cooldown the still-true triggers fire again
+    world().now += 10 * 60_000;
+    trading().alerts.evaluate();
+    expect(titles().length).toBe(n + 2);
+  });
+
+  it('holding alerts: one-shot rules switch off, small and closed positions are skipped, token filter and validation', async () => {
+    const user = await signIn();
+    const create = (body: Record<string, unknown>) => call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'holding', ...body } });
+    expect((await create({})).status).toBe(400);
+    expect((await create({ holding: { upPct: null } })).status).toBe(400);
+    expect((await create({ holding: { downPct: 120 } })).status).toBe(400);
+    expect((await create({ holding: { upPct: 10 }, token: 'missing' })).status).toBe(404);
+
+    const a = launch({ devBuy: 1 }).token;
+    const b = launch({ devBuy: 1 }).token;
+    const w = whale();
+    await swap(user, a, { amount: 1 });
+    await swap(user, b, { amount: 0.01 });
+    const once = (await create({ holding: { basis: '5m_change', upPct: 20, minPositionUsd: 0 }, token: b.address })).body;
+    const big = (await create({ holding: { upPct: 20, minPositionUsd: 1_000 } })).body;
+    pumpTo(a, w, price(a) * 1.5);
+    pumpTo(b, w, price(b) * 1.5);
+    trading().alerts.evaluate();
+    // only b matches the token filter; b's $2 bag is below the other rule's $1,000 minimum
+    expect(notifications(user).map((n) => [n.title, n.token])).toEqual([[expect.stringMatching(new RegExp(`^\\$${b.symbol} up \\d+% in 5m$`)), b.address]]);
+    const rules = (await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body;
+    expect(rules.find((r) => r.id === once.id)).toMatchObject({ enabled: false, lastTriggeredAt: world().now });
+    expect(rules.find((r) => r.id === big.id)).toMatchObject({ enabled: true, lastTriggeredAt: null });
+
+    // a closed position is no longer watched
+    const repeat = (await create({ holding: { upPct: 20 }, repeat: true, token: a.address })).body;
+    await swap(user, a, { side: 'sell', amount: 100, amountKind: 'percent' });
+    trading().alerts.evaluate();
+    expect((await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body.find((r) => r.id === repeat.id)!.lastTriggeredAt).toBeNull();
+  });
+
+  it('signal subscriptions: match on group filters and validate them', async () => {
+    const user = await signIn();
+    const create = (signals: unknown) => call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'signal_subscription', signals } });
+    expect((await create(null)).status).toBe(400);
+    expect((await create({ groups: [] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: ['nope'] }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], mcMin: 10, mcMax: 5 }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], launchpads: ['fourpad'] }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], launchpads: ['moonpit'] }] })).status).toBe(200);
+
+    const base = { id: 's', chain: 'sol', kind: 'smart_buy', title: 'Smart money buy', detail: '', marketCapAtTrigger: 8_000, maxMultiple: 1, wallets: [], createdAt: 0 };
+    const token = { chain: 'sol', address: 'T', symbol: 'T', marketCapUsd: 10_000, liquidityUsd: 6_000, launchpad: 'moonpit', createdAt: -30 * 60_000 };
+    const s = { ...base, token, cur: { holders: 40, top10: 0.25, liquidityUsd: 6_000 }, lowQuality: false } as unknown as Signal;
+    const c = { now: 0, smartHolders: () => 2 };
+    const g = (over: Partial<SignalFilterGroup>): SignalFilterGroup => ({ kinds: [], excludeRisk: true, ...over });
+    expect(matchesGroup(g({}), s, c)).toBe(true);
+    expect(matchesGroup(g({ kinds: ['kol_buy'] }), s, c)).toBe(false);
+    expect(matchesGroup(g({ mcMin: 20_000 }), s, c)).toBe(false);
+    expect(matchesGroup(g({ triggerMcMax: 5_000 }), s, c)).toBe(false);
+    expect(matchesGroup(g({ minLiquidityUsd: 5_000, minHolders: 40, maxTop10: 0.3, minAgeMin: 10, maxAgeMin: 60, minSmart: 2, launchpads: ['moonpit'] }), s, c)).toBe(true);
+    expect(matchesGroup(g({ minSmart: 3 }), s, c)).toBe(false);
+    expect(matchesGroup(g({}), { ...s, lowQuality: true }, c)).toBe(false);
+    expect(matchesGroup(g({ excludeRisk: false }), { ...s, lowQuality: true }, c)).toBe(true);
+    // unknown holder data never passes a bound on it
+    expect(matchesGroup(g({ minHolders: 1 }), { ...s, cur: undefined }, c)).toBe(false);
+    expect(matchesSubscription({ name: '', maxPerHour: 30, groups: [g({ kinds: ['kol_buy'] }), g({ kinds: ['smart_buy'] })] }, s, c)).toBe(true);
+  });
+
   it('validates alert references', async () => {
     const user = await signIn();
     const create = (body: Record<string, unknown>) => call('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', ...body } });
@@ -1276,6 +1496,28 @@ describe('portfolio', () => {
     expect((await call('GET', '/api/portfolio?chain=doge', { auth: user.auth })).status).toBe(400);
   });
 
+  it('serves the daily realized PnL calendar of every wallet of the account (30 UTC days)', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    await swap(user, token, { amount: 1 });
+    pumpTo(token, whale(), price(token) * 2);
+    await swap(user, token, { side: 'sell', amount: 50, amountKind: 'percent' });
+    const realized = user.wallet().positions.get(token.address)!.realizedPnlUsd;
+    expect(realized).toBeGreaterThan(0);
+
+    const sol = (await call<PortfolioCalendar>('GET', '/api/portfolio/calendar?chain=sol', { auth: user.auth })).body;
+    expect(sol.chain).toBe('sol');
+    expect(sol.days).toHaveLength(30);
+    const day = 86_400_000;
+    expect(sol.days[29].day).toBe(Math.floor(world().now / day) * day);
+    expect(sol.days[29].pnlUsd).toBeCloseTo(realized, 6);
+    expect(sol.days.slice(0, 29).every((d) => d.pnlUsd === 0)).toBe(true);
+    const all = (await call<PortfolioCalendar>('GET', '/api/portfolio/calendar', { auth: user.auth })).body;
+    expect(all).toMatchObject({ chain: 'all' });
+    expect(all.days[29].pnlUsd).toBeCloseTo(realized, 6);
+    expect((await call('GET', '/api/portfolio/calendar?chain=doge', { auth: user.auth })).status).toBe(400);
+  });
+
   it('counts every position toward PnL and win rate, beyond the holdings row cap', async () => {
     useFakeAnalytics();
     const user = await signIn();
@@ -1306,11 +1548,13 @@ describe('access', () => {
     const routes: [Method, string][] = [
       ['POST', '/api/trade/quote'],
       ['POST', '/api/trade/swap'],
+      ['POST', '/api/trade/initials'],
       ['GET', '/api/orders'],
       ['POST', '/api/orders'],
       ['DELETE', '/api/orders/x'],
       ['GET', '/api/portfolio'],
       ['GET', '/api/portfolio/activity'],
+      ['GET', '/api/portfolio/calendar'],
       ['GET', '/api/copytrade'],
       ['POST', '/api/copytrade'],
       ['PATCH', '/api/copytrade/x'],

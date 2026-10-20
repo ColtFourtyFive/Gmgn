@@ -13,6 +13,8 @@ export type ChainScope = ChainId | 'all';
 export const accountKeys = {
   portfolio: (scope: ChainScope) => ['portfolio', 'summary', scope] as const,
   activity: (scope: ChainScope) => ['portfolio', 'activity', scope] as const,
+  /** Under ['portfolio'] so fills refresh it. */
+  calendar: (scope: ChainScope) => ['portfolio', 'calendar', scope] as const,
   orders: (status: 'open' | 'history', scope: ChainScope) => ['orders', status, scope] as const,
   watchlist: ['watchlist'] as const,
   copyTasks: ['copytrade'] as const,
