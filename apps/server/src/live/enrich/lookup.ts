@@ -7,7 +7,7 @@
 // while in flight and misses are remembered for a few minutes, so a crawler
 // probing random addresses costs a bounded number of RPC reads.
 
-import type { Connection, PublicKey } from '@solana/web3.js';
+import { PublicKey, type Connection } from '@solana/web3.js';
 import { LIVE_DEXES } from '@trenchscope/shared';
 import type { ExternalTokenSpec, TokenState, World } from '../../sim/world';
 import { PUMP, PUMP_DECIMALS } from '../feed/ingest';
@@ -126,6 +126,8 @@ export class TokenLookup {
     run: <T>(fn: () => Promise<T>) => Promise<T>,
   ): Promise<Omit<ExternalTokenSpec, 'createdAt'> | null> {
     const c = snap.curve!;
+    // Curves completed before the creator field existed decode it as the default key (11111111...).
+    const creator = c.creator !== PublicKey.default.toBase58() ? c.creator : (snap.meta?.updateAuthority ?? mint);
     const base = {
       chain: 'sol' as const,
       address: mint,
@@ -133,7 +135,7 @@ export class TokenLookup {
       ...this.identity(mint, snap),
       description: '',
       imageUrl: null,
-      creator: c.creator,
+      creator,
       decimals: snap.mint.decimals || PUMP_DECIMALS,
       totalSupply: snap.mint.supply > 0 ? snap.mint.supply : c.totalSupply,
       socials: {},
@@ -141,7 +143,13 @@ export class TokenLookup {
     const curve = { virtualNative: c.virtualNative, virtualTokens: c.virtualTokens, realNative: c.realNative, realTokens: c.complete ? 0 : c.realTokens, initialRealTokens: PUMP.curveTokens, feeRate: PUMP.feeRate };
     if (!c.complete) return { ...base, status: 'curve', curve, pool: null };
     const pool = await readPumpPool(connection, key, run).catch(() => null);
-    if (!pool) return { ...base, status: 'migrating', curve, pool: null };
+    if (!pool) {
+      // No canonical PumpSwap pool: migrating right now, or a curve that completed before PumpSwap
+      // existed and went to another DEX (Fartcoin: Raydium), which Jupiter prices and routes.
+      const routed = await this.dexSpec(mint, snap).catch(() => null);
+      if (routed) return { ...routed, launchpad: PUMP.id, creator, curve };
+      return { ...base, status: 'migrating', curve, pool: null };
+    }
     return {
       ...base,
       status: 'migrated',

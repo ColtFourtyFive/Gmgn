@@ -1,0 +1,14 @@
+{
+ "uri": "https://ipfs.io/ipfs/bafkreie5477ranpbfnvbyml4rzws6b2n5oj7jlrw43trh534k2cedmzmby",
+ "contentType": "application/json",
+ "json": {
+  "name": "VANISH",
+  "symbol": "VANISH",
+  "description": "Launch from a wallet that never existed. Anonymous pump.fun launches: a brand-new wallet, funded through a privacy pool, creates your coin. Every VANISH coin ends in VSH.",
+  "image": "https://ipfs.io/ipfs/bafybeihkwbffktou5ieivkg4r3s6bulv6ee545mj22blyvdm4hz4j63kwq",
+  "showName": true,
+  "createdOn": "https://pump.fun",
+  "twitter": "https://x.com/vanishpad",
+  "website": "https://vanishpad.xyz/"
+ }
+}

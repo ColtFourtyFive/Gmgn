@@ -1,8 +1,11 @@
 // USD prices from Jupiter Price API v3 (GET <base>/price/v3?ids=<mint>,<mint>):
-//   { "<mint>": { "usdPrice": 187.2, "blockId": 123, "decimals": 9, "priceChange24h": -1.3, "liquidity": 1.2e9 }, ... }
-// Mints Jupiter cannot price are simply absent. The ticker refreshes SOL/USD
-// (world.setNativeUsd) about every 30 s, plus the prices of tracked tokens no
-// feed streams (tokens from other venues that someone holds or watches).
+//   { "<mint>": { "usdPrice": 187.2, "blockId": 123, "decimals": 9, "priceChange24h": -1.3,
+//                 "liquidity": 1.2e9, "createdAt": "2024-06-05T08:55:25.527Z", "launchpad": "pump.fun" }, ... }
+// (shape checked against lite-api.jup.ag, fixture test/fixtures/jupiter/price-v3.json). Mints
+// Jupiter cannot price, and malformed ids, are simply absent (`{}`, still 200); ids past the
+// 50th are dropped silently, so requests are chunked by 50. The ticker refreshes SOL/USD
+// (world.setNativeUsd) about every 30 s, plus the prices of tracked tokens no feed streams
+// (tokens from other venues that someone holds or watches).
 
 import { WSOL_MINT } from '@trenchscope/shared';
 import { z } from 'zod';
@@ -15,7 +18,7 @@ export interface JupiterPrice {
   priceChange24h: number | null;
 }
 
-/** Jupiter answers at most this many ids per request. */
+/** Jupiter answers at most this many ids per request (the rest are dropped without an error). */
 export const PRICE_IDS_PER_REQUEST = 50;
 
 const entry = z
@@ -34,26 +37,44 @@ export interface JupiterOptions {
   timeoutMs?: number;
 }
 
-/** Prices of up to any number of mints (chunked); entries that fail validation are skipped. */
+/**
+ * Prices of any number of mints (chunked); entries that fail validation are skipped. A chunk that
+ * fails does not cost the others their prices (SOL/USD rides in the first): what was read is
+ * returned, and only a call where every chunk failed throws. A rate limit (429) stops the
+ * remaining chunks of this call.
+ */
 export async function fetchJupiterPrices(ids: string[], opts: JupiterOptions): Promise<Map<string, JupiterPrice>> {
   const out = new Map<string, JupiterPrice>();
   const unique = [...new Set(ids)];
+  let failed = 0;
+  let chunks = 0;
+  let lastError: unknown = null;
   for (let i = 0; i < unique.length; i += PRICE_IDS_PER_REQUEST) {
     const chunk = unique.slice(i, i + PRICE_IDS_PER_REQUEST);
+    chunks++;
     const url = `${opts.baseUrl.replace(/\/+$/, '')}/price/v3?ids=${chunk.map(encodeURIComponent).join(',')}`;
-    const json = await fetchServiceJson(url, {
-      fetch: opts.fetch,
-      timeoutMs: opts.timeoutMs ?? 5000,
-      maxBytes: 512 * 1024,
-      headers: opts.apiKey ? { 'x-api-key': opts.apiKey } : undefined,
-    });
-    if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('unexpected price response');
+    let json: unknown;
+    try {
+      json = await fetchServiceJson(url, {
+        fetch: opts.fetch,
+        timeoutMs: opts.timeoutMs ?? 5000,
+        maxBytes: 512 * 1024,
+        headers: opts.apiKey ? { 'x-api-key': opts.apiKey } : undefined,
+      });
+      if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('unexpected price response');
+    } catch (err) {
+      failed++;
+      lastError = err;
+      if (err instanceof Error && /^http 429\b/.test(err.message)) break;
+      continue;
+    }
     for (const id of chunk) {
       const r = entry.safeParse((json as Record<string, unknown>)[id]);
       if (!r.success) continue;
       out.set(id, { usdPrice: r.data.usdPrice, decimals: r.data.decimals ?? null, liquidity: r.data.liquidity ?? null, priceChange24h: r.data.priceChange24h ?? null });
     }
   }
+  if (chunks > 0 && failed === chunks) throw lastError instanceof Error ? lastError : new Error('price request failed');
   return out;
 }
 

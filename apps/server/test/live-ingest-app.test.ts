@@ -15,7 +15,7 @@ import type { MetaResponse, TokenDetail, Trade, TrenchesSnapshot, WalletProfile 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
-import { loadLiveConfig } from '../src/live/config';
+import { DEFAULT_IPFS_GATEWAYS, loadLiveConfig } from '../src/live/config';
 import type { LiveMarket } from '../src/live/market';
 
 vi.mock('node:dns/promises', () => ({ lookup: async () => [{ address: '93.184.216.34', family: 4 }] }));
@@ -26,7 +26,10 @@ const FIX = join(__dirname, 'fixtures', 'pumpportal');
 const lifecycle = JSON.parse(readFileSync(join(FIX, 'lifecycle.json'), 'utf8')) as Record<string, unknown>[];
 const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as { createCat: Record<string, unknown>; wallets: { DEV: string; A: string; B: string; MINT: string; MINT2: string } };
 const { MINT, MINT2, A } = misc.wallets;
-const IMAGE = 'https://ipfs.io/ipfs/QmImageImageImageImageImageImageImageImageIma';
+// What pump.fun metadata names (a retired public gateway), and where the image is served from: the first configured gateway.
+const IMAGE_CID = 'bafybeihkwbffktou5ieivkg4r3s6bulv6ee545mj22blyvdm4hz4j63kwq';
+const IMAGE = `https://ipfs.io/ipfs/${IMAGE_CID}`;
+const IMAGE_SHOWN = `${DEFAULT_IPFS_GATEWAYS.split(',')[0]}${IMAGE_CID}`;
 const KOL = Keypair.generate().publicKey.toBase58();
 
 let wss: WebSocketServer;
@@ -122,11 +125,11 @@ describe('live ingestion through the app', () => {
   });
 
   it('enriches the launch from its metadata: image, description, socials', async () => {
-    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.imageUrl === IMAGE);
+    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.imageUrl === IMAGE_SHOWN);
     expect(detail.body.description).toBe('the frog that ribbits');
     expect(detail.body.socials).toEqual({ twitter: 'https://x.com/ribbit_sol', website: 'https://ribbit.fun/' });
     const trenches = await get<TrenchesSnapshot>('/api/sol/trenches');
-    expect(trenches.body.new.find((t) => t.address === MINT)?.imageUrl).toBe(IMAGE);
+    expect(trenches.body.new.find((t) => t.address === MINT)?.imageUrl).toBe(IMAGE_SHOWN);
   });
 
   it('follows the curve to completion and migration, then PumpSwap trades; meta counts both', async () => {
@@ -184,6 +187,6 @@ describe('live ingestion through the app', () => {
   });
 
   it('never fetched anything but the stubbed Jupiter and metadata URLs', () => {
-    for (const url of fetched) expect(url.startsWith('http://jupiter.test/') || url.startsWith('https://ipfs.io/ipfs/') || url.startsWith('https://dweb.link/ipfs/'), url).toBe(true);
+    for (const url of fetched) expect(url.startsWith('http://jupiter.test/') || DEFAULT_IPFS_GATEWAYS.split(',').some((g) => url.startsWith(g)), url).toBe(true);
   });
 });
