@@ -112,6 +112,28 @@ export class FakeConnection {
     return a ? { ...a, executable: false, rentEpoch: 0 } : null;
   }
 
+  async getMultipleAccountsInfo(keys: PublicKey[]) {
+    this.calls.push('getMultipleAccountsInfo');
+    return keys.map((key) => {
+      const a = this.accounts.get(key.toBase58());
+      return a ? { ...a, executable: false, rentEpoch: 0 } : null;
+    });
+  }
+
+  /** Accounts as a scenario fixture recorded them (getAccountInfo results, data base64). */
+  loadAccounts(recorded: Record<string, { owner: string; lamports: number; data: string } | null>): void {
+    for (const [key, a] of Object.entries(recorded)) {
+      if (a) this.accounts.set(key, { owner: new PublicKey(a.owner), lamports: a.lamports, data: Buffer.from(a.data, 'base64') });
+    }
+  }
+
+  /** Mainnet's rate since its rent reduction (October 2026): 5080 lamports per byte, 128 bytes of overhead. */
+  rentPerByte = 5080;
+  async getMinimumBalanceForRentExemption(bytes: number) {
+    this.calls.push('getMinimumBalanceForRentExemption');
+    return (128 + bytes) * this.rentPerByte;
+  }
+
   async getAddressLookupTable(key: PublicKey) {
     this.calls.push('getAddressLookupTable');
     return { context: { slot: 1 }, value: this.lookupTables.get(key.toBase58()) ?? null };

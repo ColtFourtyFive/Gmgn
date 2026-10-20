@@ -1,6 +1,9 @@
 // Embedded-wallet signers, offline: the local development keystore (AES-256-GCM
 // at rest, refused in production) and the Turnkey signer against a fake
 // Turnkey API client (wallet creation parameters, retry, transaction signing).
+// No Turnkey credentials exist for this repository: the request and response
+// shapes are checked at compile time against @turnkey/sdk-server and
+// @turnkey/solana's own types (see "Turnkey SDK shapes" below).
 
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,6 +11,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Keypair, PublicKey, SystemProgram, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
+import type { TurnkeyApiClient } from '@turnkey/sdk-server';
+import type { TurnkeySigner } from '@turnkey/solana';
 import { createLiveServices } from '../src/live/services';
 import { createSigner, DEV_KEYSTORE_FILE, LocalDevSigner, SOLANA_WALLET_ACCOUNT, TurnkeyWalletSigner, walletNameFor, type TurnkeyApi } from '../src/live/signer';
 import { assertSignedAsBuilt, compileV0 } from '../src/live/execution/tx';
@@ -160,5 +165,33 @@ describe('Turnkey signer', () => {
     expect(signed).toBeInstanceOf(VersionedTransaction);
     expect(() => assertSignedAsBuilt(built, signed, owner)).not.toThrow();
     await expect(signer.signTransaction({ ...ref, provider: 'local-dev' }, tx)).rejects.toThrow(/not turnkey/);
+  });
+});
+
+// Compile-time checks (pnpm typecheck): what the signer sends and reads matches the SDK clients' types.
+type SignerClient = ConstructorParameters<typeof TurnkeySigner>[0]['client'];
+type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+const shapes = {
+  /** The server SDK's API client is a TurnkeyApi and a client TurnkeySigner accepts. */
+  api: (c: TurnkeyApiClient): [TurnkeyApi, SignerClient] => [c, c],
+  createBody: (): Parameters<TurnkeyApiClient['createWallet']>[0] => ({ walletName: walletNameFor('acc_1', 'sol'), accounts: [SOLANA_WALLET_ACCOUNT] }),
+  walletsBody: (): Parameters<TurnkeyApiClient['getWallets']>[0] => ({}),
+  accountsBody: (): Parameters<TurnkeyApiClient['getWalletAccounts']>[0] => ({ walletId: 'w-1' }),
+  createResponse: (r: Awaited<ReturnType<TurnkeyApiClient['createWallet']>>): { walletId: string; addresses: string[] } => r,
+  walletsResponse: (r: Awaited<ReturnType<TurnkeyApiClient['getWallets']>>): { wallets: { walletId: string; walletName: string }[] } => r,
+  accountsResponse: (r: Awaited<ReturnType<TurnkeyApiClient['getWalletAccounts']>>): { accounts: { address: string; addressFormat: string }[] } => r,
+  /** What TurnkeySigner sends for a Solana transaction (hex in, hex out) through the server client. */
+  signBody: (): Parameters<TurnkeyApiClient['signTransaction']>[0] => ({ signWith: 'address', unsignedTransaction: 'ab', type: 'TRANSACTION_TYPE_SOLANA' }),
+  signResponse: (r: Awaited<ReturnType<TurnkeyApiClient['signTransaction']>>): { signedTransaction: string; activity: { status: string } } => r,
+  /** signTransaction(tx, address, organizationId) of the version installed. */
+  sign: (s: TurnkeySigner, tx: VersionedTransaction) => s.signTransaction(tx, 'address', 'org'),
+};
+const accountShape: Equals<(typeof SOLANA_WALLET_ACCOUNT)['addressFormat'], 'ADDRESS_FORMAT_SOLANA'> = true;
+
+describe('Turnkey SDK shapes', () => {
+  it('match the installed @turnkey/sdk-server and @turnkey/solana types (checked by tsc)', () => {
+    expect(accountShape).toBe(true);
+    expect(shapes.createBody()).toEqual({ walletName: 'trenchscope:acc_1:sol', accounts: [SOLANA_WALLET_ACCOUNT] });
+    expect(shapes.signBody()).toMatchObject({ type: 'TRANSACTION_TYPE_SOLANA' });
   });
 });

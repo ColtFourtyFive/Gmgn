@@ -1,1 +1,4 @@
-{ "error": "Could not find any route", "errorCode": "COULD_NOT_FIND_ANY_ROUTE" }
+{
+ "error": "No routes found",
+ "errorCode": "NO_ROUTES_FOUND"
+}

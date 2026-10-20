@@ -1,28 +1,42 @@
 {
-  "inputMint": "<MINT>",
-  "inAmount": "35000000000000",
-  "outputMint": "So11111111111111111111111111111111111111112",
-  "outAmount": "950000000",
-  "otherAmountThreshold": "902500000",
-  "swapMode": "ExactIn",
-  "slippageBps": 500,
-  "platformFee": null,
-  "priceImpactPct": "0.0101",
-  "routePlan": [
-    {
-      "swapInfo": {
-        "ammKey": "<AMM>",
-        "label": "Pump.fun Amm",
-        "inputMint": "<MINT>",
-        "outputMint": "So11111111111111111111111111111111111111112",
-        "inAmount": "35000000000000",
-        "outAmount": "950000000",
-        "feeAmount": "2375000",
-        "feeMint": "So11111111111111111111111111111111111111112"
-      },
-      "percent": 100
-    }
-  ],
-  "contextSlot": 300000200,
-  "timeTaken": 0.01
+ "inputMint": "<MINT>",
+ "inAmount": "25341017950",
+ "outputMint": "So11111111111111111111111111111111111111112",
+ "outAmount": "25204439",
+ "otherAmountThreshold": "22683996",
+ "swapMode": "ExactIn",
+ "slippageBps": 1000,
+ "platformFee": null,
+ "priceImpactPct": "0.0134891055380893363954865812",
+ "routePlan": [
+  {
+   "swapInfo": {
+    "ammKey": "zWy8MjPNR9j5MTtRCY7VDiGsKsLEvty1nvFC5e9WZ2B",
+    "label": "Pump.fun Amm",
+    "inputMint": "<MINT>",
+    "outputMint": "So11111111111111111111111111111111111111112",
+    "inAmount": "25341017950",
+    "outAmount": "25204439",
+    "updateContextSlot": "459368939"
+   },
+   "percent": 100,
+   "bps": null
+  }
+ ],
+ "contextSlot": 459368948,
+ "timeTaken": 0.00016238,
+ "swapUsdValue": "2.6854954101515317132758",
+ "mostReliableAmmsQuoteReport": {
+  "info": {
+   "So11111111111111111111111111111111111111112": "No MRP",
+   "<MINT>": "No MRP"
+  }
+ },
+ "longtailMarketQuoteReport": null,
+ "useIncurredSlippageForQuoting": null,
+ "useRewards": null,
+ "otherRoutePlans": null,
+ "loadedLongtailToken": false,
+ "instructionVersion": null,
+ "transactionVersion": 0
 }

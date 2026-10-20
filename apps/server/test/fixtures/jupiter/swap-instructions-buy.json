@@ -1,64 +1,314 @@
 {
-  "tokenLedgerInstruction": null,
-  "computeBudgetInstructions": [
-    { "programId": "ComputeBudget111111111111111111111111111111", "accounts": [], "data": "AiC/AgA=" }
-  ],
-  "setupInstructions": [
+ "tokenLedgerInstruction": null,
+ "computeBudgetInstructions": [
+  {
+   "programId": "ComputeBudget111111111111111111111111111111",
+   "accounts": [],
+   "data": "AmaJAQA="
+  },
+  {
+   "programId": "ComputeBudget111111111111111111111111111111",
+   "accounts": [],
+   "data": "A1gCAAAAAAAA"
+  }
+ ],
+ "setupInstructions": [
+  {
+   "programId": "11111111111111111111111111111111",
+   "accounts": [
     {
-      "programId": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-      "accounts": [
-        { "pubkey": "<OWNER>", "isSigner": true, "isWritable": true },
-        { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
-        { "pubkey": "<OWNER>", "isSigner": false, "isWritable": false },
-        { "pubkey": "So11111111111111111111111111111111111111112", "isSigner": false, "isWritable": false },
-        { "pubkey": "11111111111111111111111111111111", "isSigner": false, "isWritable": false },
-        { "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "isSigner": false, "isWritable": false }
-      ],
-      "data": "AQ=="
+     "pubkey": "<OWNER>",
+     "isSigner": true,
+     "isWritable": true
     },
     {
-      "programId": "11111111111111111111111111111111",
-      "accounts": [
-        { "pubkey": "<OWNER>", "isSigner": true, "isWritable": true },
-        { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true }
-      ],
-      "data": "AgAAAADKmjsAAAAA"
-    },
-    {
-      "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      "accounts": [{ "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true }],
-      "data": "EQ=="
+     "pubkey": "<WSOL_ATA>",
+     "isSigner": false,
+     "isWritable": true
     }
+   ],
+   "data": "AgAAAICWmAAAAAAA"
+  },
+  {
+   "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "accounts": [
+    {
+     "pubkey": "<WSOL_ATA>",
+     "isSigner": false,
+     "isWritable": true
+    }
+   ],
+   "data": "EQ=="
+  },
+  {
+   "programId": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+   "accounts": [
+    {
+     "pubkey": "<OWNER>",
+     "isSigner": true,
+     "isWritable": true
+    },
+    {
+     "pubkey": "<OWNER_ATA>",
+     "isSigner": false,
+     "isWritable": true
+    },
+    {
+     "pubkey": "<OWNER>",
+     "isSigner": false,
+     "isWritable": false
+    },
+    {
+     "pubkey": "<MINT>",
+     "isSigner": false,
+     "isWritable": false
+    },
+    {
+     "pubkey": "11111111111111111111111111111111",
+     "isSigner": false,
+     "isWritable": false
+    },
+    {
+     "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+     "isSigner": false,
+     "isWritable": false
+    }
+   ],
+   "data": "AQ=="
+  }
+ ],
+ "swapInstruction": {
+  "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+  "accounts": [
+   {
+    "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<OWNER>",
+    "isSigner": true,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<WSOL_ATA>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "<OWNER_ATA>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<MINT>",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "D8cy77BBepLMngZx6ZukaTff5hCt1HrWyKk3Hnd9oitf",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "EvdxxQA1TPuANNW2EMMHsJ36G9QumjHHCL8nui9SADxp",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "<OWNER>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<MINT>",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "So11111111111111111111111111111111111111112",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<OWNER_ATA>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "<WSOL_ATA>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "BWGd5Q22iKGUpeZL7jM9DDNduoiHat3pzmeaJVHCXyjn",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "4gU9s1nF5FHzxiVQi3bUwsHqruVZJ59Ybuqb2WsZ4xJB",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "11111111111111111111111111111111",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<UVA_AMM>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "AktftA98kSWAxn6kVSoqBXBELUArjKu2H9WmKB48ULFY",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+    "isSigner": false,
+    "isWritable": false
+   },
+   {
+    "pubkey": "<OWNER>",
+    "isSigner": true,
+    "isWritable": true
+   },
+   {
+    "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "isSigner": false,
+    "isWritable": false
+   }
   ],
-  "swapInstruction": {
-    "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-    "accounts": [
-      { "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "isSigner": false, "isWritable": false },
-      { "pubkey": "<OWNER>", "isSigner": true, "isWritable": true },
-      { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<OWNER_ATA>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<MINT>", "isSigner": false, "isWritable": false },
-      { "pubkey": "<AMM>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<POOL_BASE>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<POOL_QUOTE>", "isSigner": false, "isWritable": true }
-    ],
-    "data": "5RfLl3rjrSoBAAAAJmQAAUBCDwAAAAAAgJaYAAAAAABQAAA="
-  },
-  "cleanupInstruction": {
-    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-    "accounts": [
-      { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<OWNER>", "isSigner": false, "isWritable": true },
-      { "pubkey": "<OWNER>", "isSigner": true, "isWritable": false }
-    ],
-    "data": "CQ=="
-  },
-  "otherInstructions": [],
-  "addressLookupTableAddresses": ["<ALT>"],
-  "prioritizationFeeLamports": 0,
-  "computeUnitLimit": 180000,
-  "prioritizationType": { "computeBudget": { "microLamports": 0, "estimatedMicroLamports": 0 } },
-  "simulationSlot": 300000101,
-  "dynamicSlippageReport": null,
-  "simulationError": null
+  "data": "5RfLl3rjrSoBAAAAwQBkAAGAlpgAAAAAAG994+IAAAAA6AMA"
+ },
+ "cleanupInstruction": {
+  "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "accounts": [
+   {
+    "pubkey": "<WSOL_ATA>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "<OWNER>",
+    "isSigner": false,
+    "isWritable": true
+   },
+   {
+    "pubkey": "<OWNER>",
+    "isSigner": true,
+    "isWritable": false
+   }
+  ],
+  "data": "CQ=="
+ },
+ "otherInstructions": [],
+ "addressLookupTableAddresses": [
+  "BbRnvbxKkFEDU85LX7xKyob3BgXYX4dsHNvVFEFTbLiQ"
+ ],
+ "prioritizationFeeLamports": 60,
+ "computeUnitLimit": 100710,
+ "loadedAccountsDataSize": 14990157,
+ "loadedAccountsDataSizeLimit": null,
+ "transactionVersion": 0,
+ "prioritizationType": {
+  "computeBudget": {
+   "microLamports": 600,
+   "estimatedMicroLamports": 600
+  }
+ },
+ "simulationSlot": 459374215,
+ "dynamicSlippageReport": null,
+ "simulationError": null,
+ "addressesByLookupTableAddress": null,
+ "blockhashWithMetadata": {
+  "blockhash": [
+   20,
+   116,
+   34,
+   80,
+   43,
+   70,
+   177,
+   85,
+   202,
+   142,
+   171,
+   32,
+   29,
+   14,
+   48,
+   168,
+   250,
+   21,
+   61,
+   223,
+   186,
+   4,
+   39,
+   216,
+   194,
+   11,
+   37,
+   93,
+   35,
+   139,
+   53,
+   119
+  ],
+  "lastValidBlockHeight": 437409338,
+  "fetchedAt": {
+   "secs_since_epoch": 1792530592,
+   "nanos_since_epoch": 859789672
+  }
+ },
+ "timeTaken": 0.016860056,
+ "createAtaTimeTaken": 0.007530086
 }
