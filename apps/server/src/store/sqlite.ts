@@ -17,6 +17,7 @@ import type { DatabaseSync as DatabaseSyncType, StatementSync } from 'node:sqlit
 import type { ChainId, TransferStatus, WalletTransfer } from '@trenchscope/shared';
 import type { AuditRecord, DurableStore, LiveFillRecord } from '../context';
 import { decodeValue, encodeValue } from './codec';
+import { checkMigrations, MIGRATIONS, type Migration } from './migrations';
 
 export const STORE_FILE = 'trenchscope.db';
 const FILE_MODE = 0o600;
@@ -24,64 +25,8 @@ const DIR_MODE = 0o700;
 const FINAL_STATUSES: readonly TransferStatus[] = ['confirmed', 'failed'];
 const OPEN_STATUSES: readonly TransferStatus[] = ['pending', 'sent'];
 
-/** Schema versions, applied in order inside one transaction each. Never edit a shipped one: append. */
-const MIGRATIONS: { version: number; sql: string }[] = [
-  {
-    version: 1,
-    sql: `
-      CREATE TABLE state (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-      CREATE TABLE audit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        at INTEGER NOT NULL,
-        account_id TEXT,
-        action TEXT NOT NULL,
-        ip TEXT,
-        detail TEXT NOT NULL
-      );
-      CREATE INDEX audit_by_account ON audit (account_id, id);
-      CREATE TRIGGER audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;
-      CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;
-      CREATE TABLE fills (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        account_id TEXT NOT NULL,
-        chain TEXT NOT NULL,
-        signature TEXT NOT NULL,
-        token TEXT NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
-        native_amount REAL NOT NULL,
-        token_amount REAL NOT NULL,
-        platform_fee REAL NOT NULL,
-        network_fee REAL NOT NULL,
-        price_usd REAL NOT NULL,
-        at INTEGER NOT NULL,
-        source TEXT NOT NULL,
-        route TEXT NOT NULL,
-        UNIQUE (account_id, signature)
-      );
-      CREATE INDEX fills_by_account ON fills (account_id, at, id);
-      CREATE INDEX fills_by_account_token ON fills (account_id, token, at, id);
-      CREATE TABLE transfers (
-        id TEXT PRIMARY KEY,
-        account_id TEXT NOT NULL,
-        client_id TEXT,
-        direction TEXT NOT NULL,
-        status TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        data TEXT NOT NULL
-      );
-      CREATE UNIQUE INDEX transfers_by_client ON transfers (account_id, client_id) WHERE client_id IS NOT NULL;
-      CREATE INDEX transfers_by_account ON transfers (account_id, created_at);
-      CREATE INDEX transfers_open ON transfers (status) WHERE status IN ('pending', 'sent');
-    `,
-  },
-];
-
-export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
+/** The schema's migrations are registered in ./migrations.ts (append only: see the rules there). */
+export { SCHEMA_VERSION } from './migrations';
 
 type Row = Record<string, unknown>;
 
@@ -162,6 +107,8 @@ export class SqliteStore implements DurableStore {
   constructor(
     readonly path: string,
     private readonly clock: () => number = Date.now,
+    /** The schema's migrations (tests pass their own list). */
+    private readonly migrations: readonly Migration[] = MIGRATIONS,
   ) {
     const memory = path === ':memory:';
     if (!memory) prepareFile(path);
@@ -190,12 +137,20 @@ export class SqliteStore implements DurableStore {
     return row ? Object.values(row)[0] : null;
   }
 
+  /**
+   * Apply every registered migration the database has not recorded, in list order. Not just the
+   * ones above its current version: workstreams merge their reserved blocks in any order, so a
+   * lower-numbered migration can arrive after a higher one was applied (./migrations.ts, rule 4).
+   */
   private migrate(): void {
+    checkMigrations(this.migrations);
+    const latest = this.migrations[this.migrations.length - 1].version;
     this.db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)');
     const current = this.schemaVersion();
-    if (current > SCHEMA_VERSION) throw new Error(`store schema v${current} is newer than this server (v${SCHEMA_VERSION}): refusing to open it`);
-    for (const m of MIGRATIONS) {
-      if (m.version <= current) continue;
+    if (current > latest) throw new Error(`store schema v${current} is newer than this server (v${latest}): refusing to open it`);
+    const applied = new Set((this.db.prepare('SELECT version FROM schema_migrations').all() as Row[]).map((r) => r.version as number));
+    for (const m of this.migrations) {
+      if (applied.has(m.version)) continue;
       this.transaction(() => {
         this.db.exec(m.sql);
         this.db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(m.version, this.clock());
