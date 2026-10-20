@@ -51,6 +51,12 @@ export class Alerts {
   private readonly records = new Map<string, AlertRecord>();
   // Indexes over enabled rules, rebuilt whenever rules change.
   private readonly byWallet = new Map<string, AlertRecord[]>();
+
+  /** Wallets the chain's wallet-trade alerts watch. */
+  watchedWallets(chain: ChainId): string[] {
+    const prefix = `${chain}:`;
+    return [...this.byWallet.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+  }
   private readonly newTokenRules = new Map<ChainId, AlertRecord[]>();
   private readonly smartTokens = new Set<string>();
   /** Smart-money buy timestamps per token watched by a smart_buys rule. */

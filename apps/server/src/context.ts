@@ -33,6 +33,7 @@ import type {
   WalletPeriod,
   WalletProfile,
   WalletTag,
+  WalletTransfer,
   WatchlistItem,
 } from '@trenchscope/shared';
 import type { Connection, VersionedTransaction } from '@solana/web3.js';
@@ -94,6 +95,8 @@ export interface AccountsApi {
   /** Accounts following a wallet (for notify-on-trade). */
   followersOf(chain: ChainId, address: string): string[];
   followerCount(chain: ChainId, address: string): number;
+  /** Every wallet some account follows on a chain (live mode streams their trades). */
+  watchedWallets(chain: ChainId): Set<string>;
   watchlist(accountId: string): WatchlistItem[];
   /** Create + push a notification on the user channel. */
   notify(accountId: string, n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>): AppNotification;
@@ -156,6 +159,8 @@ export interface TradingApi {
   hasAutomation(accountId: string): boolean;
   /** Drop the stored order history and equity series of a deleted account. */
   forgetAccount(accountId: string): void;
+  /** Wallets automation depends on (copy-trade leaders, wallet alerts); live mode streams their trades. */
+  watchedWallets(chain: ChainId): Set<string>;
 }
 
 export interface MarketApi {
@@ -211,6 +216,62 @@ export interface LiveServices {
   signer: SignerApi | null;
 }
 
+/** An append-only audit entry (security- and money-relevant actions). */
+export interface AuditRecord {
+  at: number;
+  accountId: string | null;
+  action: string;
+  ip: string | null;
+  detail: Record<string, unknown>;
+}
+
+/** A confirmed on-chain swap of an account (live mode), the durable source of cost basis. */
+export interface LiveFillRecord {
+  accountId: string;
+  chain: ChainId;
+  signature: string;
+  token: string;
+  side: 'buy' | 'sell';
+  /** SOL that went into (buy) or came out of (sell) the swap, fees excluded. */
+  nativeAmount: number;
+  tokenAmount: number;
+  platformFee: number;
+  /** Base + priority fee + tip (SOL). */
+  networkFee: number;
+  priceUsd: number;
+  at: number;
+  /** What placed it: manual, order, copy, sniper. */
+  source: string;
+  /** Venue path: jupiter, pump, pump-amm. */
+  route: string;
+}
+
+/**
+ * Durable storage for live mode (SQLite): module state blobs plus append-only
+ * money and audit records. Writes are synchronous and durable on return.
+ */
+export interface DurableStore {
+  /** Latest saved state blob of a module ('accounts', 'trading', ...), or null. */
+  getState(key: string): unknown;
+  putState(key: string, value: unknown): void;
+  appendAudit(rec: AuditRecord): void;
+  /** Newest first. */
+  auditFor(accountId: string, limit: number): AuditRecord[];
+  /** False (and nothing written) when (accountId, signature) is already recorded. */
+  appendFill(fill: LiveFillRecord): boolean;
+  /** Newest first. */
+  fillsFor(accountId: string, opts: { token?: string; limit: number }): LiveFillRecord[];
+  /** Insert or update a deposit / withdrawal by its id. */
+  upsertTransfer(accountId: string, t: WalletTransfer, clientId?: string): void;
+  /** Newest first. */
+  transfersFor(accountId: string, limit: number): WalletTransfer[];
+  /** A withdrawal by its client idempotency key. */
+  transferByClientId(accountId: string, clientId: string): WalletTransfer | null;
+  /** Transfers not yet final (pending / sent), to resume confirmation after a restart. */
+  openTransfers(): { accountId: string; transfer: WalletTransfer }[];
+  close(): void;
+}
+
 export interface AppContext {
   config: AppConfig;
   world: World;
@@ -222,6 +283,8 @@ export interface AppContext {
   market: MarketSource;
   /** Live-mode services; null in demo mode. */
   live: LiveServices | null;
+  /** Durable store (live mode); null in demo mode, which persists through snapshots only. */
+  store: DurableStore | null;
 }
 
 // ---------------------------------------------------------------------------

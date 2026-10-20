@@ -9,7 +9,7 @@
 // larger mirror sell or the target's exit. A task that keeps failing (e.g.
 // the wallet ran dry) pauses itself after COPY_AUTO_PAUSE_FAILURES in a row.
 
-import { COPY_AUTO_PAUSE_FAILURES, shortAddress, type CopyTradeTask, type SwapReceipt, type Trade } from '@trenchscope/shared';
+import { COPY_AUTO_PAUSE_FAILURES, shortAddress, type ChainId, type CopyTradeTask, type SwapReceipt, type Trade } from '@trenchscope/shared';
 import type { AppContext } from '../context';
 import type { TokenState, WalletState } from '../sim/world';
 import { badRequest, balanceOf, describeFill, normalizeAddress, notFound, parse, type Jobs } from './common';
@@ -60,6 +60,12 @@ export class CopyTrader {
 
   install(): void {
     this.ctx.world.on('trade', (trade, token, wallet) => this.onTrade(trade, token, wallet));
+  }
+
+  /** Leader wallets of the chain's copy-trade tasks. */
+  targets(chain: ChainId): string[] {
+    const prefix = `${chain}:`;
+    return [...this.byTarget.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
   }
 
   list(accountId: string): CopyTradeTask[] {

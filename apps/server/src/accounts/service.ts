@@ -502,6 +502,13 @@ export class Accounts implements AccountsApi {
     return { ...f, label: wallet?.label ?? null, tags: wallet ? this.ctx.analytics.walletTags(wallet) : [] };
   }
 
+  watchedWallets(chain: ChainId): Set<string> {
+    const prefix = `${chain}:`;
+    const out = new Set<string>();
+    for (const key of this.followers.keys()) if (key.startsWith(prefix)) out.add(key.slice(prefix.length));
+    return out;
+  }
+
   followersOf(chain: ChainId, address: string): string[] {
     return [...(this.followers.get(walletKey(chain, address)) ?? [])];
   }

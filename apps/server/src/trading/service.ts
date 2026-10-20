@@ -3,7 +3,7 @@
 // token launches and the portfolio view. Sub-services share one executor and
 // one job tracker; post-fill bookkeeping that spans them lives here.
 
-import type { Order, SwapReceipt } from '@trenchscope/shared';
+import type { ChainId, Order, SwapReceipt } from '@trenchscope/shared';
 import type { AppContext, TradingApi } from '../context';
 import type { TokenState } from '../sim/world';
 import { Alerts, type StoredAlert } from './alerts';
@@ -119,6 +119,10 @@ export class Trading implements TradingApi {
       this.sniper.list(accountId).length > 0 ||
       this.alerts.list(accountId).length > 0
     );
+  }
+
+  watchedWallets(chain: ChainId): Set<string> {
+    return new Set([...this.copyTrade.targets(chain), ...this.alerts.watchedWallets(chain)]);
   }
 
   forgetAccount(accountId: string): void {

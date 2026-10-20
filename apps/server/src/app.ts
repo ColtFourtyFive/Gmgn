@@ -73,7 +73,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   const world = snapshot ? World.restore(snapshot.world) : new World(config.seed);
   const engine = new Engine(world);
   const hub = new Hub({ maxConnectionsPerIp: config.wsConnectionsPerIp });
-  const ctx = { config, world, engine, hub, live: createLiveServices(config) } as AppContext;
+  const ctx = { config, world, engine, hub, live: createLiveServices(config), store: null } as AppContext;
   const accounts = new Accounts(ctx);
   const analytics = new Analytics(ctx);
   const trading = new Trading(ctx);
