@@ -247,6 +247,20 @@ and loses the `user` channel).
 | GET/POST | `/api/alerts` 🔒 | POST body: `Omit<AlertRule,'id'\|'createdAt'\|'lastTriggeredAt'>` | `AlertRule[]` / `AlertRule` |
 | PATCH/DELETE | `/api/alerts/:id` 🔒 | | `AlertRule` / `{ ok: true }` |
 
+Holding alerts (`AlertRule.kind: 'holding'`, PRD §9.4): `holding` = `HoldingAlertSpec { basis ('vs_cost' default |
+'5m_change'), upPct (default 20), downPct, devSell, liquidityDropPct, minPositionUsd (default 10), cooldownMin
+(default 60, 1-10080) }`, at least one trigger on (null = off; drops at most 100%). The rule watches every
+position the account's chain wallet holds (or only `token`, which must exist on the chain), positions worth less
+than `minPositionUsd` excluded. Every second: `vs_cost` compares the position's value with its cost basis
+(average cost incl. fees), `5m_change` uses the token's 5-minute price change; `upPct` / `downPct` fire while the
+move is at least that big; `liquidityDropPct` fires while liquidity is that far below its high since the rule
+started watching the position. On trades: `devSell` fires when the creator or a dev-team wallet sells at least 20%
+of its bag in one trade (not the account's own sells). Each (position, trigger) fires again only after
+`cooldownMin` (repeating rules); `repeat: false` switches the rule off after its first notification. A closed
+position is forgotten, so a re-entry starts a fresh watch. Notifications are `kind: 'alert'` with the token
+("$PEPE up 52% vs your cost", "Dev sold 60% of their $PEPE", "$PEPE liquidity down 45%"). Holding rules count
+toward the 100 alerts per account.
+
 Signal subscriptions (`AlertRule.kind: 'signal_subscription'`, PRD §9.4): `signals` =
 `SignalSubscriptionSpec { name (<= 40), groups: SignalFilterGroup[] (1-5), maxPerHour (1-120, default 30) }`;
 `token` / `wallet` are null. A fired signal matches when any group does; inside a group every set bound must

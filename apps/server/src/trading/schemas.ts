@@ -240,10 +240,24 @@ export const signalSubscriptionSchema = z.object({
   maxPerHour: z.number().int().min(1).max(SIGNAL_SUBSCRIPTION_LIMITS.maxPerHour).default(30),
 });
 
+const pctTrigger = (max: number) => z.number().finite().positive().max(max).nullable();
+
+export const holdingSchema = z
+  .object({
+    basis: z.enum(['vs_cost', '5m_change']).default('vs_cost'),
+    upPct: pctTrigger(100_000).default(20),
+    downPct: pctTrigger(100).default(null),
+    devSell: z.boolean().default(false),
+    liquidityDropPct: pctTrigger(100).default(null),
+    minPositionUsd: z.number().finite().min(0).max(1e9).default(10),
+    cooldownMin: z.number().int().min(1).max(7 * 24 * 60).default(60),
+  })
+  .refine((h) => h.upPct !== null || h.downPct !== null || h.devSell || h.liquidityDropPct !== null, 'turn on at least one trigger');
+
 export const alertSchema = z
   .object({
     chain: chainSchema,
-    kind: z.enum(['price', 'mcap', 'change', 'wallet_trade', 'new_token', 'smart_buys', 'signal_subscription']),
+    kind: z.enum(['price', 'mcap', 'change', 'wallet_trade', 'new_token', 'smart_buys', 'signal_subscription', 'holding']),
     token: address.nullable().default(null),
     wallet: address.nullable().default(null),
     keyword: z.string().trim().max(32).nullable().default(null),
@@ -253,10 +267,12 @@ export const alertSchema = z
     enabled: z.boolean().default(true),
     note: z.string().trim().max(140).default(''),
     signals: signalSubscriptionSchema.nullable().default(null),
+    holding: holdingSchema.nullable().default(null),
   })
   .superRefine((a, ctx) => {
     if (TOKEN_ALERTS.has(a.kind) && !a.token) issue(ctx, 'token', `${a.kind} alerts need a token`);
     if (a.kind === 'signal_subscription' && !a.signals) issue(ctx, 'signals', 'signal subscriptions need signals { groups }');
+    if (a.kind === 'holding' && !a.holding) issue(ctx, 'holding', 'holding alerts need holding { triggers }');
     if (a.kind === 'signal_subscription' && a.signals)
       for (const g of a.signals.groups) for (const id of g.launchpads) if (getLaunchpad(id)?.chain !== a.chain) issue(ctx, 'signals', `unknown launchpad ${id} on ${a.chain}`);
     if (a.kind === 'wallet_trade' && !a.wallet) issue(ctx, 'wallet', 'wallet_trade alerts need a wallet');

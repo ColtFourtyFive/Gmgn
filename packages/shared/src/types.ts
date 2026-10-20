@@ -1227,7 +1227,29 @@ export type AlertKind =
   | 'wallet_trade' // any trade by wallet
   | 'new_token' //    new token matching keyword
   | 'smart_buys' //   token gets >= value smart buys within 5m
-  | 'signal_subscription'; // signals matching AlertRule.signals (in-app notifications)
+  | 'signal_subscription' // signals matching AlertRule.signals (in-app notifications)
+  | 'holding'; //     the account's held positions move, see a dev sell or lose liquidity (AlertRule.holding)
+
+/**
+ * AlertRule.holding for kind 'holding' (PRD §9.4): watches every position the account's wallet holds on the
+ * rule's chain (or only AlertRule.token). At least one trigger must be on.
+ */
+export interface HoldingAlertSpec {
+  /** vs_cost = the position's value against its cost basis; 5m_change = the token's 5-minute price change. */
+  basis: 'vs_cost' | '5m_change';
+  /** Fire when up at least this many percent (null = off). */
+  upPct: number | null;
+  /** Fire when down at least this many percent (null = off). */
+  downPct: number | null;
+  /** Fire when the token's dev (or dev team) sells at least 20% of their bag in one trade. */
+  devSell: boolean;
+  /** Fire when liquidity falls this many percent below its high since the rule started watching the position (null = off). */
+  liquidityDropPct: number | null;
+  /** Positions worth less than this (USD) are ignored. */
+  minPositionUsd: number;
+  /** Per position and trigger, a repeating rule fires again after this many minutes. */
+  cooldownMin: number;
+}
 
 export interface AlertRule {
   id: string;
@@ -1245,6 +1267,8 @@ export interface AlertRule {
   note: string;
   /** signal_subscription rules: what to match (null for other kinds). */
   signals?: SignalSubscriptionSpec | null;
+  /** holding rules: the triggers (null for other kinds). */
+  holding?: HoldingAlertSpec | null;
 }
 
 // ---------------------------------------------------------------------------

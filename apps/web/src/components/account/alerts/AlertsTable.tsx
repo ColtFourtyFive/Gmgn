@@ -13,7 +13,7 @@ import { errorMessage } from '@/lib/format';
 import { toast } from '@/store/toasts';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { accountKeys, useTokenMeta, useWalletProfile } from '../queries';
-import { ALERT_KIND, signalFiltersLabel, signalKindsLabel } from './meta';
+import { ALERT_KIND, holdingTriggersLabel, signalFiltersLabel, signalKindsLabel } from './meta';
 
 function TokenCell({ rule }: { rule: AlertRule }) {
   const q = useTokenMeta(rule.chain, rule.token);
@@ -75,6 +75,18 @@ function Condition({ rule }: { rule: AlertRule }) {
           <span className="chip bg-panel-3 text-fg">{rule.keyword ?? 'anything'}</span>
         </span>
       );
+    case 'holding': {
+      const h = rule.holding;
+      if (!h) return null;
+      return (
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-fg">{holdingTriggersLabel(h)}</span>
+          <span className="truncate text-xs text-muted">
+            Positions ≥ <Usd value={h.minPositionUsd} /> · every {h.cooldownMin}m at most
+          </span>
+        </span>
+      );
+    }
     case 'signal_subscription': {
       const groups = rule.signals?.groups ?? [];
       const filters = groups[0] ? signalFiltersLabel(groups[0]) : '';
@@ -106,6 +118,7 @@ function Subject({ rule }: { rule: AlertRule }) {
           {meta.subject === 'wallet' && <WalletCell rule={rule} />}
           {meta.subject === 'keyword' && <span className="text-fg">New launches</span>}
           {meta.subject === 'signals' && <span className="truncate text-fg">{rule.signals?.name || 'Signals'}</span>}
+          {meta.subject === 'holdings' && (rule.token ? <TokenCell rule={rule} /> : <span className="text-fg">All holdings</span>)}
         </span>
       </span>
     </span>

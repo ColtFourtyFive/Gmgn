@@ -39,9 +39,56 @@ interface AlertFormState {
   maxAgeMin: number | null;
   excludeRisk: boolean;
   maxPerHour: number | null;
+  // holding
+  holdBasis: 'vs_cost' | '5m_change';
+  holdUpPct: number | null;
+  holdDownPct: number | null;
+  holdDevSell: boolean;
+  holdLiqDropPct: number | null;
+  holdMinUsd: number | null;
+  holdCooldownMin: number | null;
 }
 
-type ErrorKey = 'token' | 'wallet' | 'keyword' | 'value' | 'note' | 'signalName' | 'mcMax' | 'maxTop10Pct' | 'maxPerHour' | 'form';
+type ErrorKey =
+  | 'token'
+  | 'wallet'
+  | 'keyword'
+  | 'value'
+  | 'note'
+  | 'signalName'
+  | 'mcMax'
+  | 'maxTop10Pct'
+  | 'maxPerHour'
+  | 'holding'
+  | 'holdDownPct'
+  | 'holdLiqDropPct'
+  | 'holdCooldownMin'
+  | 'form';
+
+const HOLDING_DEFAULTS = {
+  holdBasis: 'vs_cost' as const,
+  holdUpPct: 20,
+  holdDownPct: 20,
+  holdDevSell: true,
+  holdLiqDropPct: null,
+  holdMinUsd: 10,
+  holdCooldownMin: 60,
+};
+
+/** The form's holding fields from a rule. */
+function holdingState(rule: AlertRule): Partial<AlertFormState> {
+  const h = rule.holding;
+  if (!h) return {};
+  return {
+    holdBasis: h.basis,
+    holdUpPct: h.upPct,
+    holdDownPct: h.downPct,
+    holdDevSell: h.devSell,
+    holdLiqDropPct: h.liquidityDropPct,
+    holdMinUsd: h.minPositionUsd,
+    holdCooldownMin: h.cooldownMin,
+  };
+}
 
 const SIGNAL_DEFAULTS = {
   signalName: '',
@@ -89,9 +136,11 @@ function initialState(rule: AlertRule | null, chain: ChainId, prefill?: Partial<
       note: rule.note,
       ...SIGNAL_DEFAULTS,
       ...signalState(rule),
+      ...HOLDING_DEFAULTS,
+      ...holdingState(rule),
     };
   }
-  return { kind: 'price', chain, token: '', wallet: '', keyword: '', direction: 'above', value: null, repeat: false, note: '', ...SIGNAL_DEFAULTS, ...prefill };
+  return { kind: 'price', chain, token: '', wallet: '', keyword: '', direction: 'above', value: null, repeat: false, note: '', ...SIGNAL_DEFAULTS, ...HOLDING_DEFAULTS, ...prefill };
 }
 
 export interface AlertFormProps {
@@ -149,6 +198,16 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
       if (!kw) e.keyword = 'Enter a keyword to match in new token names or symbols.';
       else if (kw.length > 32) e.keyword = 'Keep the keyword to 32 characters.';
     }
+    if (m.subject === 'holdings') {
+      if (f.token.trim()) {
+        const tErr = addressError(f.chain, f.token, 'token address');
+        if (tErr) e.token = tErr;
+      }
+      if (f.holdUpPct === null && f.holdDownPct === null && f.holdLiqDropPct === null && !f.holdDevSell) e.holding = 'Turn on at least one trigger.';
+      if (f.holdDownPct !== null && !(f.holdDownPct > 0 && f.holdDownPct <= 100)) e.holdDownPct = 'Enter a drop between 0 and 100%.';
+      if (f.holdLiqDropPct !== null && !(f.holdLiqDropPct > 0 && f.holdLiqDropPct <= 100)) e.holdLiqDropPct = 'Enter a drop between 0 and 100%.';
+      if (!(f.holdCooldownMin !== null && Number.isInteger(f.holdCooldownMin) && f.holdCooldownMin >= 1 && f.holdCooldownMin <= 10_080)) e.holdCooldownMin = 'Enter whole minutes from 1 to 10080 (a week).';
+    }
     if (m.subject === 'signals') {
       if (f.signalName.trim().length > 40) e.signalName = 'Keep the name to 40 characters.';
       if (f.mcMin !== null && f.mcMax !== null && f.mcMin > f.mcMax) e.mcMax = 'Max market cap is below min.';
@@ -188,7 +247,7 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
     const body: AlertBody = {
       chain: form.chain,
       kind: form.kind,
-      token: m.subject === 'token' || (m.subject === 'wallet' && form.token.trim()) ? normalizeAddress(form.chain, form.token) : null,
+      token: m.subject === 'token' || ((m.subject === 'wallet' || m.subject === 'holdings') && form.token.trim()) ? normalizeAddress(form.chain, form.token) : null,
       wallet: m.subject === 'wallet' ? normalizeAddress(form.chain, form.wallet) : null,
       keyword: m.subject === 'keyword' ? form.keyword.trim() : null,
       direction: m.directional ? form.direction : null,
@@ -199,6 +258,18 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
       signals:
         m.subject === 'signals'
           ? { name: form.signalName.trim(), groups: [group, ...(rule?.signals?.groups.slice(1) ?? [])], maxPerHour: form.maxPerHour ?? 30 }
+          : null,
+      holding:
+        m.subject === 'holdings'
+          ? {
+              basis: form.holdBasis,
+              upPct: form.holdUpPct,
+              downPct: form.holdDownPct,
+              devSell: form.holdDevSell,
+              liquidityDropPct: form.holdLiqDropPct,
+              minPositionUsd: form.holdMinUsd ?? 0,
+              cooldownMin: form.holdCooldownMin ?? 60,
+            }
           : null,
     };
     setPending(true);
@@ -215,7 +286,7 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
         else if (/wallet/i.test(message)) setErrors({ wallet: `No wallet with this address on ${CHAINS[form.chain].name}.` });
         else setErrors({ form: message });
       } else if (field && ['token', 'wallet', 'keyword', 'value', 'note'].includes(field)) setErrors({ [field]: message });
-      else if (field === 'signals') setErrors({ form: message });
+      else if (field === 'signals' || field === 'holding') setErrors({ form: message });
       else setErrors({ form: message });
     } finally {
       setPending(false);
@@ -348,6 +419,25 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
             </>
           )}
 
+          {meta.subject === 'holdings' && (
+            <>
+              <Field label="Only this token (optional)" htmlFor={`${ids}-htoken`} error={shown.token} hint="Leave empty to watch every token you hold on this chain.">
+                <Input
+                  id={`${ids}-htoken`}
+                  value={form.token}
+                  onChange={(e) => set('token', e.target.value)}
+                  placeholder="Every token you hold"
+                  className="font-mono text-xs"
+                  autoComplete="off"
+                  spellCheck={false}
+                  invalid={!!shown.token}
+                  data-autofocus
+                />
+              </Field>
+              {isAddressFor(form.chain, form.token) && <TokenPreview chain={form.chain} address={form.token} />}
+            </>
+          )}
+
           {meta.subject === 'signals' && (
             <>
               <Field label="Name (optional)" htmlFor={`${ids}-sname`} error={shown.signalName}>
@@ -375,6 +465,37 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
             </Field>
           )}
         </FormSection>
+
+        {meta.subject === 'holdings' && (
+          <FormSection title="Triggers">
+            <SegmentedControl
+              className="self-start"
+              value={form.holdBasis}
+              onChange={(b) => set('holdBasis', b)}
+              aria-label="Measure moves"
+              items={[
+                { value: 'vs_cost', label: 'Vs my cost', title: 'The position’s value against what it cost (fees included)' },
+                { value: '5m_change', label: '5m change', title: 'The token’s price change over the last 5 minutes' },
+              ]}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Up at least (%)" htmlFor={`${ids}-hup`}>
+                <NumberInput id={`${ids}-hup`} value={form.holdUpPct} onChange={(v) => set('holdUpPct', v)} min={0} step={10} suffix="%" placeholder="Off" />
+              </Field>
+              <Field label="Down at least (%)" htmlFor={`${ids}-hdown`} error={shown.holdDownPct}>
+                <NumberInput id={`${ids}-hdown`} value={form.holdDownPct} onChange={(v) => set('holdDownPct', v)} min={0} max={100} step={5} suffix="%" placeholder="Off" invalid={!!shown.holdDownPct} />
+              </Field>
+              <Field label="Liquidity drops (%)" htmlFor={`${ids}-hliq`} error={shown.holdLiqDropPct} hint="From its high since you held">
+                <NumberInput id={`${ids}-hliq`} value={form.holdLiqDropPct} onChange={(v) => set('holdLiqDropPct', v)} min={0} max={100} step={10} suffix="%" placeholder="Off" invalid={!!shown.holdLiqDropPct} />
+              </Field>
+              <Field label="Ignore positions under (USD)" htmlFor={`${ids}-hmin`}>
+                <NumberInput id={`${ids}-hmin`} value={form.holdMinUsd} onChange={(v) => set('holdMinUsd', v)} min={0} step={10} prefix="$" />
+              </Field>
+            </div>
+            <Toggle checked={form.holdDevSell} onChange={(v) => set('holdDevSell', v)} label="Dev sells" description="The dev (or dev team) sells 20% or more of their bag in one trade." />
+            {shown.holding && <Note tone="error">{shown.holding}</Note>}
+          </FormSection>
+        )}
 
         {meta.subject === 'signals' && (
           <FormSection title="Token filters">
@@ -441,10 +562,17 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
               form.repeat
                 ? meta.subject === 'signals'
                   ? 'Keeps notifying; a token’s signals within a minute arrive together.'
-                  : 'Keeps firing, at most once a minute.'
+                  : meta.subject === 'holdings'
+                    ? 'Keeps firing while a trigger holds, once per cooldown.'
+                    : 'Keeps firing, at most once a minute.'
                 : 'Fires once, then switches itself off.'
             }
           />
+          {meta.subject === 'holdings' && form.repeat && (
+            <Field label="Cooldown (minutes)" htmlFor={`${ids}-hcool`} error={shown.holdCooldownMin} hint="Per position and trigger, before it can fire again.">
+              <NumberInput id={`${ids}-hcool`} value={form.holdCooldownMin} onChange={(v) => set('holdCooldownMin', v)} min={1} step={15} presets={[15, 60, 240]} invalid={!!shown.holdCooldownMin} />
+            </Field>
+          )}
           {meta.subject === 'signals' && (
             <Field label="At most per hour" htmlFor={`${ids}-perhour`} error={shown.maxPerHour} hint="Signals past the limit are skipped until the hour rolls over.">
               <NumberInput id={`${ids}-perhour`} value={form.maxPerHour} onChange={(v) => set('maxPerHour', v)} min={1} max={120} step={5} presets={[10, 30, 60]} invalid={!!shown.maxPerHour} />

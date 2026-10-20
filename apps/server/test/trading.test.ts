@@ -1235,6 +1235,74 @@ describe('alerts', () => {
     expect(signalNotes()).toHaveLength(3);
   });
 
+  it('holding alerts: moves vs cost, liquidity drain and dev sells on held positions, with a per-trigger cooldown', async () => {
+    const user = await signIn();
+    const holding = (spec: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'holding', repeat: true, holding: spec, ...extra } });
+    const created = await holding({ upPct: 50, downPct: 20, devSell: true, liquidityDropPct: 40, cooldownMin: 10 });
+    expect(created.status).toBe(200);
+    expect(created.body).toMatchObject({ kind: 'holding', token: null, holding: { basis: 'vs_cost', upPct: 50, downPct: 20, devSell: true, liquidityDropPct: 40, minPositionUsd: 10, cooldownMin: 10 } });
+    const titles = () => notifications(user).filter((n) => n.kind === 'alert').map((n) => n.title);
+
+    const { token, dev } = launch({ devBuy: 5 });
+    const w = whale();
+    await swap(user, token, { amount: 1 });
+    trading().alerts.evaluate();
+    expect(titles()).toEqual([]);
+
+    // +50% vs the position's cost basis
+    pumpTo(token, w, price(token) * 1.7);
+    trading().alerts.evaluate();
+    expect(titles()).toEqual([expect.stringMatching(new RegExp(`^\\$${token.symbol} up \\d+% vs your cost$`))]);
+    trading().alerts.evaluate();
+    expect(titles()).toHaveLength(1); // cooling down
+
+    // the dev dumps its bag (the dev-sell trigger), the whale exits: liquidity drains and the bag goes under water
+    world().executeSwap(dev, token, 'sell', balance(dev, token));
+    expect(titles()[0]).toBe(`Dev sold 100% of their $${token.symbol}`);
+    world().executeSwap(w, token, 'sell', balance(w, token));
+    trading().alerts.evaluate();
+    expect(titles().slice(0, 2)).toEqual([expect.stringMatching(/ liquidity down \d+%$/), expect.stringMatching(/ down \d+% vs your cost$/)]);
+    const n = titles().length;
+    trading().alerts.evaluate();
+    expect(titles()).toHaveLength(n);
+    // after the cooldown the still-true triggers fire again
+    world().now += 10 * 60_000;
+    trading().alerts.evaluate();
+    expect(titles().length).toBe(n + 2);
+  });
+
+  it('holding alerts: one-shot rules switch off, small and closed positions are skipped, token filter and validation', async () => {
+    const user = await signIn();
+    const create = (body: Record<string, unknown>) => call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'holding', ...body } });
+    expect((await create({})).status).toBe(400);
+    expect((await create({ holding: { upPct: null } })).status).toBe(400);
+    expect((await create({ holding: { downPct: 120 } })).status).toBe(400);
+    expect((await create({ holding: { upPct: 10 }, token: 'missing' })).status).toBe(404);
+
+    const a = launch({ devBuy: 1 }).token;
+    const b = launch({ devBuy: 1 }).token;
+    const w = whale();
+    await swap(user, a, { amount: 1 });
+    await swap(user, b, { amount: 0.01 });
+    const once = (await create({ holding: { basis: '5m_change', upPct: 20, minPositionUsd: 0 }, token: b.address })).body;
+    const big = (await create({ holding: { upPct: 20, minPositionUsd: 1_000 } })).body;
+    pumpTo(a, w, price(a) * 1.5);
+    pumpTo(b, w, price(b) * 1.5);
+    trading().alerts.evaluate();
+    // only b matches the token filter; b's $2 bag is below the other rule's $1,000 minimum
+    expect(notifications(user).map((n) => [n.title, n.token])).toEqual([[expect.stringMatching(new RegExp(`^\\$${b.symbol} up \\d+% in 5m$`)), b.address]]);
+    const rules = (await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body;
+    expect(rules.find((r) => r.id === once.id)).toMatchObject({ enabled: false, lastTriggeredAt: world().now });
+    expect(rules.find((r) => r.id === big.id)).toMatchObject({ enabled: true, lastTriggeredAt: null });
+
+    // a closed position is no longer watched
+    const repeat = (await create({ holding: { upPct: 20 }, repeat: true, token: a.address })).body;
+    await swap(user, a, { side: 'sell', amount: 100, amountKind: 'percent' });
+    trading().alerts.evaluate();
+    expect((await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body.find((r) => r.id === repeat.id)!.lastTriggeredAt).toBeNull();
+  });
+
   it('signal subscriptions: match on group filters and validate them', async () => {
     const user = await signIn();
     const create = (signals: unknown) => call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'signal_subscription', signals } });

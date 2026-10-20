@@ -3,8 +3,11 @@
 // and new launches matching a keyword (event driven), and signal subscriptions
 // (signalSubs.ts: fired signals matched by (chain, kind), a token's matches
 // merged within a minute into one notification, capped per rule per hour).
-// One-shot rules disable themselves after firing; repeating rules cool down
-// for a minute (subscriptions: per token, through the merge window).
+// Holding rules watch the account's own positions on a chain (every second:
+// moves vs cost or in 5m, liquidity draining from its high; on trades: a dev
+// sell). One-shot rules disable themselves after firing; repeating rules cool
+// down for a minute (subscriptions: per token, through the merge window;
+// holdings: per position and trigger, for the rule's cooldownMin).
 
 import {
   CHAINS,
@@ -30,6 +33,18 @@ const MAX_ALERTS = 100;
 const EVALUATE_EVERY_MS = 1000;
 const REPEAT_COOLDOWN_MS = 60_000;
 const SMART_WINDOW_MS = 5 * 60_000;
+/** Holding rules' dev-sell trigger: the dev (team) sells at least this share of its bag in one trade (the dev_sell signal's bar). */
+export const HOLDING_DEV_SELL_SHARE = 0.2;
+
+type HoldingTrigger = 'up' | 'down' | 'dev' | 'liquidity';
+
+/** One position a holding rule watches: liquidity high since watched, last fire per trigger. */
+interface HoldingWatch {
+  peakLiq: number;
+  fired: Partial<Record<HoldingTrigger, number>>;
+}
+
+const pctText = (r: number) => formatPercent(Math.abs(r), { sign: false, digits: 0 });
 
 interface AlertRecord {
   accountId: string;
@@ -82,6 +97,11 @@ export class Alerts {
   private readonly lastSignalNote = new Map<string, number>();
   /** ruleId -> times of its notifications in the last hour (maxPerHour). */
   private readonly signalLog = new Map<string, number[]>();
+  /** Enabled holding rules per chain (all / with the dev-sell trigger on). */
+  private readonly holdingRules = new Map<ChainId, AlertRecord[]>();
+  private readonly holdingDevRules = new Map<ChainId, AlertRecord[]>();
+  /** `${ruleId}|${token}` -> the watched position's state (dropped when the position closes). */
+  private readonly holdingState = new Map<string, HoldingWatch>();
 
   constructor(private readonly ctx: AppContext) {}
 
@@ -153,6 +173,7 @@ export class Alerts {
       keyword: input.kind === 'new_token' ? input.keyword || null : null,
       direction: levels ? (input.direction ?? (input.value >= current! ? 'above' : 'below')) : input.direction,
       signals: subscription ? input.signals : null,
+      holding: input.kind === 'holding' ? input.holding : null,
     });
     record.last = levels ? current : null;
   }
@@ -162,6 +183,8 @@ export class Alerts {
     this.newTokenRules.clear();
     this.smartTokens.clear();
     this.signalRules.clear();
+    this.holdingRules.clear();
+    this.holdingDevRules.clear();
     for (const record of this.records.values()) {
       const { rule } = record;
       if (!rule.enabled) continue;
@@ -172,7 +195,14 @@ export class Alerts {
         const kinds = new Set<string>();
         for (const g of rule.signals.groups) for (const k of g.kinds.length ? g.kinds : ['*']) kinds.add(k);
         for (const k of kinds) pushTo(this.signalRules, `${rule.chain}:${k}`, record);
+      } else if (rule.kind === 'holding' && rule.holding) {
+        pushTo(this.holdingRules, rule.chain, record);
+        if (rule.holding.devSell) pushTo(this.holdingDevRules, rule.chain, record);
       }
+    }
+    for (const key of this.holdingState.keys()) {
+      const r = this.records.get(key.slice(0, key.indexOf('|')));
+      if (!r || !r.rule.enabled || r.rule.kind !== 'holding') this.holdingState.delete(key);
     }
     for (const token of this.smartBuys.keys()) if (!this.smartTokens.has(token)) this.smartBuys.delete(token);
     for (const [key, p] of this.pendingSignals) if (!p.record.rule.enabled || this.records.get(p.record.rule.id) !== p.record) this.pendingSignals.delete(key);
@@ -192,6 +222,7 @@ export class Alerts {
     const { world } = this.ctx;
     const now = world.now;
     this.flushSignals(now);
+    for (const records of this.holdingRules.values()) for (const record of records) this.checkHoldings(record, now);
     for (const [token, times] of this.smartBuys) {
       const fresh = times.filter((t) => now - t < SMART_WINDOW_MS);
       if (fresh.length) this.smartBuys.set(token, fresh);
@@ -233,6 +264,7 @@ export class Alerts {
 
   private onTrade(trade: Trade): void {
     if (this.ctx.engine.warming) return;
+    if (trade.side === 'sell' && trade.isDev && this.holdingDevRules.has(trade.chain)) this.onDevSell(trade);
     if (trade.side === 'buy' && this.smartTokens.has(trade.token) && trade.walletTags.includes('smart')) {
       pushTo(this.smartBuys, trade.token, trade.timestamp);
     }
@@ -256,6 +288,89 @@ export class Alerts {
       const venue = getLaunchpad(token.launchpad)?.name ?? token.launchpad;
       this.fire(record, `New token $${token.symbol}`, `${token.name} launched on ${venue}`, token.address);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Holdings
+  // ---------------------------------------------------------------------------
+
+  /** The rule's watch on a held position (created at its first look, liquidity high = now). */
+  private watchOf(record: AlertRecord, token: string, liquidityUsd: number): HoldingWatch {
+    const key = `${record.rule.id}|${token}`;
+    let st = this.holdingState.get(key);
+    if (!st) this.holdingState.set(key, (st = { peakLiq: liquidityUsd, fired: {} }));
+    return st;
+  }
+
+  /** Moves vs cost (or in 5m) and liquidity drawdowns of every position the rule watches. */
+  private checkHoldings(record: AlertRecord, now: number): void {
+    const { rule } = record;
+    const h = rule.holding;
+    if (!rule.enabled || !h) return;
+    const { world, accounts } = this.ctx;
+    const wallet = accounts.walletFor(record.accountId, rule.chain);
+    for (const pos of wallet.positions.values()) {
+      if (rule.token && pos.token !== rule.token) continue;
+      if (pos.balance <= 0) {
+        // a closed position starts over if it is opened again
+        this.holdingState.delete(`${rule.id}|${pos.token}`);
+        continue;
+      }
+      const t = world.getToken(pos.token);
+      if (!t) continue;
+      const value = pos.balance * world.priceUsd(t);
+      if (value < h.minPositionUsd) continue;
+      const liq = world.liquidityUsd(t);
+      const st = this.watchOf(record, t.address, liq);
+      st.peakLiq = Math.max(st.peakLiq, liq);
+      const sym = `$${t.symbol}`;
+      const vsCost = h.basis === 'vs_cost';
+      const change = vsCost ? (pos.costBasisUsd > 0 ? value / pos.costBasisUsd - 1 : null) : world.windowStats(t, '5m').priceChange;
+      const held = vsCost ? `You hold ${formatUsd(value)} (cost ${formatUsd(pos.costBasisUsd)})` : `You hold ${formatUsd(value)}`;
+      const where = vsCost ? 'vs your cost' : 'in 5m';
+      const mc = `MC ${formatUsd(world.marketCapUsd(t))}`;
+      if (change !== null && h.upPct !== null && change * 100 >= h.upPct) this.fireHolding(record, st, 'up', now, `${sym} up ${pctText(change)} ${where}`, `${held} · ${mc}`, t.address);
+      if (change !== null && h.downPct !== null && change * 100 <= -h.downPct) this.fireHolding(record, st, 'down', now, `${sym} down ${pctText(change)} ${where}`, `${held} · ${mc}`, t.address);
+      if (h.liquidityDropPct !== null && st.peakLiq > 0 && liq <= st.peakLiq * (1 - h.liquidityDropPct / 100)) {
+        this.fireHolding(record, st, 'liquidity', now, `${sym} liquidity down ${pctText(1 - liq / st.peakLiq)}`, `Liquidity ${formatUsd(liq)} (high ${formatUsd(st.peakLiq)}) · you hold ${formatUsd(value)}`, t.address);
+      }
+      if (!rule.enabled) return; // a one-shot rule has fired
+    }
+  }
+
+  /** A dev (team) sell of at least HOLDING_DEV_SELL_SHARE of its bag: alert the holders whose rules ask for it. */
+  private onDevSell(trade: Trade): void {
+    const { world, accounts } = this.ctx;
+    const t = world.getToken(trade.token);
+    if (!t) return;
+    const before = trade.makerHoldRate * t.totalSupply + trade.tokenAmount;
+    const share = before > 0 ? trade.tokenAmount / before : 0;
+    if (share < HOLDING_DEV_SELL_SHARE) return;
+    const now = world.now;
+    for (const record of this.holdingDevRules.get(trade.chain) ?? []) {
+      const { rule } = record;
+      const h = rule.holding;
+      if (!rule.enabled || !h || (rule.token && rule.token !== t.address)) continue;
+      const wallet = accounts.walletFor(record.accountId, rule.chain);
+      if (wallet.address === trade.wallet) continue; // the account's own sell of its launch
+      const pos = wallet.positions.get(t.address);
+      if (!pos || pos.balance <= 0) continue;
+      const value = pos.balance * world.priceUsd(t);
+      if (value < h.minPositionUsd) continue;
+      const st = this.watchOf(record, t.address, world.liquidityUsd(t));
+      const who = trade.wallet === t.creator ? 'Dev' : 'Dev team';
+      this.fireHolding(record, st, 'dev', now, `${who} sold ${pctText(share)} of their $${t.symbol}`, `${formatUsd(trade.usdAmount)} sold · you hold ${formatUsd(value)} · MC ${formatUsd(trade.marketCapUsd)}`, t.address);
+    }
+  }
+
+  /** Fire one trigger of a watched position unless it is cooling down (repeating rules) or the rule is off. */
+  private fireHolding(record: AlertRecord, st: HoldingWatch, trigger: HoldingTrigger, now: number, title: string, body: string, token: string): void {
+    const { rule } = record;
+    if (!rule.enabled || !rule.holding) return;
+    const last = st.fired[trigger];
+    if (last !== undefined && now - last < rule.holding.cooldownMin * 60_000) return;
+    st.fired[trigger] = now;
+    this.fire(record, title, body, token);
   }
 
   // ---------------------------------------------------------------------------
@@ -350,6 +465,7 @@ export class Alerts {
     this.pendingSignals.clear();
     this.lastSignalNote.clear();
     this.signalLog.clear();
+    this.holdingState.clear();
     for (const { accountId, rule } of stored) this.records.set(rule.id, { accountId, rule, last: null });
     this.reindex();
   }

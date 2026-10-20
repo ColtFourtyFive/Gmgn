@@ -32,6 +32,33 @@ function open(prefill: AlertPrefill, rule: AlertRule | null = null) {
   return onClose;
 }
 
+describe('AlertForm: holding alerts', () => {
+  it('creates a holding rule over every held token with the picked triggers', async () => {
+    const create = vi.spyOn(api, 'createAlert').mockImplementation(async (body) => ({ ...body, id: 'r1', createdAt: 0, lastTriggeredAt: null }) as AlertRule);
+    open({ kind: 'holding', chain: 'sol', repeat: true });
+    // defaults: +-20% vs cost and dev sells
+    fireEvent.change(screen.getByRole('textbox', { name: 'Up at least (%)' }), { target: { value: '50' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Liquidity drops (%)' }), { target: { value: '40' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Cooldown (minutes)' }), { target: { value: '15' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create alert' })));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create.mock.calls[0][0]).toMatchObject({
+      kind: 'holding',
+      token: null,
+      signals: null,
+      holding: { basis: 'vs_cost', upPct: 50, downPct: 20, devSell: true, liquidityDropPct: 40, minPositionUsd: 10, cooldownMin: 15 },
+    });
+  });
+
+  it('needs at least one trigger', async () => {
+    const create = vi.spyOn(api, 'createAlert');
+    open({ kind: 'holding', chain: 'sol', holdUpPct: null, holdDownPct: null, holdDevSell: false });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create alert' })));
+    expect(screen.getByText('Turn on at least one trigger.')).toBeTruthy();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('AlertForm: signal subscriptions', () => {
   it('creates a subscription with the picked kinds and filters', async () => {
     const create = vi.spyOn(api, 'createAlert').mockImplementation(async (body) => ({ ...body, id: 'r1', createdAt: 0, lastTriggeredAt: null }) as AlertRule);
