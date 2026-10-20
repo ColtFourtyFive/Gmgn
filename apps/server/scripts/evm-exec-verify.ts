@@ -111,27 +111,33 @@ async function recentLogs(client: PublicClient, chain: EvmChainId, address: Addr
 }
 
 /**
- * A wallet holding the token, from its recent Transfer logs: EOAs (including
- * EIP-7702 delegated ones) first; contracts only when allowed (curve tokens are
- * often held by smart accounts) and only if no EOA holds any.
+ * A wallet holding the token, from its recent Transfer logs (or the given candidates): the EOA (including
+ * EIP-7702 delegated ones) with the largest balance among the most recent recipients, so a 10% sell is a
+ * real trade rather than dust; contracts only when allowed (curve tokens are often held by smart accounts)
+ * and only if no EOA holds any.
  */
-async function findHolder(client: PublicClient, chain: EvmChainId, token: Address, exclude: Address[] = [], allowContracts = false): Promise<Address | null> {
-  const logs = await recentLogs(client, chain, token, TRANSFER as never, LOG_WINDOW[chain] * 6n);
+async function findHolder(client: PublicClient, chain: EvmChainId, token: Address, exclude: Address[] = [], allowContracts = false, candidates?: Address[]): Promise<Address | null> {
+  const recipients = candidates ?? (await recentLogs(client, chain, token, TRANSFER as never, LOG_WINDOW[chain] * 6n)).reverse().map((l) => (l as unknown as { args: { to: Address } }).args.to);
   const seen = new Set<string>();
+  let best: { who: Address; bal: bigint } | null = null;
   let contract: Address | null = null;
-  for (const l of logs.reverse()) {
-    const to = (l as unknown as { args: { to: Address } }).args.to;
+  for (const to of recipients) {
     if (!to || seen.has(to.toLowerCase()) || isAddressEqual(to, token) || exclude.some((e) => isAddressEqual(e, to))) continue;
     seen.add(to.toLowerCase());
+    if (seen.size > 30) break;
     const [code, bal] = await Promise.all([client.getCode({ address: to }), client.readContract({ address: token, abi: [parseAbiItem('function balanceOf(address) view returns (uint256)')], functionName: 'balanceOf', args: [to] })]);
-    // ignore dust: 10% of it must still be a real sell
     if ((bal as bigint) < 1_000_000n) continue;
     const eoa = code === undefined || code === '0x' || code.startsWith('0xef0100');
-    if (eoa) return to;
-    if (allowContracts && !contract) contract = to;
-    if (seen.size > 60) break;
+    if (eoa && (!best || (bal as bigint) > best.bal)) best = { who: to, bal: bal as bigint };
+    if (!eoa && allowContracts && !contract) contract = to;
   }
-  return contract;
+  return best?.who ?? contract;
+}
+
+/** Accounts that bought `token` on the four.meme curve recently (newest first): some launches revert "GW" for holders whose tokens did not come from a curve purchase. */
+async function fourMemeBuyers(client: PublicClient, token: Address): Promise<Address[]> {
+  const logs = await recentLogs(client, 'bsc', '0x5c952063c7fc8610FFDB798152D69F0B9550762b', parseAbiItem('event TokenPurchase(address token, address account, uint256 price, uint256 amount, uint256 cost, uint256 fee, uint256 offers, uint256 funds)') as never, 6_000n);
+  return (logs as unknown as { args: { token: Address; account: Address } }[]).filter((l) => isAddressEqual(l.args.token, token)).reverse().map((l) => l.args.account);
 }
 
 const balanceOfAbi = [parseAbiItem('function balanceOf(address) view returns (uint256)')];
@@ -341,7 +347,7 @@ async function main(): Promise<void> {
       for (const side of ['buy', 'sell', 'sell', 'sell'] as const) {
         if (side === 'sell' && c.sell === false) continue;
         // a retry only after a holder-specific sell revert (e.g. four.meme "GW" for some holders)
-        if (side === 'sell' && rows.at(-1)?.side === 'sell' && !rows.at(-1)!.status.includes('reverts')) continue;
+        if (side === 'sell' && rows.at(-1)?.side === 'sell' && (!rows.at(-1)!.status.includes('reverts') || rows.at(-1)!.case.includes('slot-funded'))) continue;
         if (side === 'sell' && rows.at(-1)?.side === 'sell') rows.at(-1)!.status += ' -> holder-specific, next holder';
         const rec: Recording = { rpc: [], http: [] };
         const client = recordingClient(EVM_CHAINS[chain].viem, RPC[chain], rec);
@@ -354,7 +360,8 @@ async function main(): Promise<void> {
         if (side === 'sell') {
           const curve = c.venues?.some((v) => v === 'flap' || v === 'pons' || v === 'fourmeme') ?? false;
           const venueContracts = ['0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0', '0x26605F322F7FF986F381bB9A6E3f5dAB0beaeB09', '0x5c952063c7fc8610FFDB798152D69F0B9550762b'] as Address[];
-          wallet = await findHolder(discoverClient, chain, c.token, [...venueContracts, ...restricted], curve).catch(() => null);
+          const candidates = c.venues?.includes('fourmeme') ? await fourMemeBuyers(discoverClient, c.token).catch(() => undefined) : undefined;
+          wallet = await findHolder(discoverClient, chain, c.token, [...venueContracts, ...restricted], curve, candidates).catch(() => null);
           if (wallet) restricted.push(wallet);
           if (!wallet) {
             // no EOA holder: give the fresh wallet what the buy would have bought, through the balance slot
