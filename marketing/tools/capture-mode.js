@@ -11,6 +11,7 @@
     /^\s*Your (paper )?wallets are funded on every chain\.?\s*$/,
     /^\s*Live\s*$/, // the green "Live" pills: demo data is not live
     /^\s*\d+\s?ms\s*$/, // the status bar's ping
+    /^\s*ms\s*$/, // ...when React renders the number and the unit as separate text nodes
   ];
   // In-place rewrites of sim-only phrasing into the live product's wording.
   const REPLACE = [
