@@ -1,0 +1,394 @@
+// Candlestick chart (lightweight-charts 4.2): REST history per resolution,
+// live `candle` updates from the page feed, Price/MCap unit, trade markers by
+// wallet class, migration marker and price lines for the viewer's average
+// buy price and open orders.
+
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+  createChart,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  type MouseEventParams,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import { useQuery } from '@tanstack/react-query';
+import { formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Resolution, type TokenDetail } from '@trenchscope/shared';
+import { CandlestickChart, Eye, MoveHorizontal } from 'lucide-react';
+import clsx from 'clsx';
+import { withSubscript, WALLET_TAG_META } from '@/components/common';
+import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Skeleton } from '@/components/ui';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { api } from '@/lib/api';
+import { useUi } from '@/store/ui';
+import { useViewerTags } from '@/components/discovery';
+import { useTokenFeed } from './feed';
+import { buildMarkers, cssColor, formatAxis, minMoveFor, safeLocale, toBar, toChartTime, type Bar } from './chartUtils';
+import { DEFAULT_MARKER_CLASSES, MARKER_CLASSES, type MarkerClass } from './model';
+import { tokenKeys, useChartUnit } from './queries';
+import type { ChartUnit } from './store';
+import { useMarkerTrades } from './useMarkerTrades';
+import { useSession } from '@/store/session';
+
+export interface PriceChartProps {
+  token: TokenDetail;
+  resolution: Resolution;
+  onResolutionChange: (r: Resolution) => void;
+  /** The viewer's position (avg buy line). */
+  position?: Position | null;
+  /** The viewer's open orders on this token (trigger lines). */
+  orders?: Order[];
+  height: number;
+  className?: string;
+}
+
+const RES_ITEMS = RESOLUTIONS.map((r) => ({ value: r, label: r }));
+const UNIT_ITEMS: { value: ChartUnit; label: string }[] = [
+  { value: 'price', label: 'Price' },
+  { value: 'mcap', label: 'MCap' },
+];
+
+interface Legend {
+  bar: Bar;
+  volume: number;
+}
+
+/** Price (or MC) at which an open order fires, in USD price terms; null when not price-like. */
+function orderTriggerPrice(o: Order, supply: number): number | null {
+  if (o.status !== 'open') return null;
+  if (o.triggerType === 'price') return o.triggerValue;
+  if (o.triggerType === 'mcap') return supply > 0 ? o.triggerValue / supply : null;
+  if (o.triggerType === 'change') {
+    if (o.kind === 'trailing_stop') return o.armed && o.peakPriceUsd ? o.peakPriceUsd * (1 - o.triggerValue / 100) : null;
+    if (!o.refPriceUsd) return null;
+    return o.kind === 'stop_loss' ? o.refPriceUsd * (1 - o.triggerValue / 100) : o.refPriceUsd * (1 + o.triggerValue / 100);
+  }
+  return null;
+}
+
+const ORDER_LINE_TITLE: Partial<Record<Order['kind'], string>> = {
+  limit_buy: 'Limit buy',
+  limit_sell: 'Limit sell',
+  take_profit: 'TP',
+  stop_loss: 'SL',
+  trailing_stop: 'Trail',
+};
+
+export const PriceChart = memo(function PriceChart({ token, resolution, onResolutionChange, position, orders, height, className }: PriceChartProps) {
+  const { chain, address } = token;
+  const supply = token.totalSupply;
+  const [unit, setUnit] = useChartUnit();
+  const theme = useUi((s) => s.theme);
+  const feed = useTokenFeed();
+  const signedIn = useSession((s) => !!s.token);
+  const viewerTags = useViewerTags(chain);
+  const [classList, setClassList] = useLocalStorage<MarkerClass[]>('ts.token.markers', DEFAULT_MARKER_CLASSES);
+  const enabled = useMemo(() => new Set(classList), [classList]);
+  const markerTrades = useMarkerTrades(chain, address, enabled);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const linesRef = useRef<IPriceLine[]>([]);
+  /** Raw candles on the chart (server units), REST history + live updates. */
+  const rawRef = useRef<Candle[]>([]);
+  /** Live candles that arrived before the history for their resolution. */
+  const pendingRef = useRef<Candle[]>([]);
+  const loadedRef = useRef(false);
+  const unitRef = useRef(unit);
+  unitRef.current = unit;
+  const resRef = useRef(resolution);
+  resRef.current = resolution;
+  const supplyRef = useRef(supply);
+  supplyRef.current = supply;
+  /** Bumped whenever bars are (re)written so markers and lines follow. */
+  const [dataVersion, setDataVersion] = useState(0);
+  const [legend, setLegend] = useState<Legend | null>(null);
+  const [lastLegend, setLastLegend] = useState<Legend | null>(null);
+
+  const candles = useQuery({
+    queryKey: tokenKeys.candles(chain, address, resolution),
+    queryFn: () => api.candles(chain, address, resolution, 500),
+    staleTime: 0,
+    gcTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const colors = () => ({ up: cssColor('up'), down: cssColor('down'), upVol: cssColor('up', 0.35), downVol: cssColor('down', 0.35) });
+
+  const volumeBar = (c: Candle) => {
+    const col = colors();
+    return { time: toChartTime(c.time), value: c.volume, color: c.close >= c.open ? col.upVol : col.downVol };
+  };
+
+  const writeAll = () => {
+    const series = candleRef.current;
+    const vol = volumeRef.current;
+    if (!series || !vol) return;
+    const raw = rawRef.current;
+    series.setData(raw.map((c) => toBar(c, unitRef.current, supplyRef.current)));
+    vol.setData(raw.map(volumeBar));
+    const last = raw[raw.length - 1];
+    setLastLegend(last ? { bar: toBar(last, unitRef.current, supplyRef.current), volume: last.volume } : null);
+    setDataVersion((v) => v + 1);
+  };
+
+  const applyLive = (c: Candle) => {
+    const raw = rawRef.current;
+    const last = raw[raw.length - 1];
+    if (last && c.time < last.time) return;
+    if (last && c.time === last.time) raw[raw.length - 1] = c;
+    else raw.push(c);
+    const bar = toBar(c, unitRef.current, supplyRef.current);
+    candleRef.current?.update(bar);
+    volumeRef.current?.update(volumeBar(c));
+    setLastLegend({ bar, volume: c.volume });
+    if (!last || c.time !== last.time) setDataVersion((v) => v + 1);
+  };
+
+  // Create the chart once.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const chart = createChart(el, {
+      autoSize: true,
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.22 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7, minBarSpacing: 1.5 },
+      localization: { locale: safeLocale() },
+      handleScale: { axisPressedMouseMove: { time: true, price: true } },
+    });
+    const series = chart.addCandlestickSeries({ borderVisible: false, priceLineVisible: true, lastValueVisible: true });
+    const vol = chart.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    const onMove = (param: MouseEventParams<Time>) => {
+      const bar = param.seriesData.get(series) as Bar | undefined;
+      const v = param.seriesData.get(vol) as { value?: number } | undefined;
+      setLegend(bar && 'open' in bar ? { bar, volume: v?.value ?? 0 } : null);
+    };
+    chart.subscribeCrosshairMove(onMove);
+    chartRef.current = chart;
+    candleRef.current = series;
+    volumeRef.current = vol;
+    return () => {
+      chart.unsubscribeCrosshairMove(onMove);
+      chart.remove();
+      chartRef.current = null;
+      candleRef.current = null;
+      volumeRef.current = null;
+      linesRef.current = [];
+    };
+  }, []);
+
+  // Theme colors.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = candleRef.current;
+    if (!chart || !series) return;
+    const grid = cssColor('line', 0.5);
+    chart.applyOptions({
+      layout: { background: { type: ColorType.Solid, color: cssColor('panel') }, textColor: cssColor('muted'), fontSize: 11, fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+      grid: { vertLines: { color: grid, style: LineStyle.Dotted }, horzLines: { color: grid, style: LineStyle.Dotted } },
+      crosshair: {
+        vertLine: { color: cssColor('faint'), labelBackgroundColor: cssColor('panel-3') },
+        horzLine: { color: cssColor('faint'), labelBackgroundColor: cssColor('panel-3') },
+      },
+    });
+    const c = colors();
+    series.applyOptions({ upColor: c.up, downColor: c.down, wickUpColor: c.up, wickDownColor: c.down });
+    if (loadedRef.current) volumeRef.current?.setData(rawRef.current.map(volumeBar));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  // Unit: axis format + rescale every bar.
+  useEffect(() => {
+    candleRef.current?.applyOptions({ priceFormat: { type: 'custom', minMove: minMoveFor(unit), formatter: (p: number) => formatAxis(p, unit) } });
+    if (loadedRef.current) writeAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unit]);
+
+  // Seconds on the time axis for sub-minute resolutions; reset state on resolution change.
+  useEffect(() => {
+    chartRef.current?.applyOptions({ timeScale: { secondsVisible: resolution === '1s' || resolution === '15s' } });
+    loadedRef.current = false;
+    pendingRef.current = [];
+  }, [resolution]);
+
+  // REST history.
+  useEffect(() => {
+    const data = candles.data;
+    if (!data || data.resolution !== resolution) return;
+    const fresh = !loadedRef.current;
+    const merged = data.candles.slice();
+    // Keep live updates newer than the snapshot.
+    const tail = (fresh ? pendingRef.current : rawRef.current).filter((c) => c.time >= (merged[merged.length - 1]?.time ?? 0));
+    for (const c of tail) {
+      const last = merged[merged.length - 1];
+      if (last && c.time === last.time) merged[merged.length - 1] = c;
+      else if (!last || c.time > last.time) merged.push(c);
+    }
+    rawRef.current = merged;
+    pendingRef.current = [];
+    loadedRef.current = true;
+    writeAll();
+    if (fresh) chartRef.current?.timeScale().fitContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles.data, resolution]);
+
+  // Live candles.
+  useEffect(
+    () =>
+      feed.subscribeCandles(({ resolution: r, candle }) => {
+        if (r !== resRef.current) return;
+        if (!loadedRef.current) pendingRef.current.push(candle);
+        else applyLive(candle);
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [feed],
+  );
+
+  // Markers.
+  useEffect(() => {
+    const series = candleRef.current;
+    if (!series) return;
+    const raw = rawRef.current;
+    const range = raw.length ? { from: toChartTime(raw[0].time), to: toChartTime(raw[raw.length - 1].time) } : null;
+    series.setMarkers(
+      buildMarkers({
+        trades: markerTrades,
+        enabled,
+        viewerTags,
+        resolution,
+        range,
+        migratedAt: token.migratedAt,
+        colors: { up: cssColor('up'), down: cssColor('down'), mine: cssColor('accent'), info: cssColor('info') },
+      }),
+    );
+  }, [markerTrades, enabled, viewerTags, resolution, token.migratedAt, dataVersion, theme]);
+
+  // Price lines: average buy and open order triggers.
+  const avgBuy = position && position.balance > 0 && position.avgBuyPriceUsd > 0 ? position.avgBuyPriceUsd : null;
+  const lineSpecs = useMemo(() => {
+    const specs: { price: number; title: string; tone: string; style: LineStyle }[] = [];
+    if (avgBuy) specs.push({ price: avgBuy, title: 'Avg buy', tone: 'accent', style: LineStyle.Dashed });
+    for (const o of orders ?? []) {
+      const p = orderTriggerPrice(o, supply);
+      const title = ORDER_LINE_TITLE[o.kind];
+      if (p && title) specs.push({ price: p, title, tone: o.side === 'buy' ? 'up' : 'down', style: LineStyle.Dotted });
+    }
+    return specs.slice(0, 12);
+  }, [avgBuy, orders, supply]);
+
+  useEffect(() => {
+    const series = candleRef.current;
+    if (!series) return;
+    for (const l of linesRef.current) series.removePriceLine(l);
+    linesRef.current = lineSpecs.map((s) =>
+      series.createPriceLine({
+        price: unit === 'mcap' ? s.price * supply : s.price,
+        color: cssColor(s.tone, 0.85),
+        lineWidth: 1,
+        lineStyle: s.style,
+        axisLabelVisible: true,
+        title: s.title,
+      }),
+    );
+  }, [lineSpecs, unit, supply, theme]);
+
+  const toggleClass = (cls: MarkerClass, on: boolean) => setClassList((prev) => (on ? [...new Set([...prev, cls])] : prev.filter((c) => c !== cls)));
+
+  const shown = legend ?? lastLegend;
+  const change = shown ? shown.bar.close / shown.bar.open - 1 : null;
+  const empty = candles.isSuccess && rawRef.current.length === 0 && candles.data.candles.length === 0;
+
+  return (
+    <section className={clsx('panel flex min-w-0 flex-col overflow-hidden', className)} aria-label={`${token.symbol} chart`}>
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5">
+        <SegmentedControl size="sm" value={resolution} onChange={onResolutionChange} items={RES_ITEMS} aria-label="Candle resolution" />
+        <SegmentedControl size="sm" value={unit} onChange={setUnit} items={UNIT_ITEMS} aria-label="Chart unit" />
+        <span className="flex-1" />
+        <Popover
+          placement="bottom-end"
+          aria-label="Trade markers"
+          className="w-60 p-2"
+          trigger={
+            <button type="button" className="btn-ghost btn-xs" aria-label="Trade markers">
+              <Eye size={12} aria-hidden />
+              Markers
+              <span className="num rounded bg-panel-3 px-1 text-2xs text-muted">{classList.length}</span>
+            </button>
+          }
+        >
+          <p className="mb-1.5 px-1 text-xs text-muted">Show trades on the chart by wallet type (latest 300).</p>
+          <ul className="flex flex-col">
+            {MARKER_CLASSES.map((c) => {
+              const meta = WALLET_TAG_META[c.tag];
+              const Icon = meta.icon;
+              const locked = c.private && !signedIn;
+              return (
+                <li key={c.key} className="flex h-7 items-center justify-between gap-2 rounded px-1 hover:bg-panel-2">
+                  <Checkbox
+                    checked={enabled.has(c.key) && !locked}
+                    disabled={locked}
+                    onChange={(on) => toggleClass(c.key, on)}
+                    label={
+                      <span className="inline-flex items-center gap-1.5">
+                        <Icon size={12} style={{ color: `rgb(var(--${meta.token}))` }} aria-hidden />
+                        {c.label}
+                      </span>
+                    }
+                  />
+                  {locked && <span className="text-2xs text-faint">Sign in</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </Popover>
+        <IconButton size="sm" label="Reset zoom" icon={<MoveHorizontal size={14} />} onClick={() => chartRef.current?.timeScale().fitContent()} />
+      </div>
+      <div className="relative min-w-0" style={{ height }}>
+        <div ref={containerRef} className="absolute inset-0" />
+        {shown && (
+          <div className="pointer-events-none absolute left-2 top-1.5 z-[2] flex flex-wrap items-center gap-x-2 text-2xs text-muted">
+            <span>
+              O <span className="num text-fg">{withSubscript(formatAxis(shown.bar.open, unit))}</span>
+            </span>
+            <span>
+              H <span className="num text-fg">{withSubscript(formatAxis(shown.bar.high, unit))}</span>
+            </span>
+            <span>
+              L <span className="num text-fg">{withSubscript(formatAxis(shown.bar.low, unit))}</span>
+            </span>
+            <span>
+              C <span className={clsx('num', change !== null && change < 0 ? 'text-down' : 'text-up')}>{withSubscript(formatAxis(shown.bar.close, unit))}</span>
+            </span>
+            <span>
+              V <span className="num text-fg">{formatUsd(shown.volume)}</span>
+            </span>
+          </div>
+        )}
+        {candles.isPending && (
+          <div className="absolute inset-0 z-[3] flex flex-col gap-2 bg-panel p-3">
+            <Skeleton className="h-full w-full" />
+          </div>
+        )}
+        {candles.isError && !candles.data && (
+          <div className="absolute inset-0 z-[3] flex items-center justify-center bg-panel">
+            <ErrorState compact title="Chart unavailable" error={candles.error} onRetry={() => void candles.refetch()} retrying={candles.isFetching} />
+          </div>
+        )}
+        {empty && (
+          <div className="absolute inset-0 z-[3] flex items-center justify-center bg-panel/80">
+            <EmptyState compact icon={<CandlestickChart size={16} />} title="No trades yet" description="Candles appear with the first swap." />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+});

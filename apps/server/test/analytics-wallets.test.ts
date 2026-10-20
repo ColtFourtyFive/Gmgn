@@ -324,6 +324,25 @@ describe('period stats', () => {
 });
 
 describe('deleted tokens', () => {
+  it('drops the state of wallets the simulator removed', () => {
+    const crew = mkWallet();
+    crew.tags.add('smart');
+    const t = mkToken();
+    buy(crew, t, 0.5);
+    sellFrac(crew, t); // the world only removes wallets no token holds as a holder
+    wa.profile(crew, { accountId: null });
+    const internal = wa as unknown as { tracks: Map<string, unknown>; baseCache: Map<string, unknown> };
+    expect(internal.tracks.has(crew.address)).toBe(true);
+    world.removeWallets(new Set([crew.address]));
+    expect(internal.tracks.has(crew.address)).toBe(false);
+    expect(internal.baseCache.has(crew.address)).toBe(false);
+    wa.refreshLeaderboards();
+    expect(wa.leaderboard('sol', { tag: 'all' }, { accountId: null }).map((r) => r.address)).not.toContain(crew.address);
+    // Its past trades stay valid feed rows (the trade data does not depend on the wallet record).
+    expect(wa.feed('sol', 'smart', 10, { accountId: null }).map((i) => i.trade.wallet)).toContain(crew.address);
+    expect(() => wa.classifyTick()).not.toThrow();
+  });
+
   it('skips tokens the simulator deleted in feeds, signals and wallet reads, and prunes their state', () => {
     const s = mkWallet();
     s.tags.add('smart');

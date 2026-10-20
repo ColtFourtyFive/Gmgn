@@ -226,6 +226,14 @@ export class WalletAnalytics {
     const { world, engine, hub } = this.ctx;
     world.on('trade', (trade, t, w) => this.onTrade(trade, t, w));
     world.on('walletCreated', (w) => this.dirty.add(w.address));
+    // Simulator pruning (e.g. single-use crew wallets): drop their state now rather than at the next sweep.
+    world.on('walletsRemoved', (addrs) => {
+      for (const a of addrs) {
+        this.tracks.delete(a);
+        this.baseCache.delete(a);
+        this.dirty.delete(a);
+      }
+    });
     world.on('tokenMigrated', (t) => this.signalEngine.onMigrated(t));
     world.on('tokenFlag', (t, flag) => this.signalEngine.onFlag(t, flag));
     world.on('kolCall', (t, w) => this.signalEngine.onKolCall(t, w));
