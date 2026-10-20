@@ -13,6 +13,7 @@ import { ENTRY_POINTS, TOPIC } from '../src/live/evm/feed/abi';
 import { ChainFeed } from '../src/live/evm/feed/chain-feed';
 import { loadEvmFeedSettings } from '../src/live/evm/feed/config';
 import { FixtureRpc, type RpcFixture } from '../src/live/evm/feed/fixture-rpc';
+import { toUnits } from '../src/live/evm/feed/math';
 import { parseRawLog } from '../src/live/evm/feed/rpc';
 import { FLAP_TOPIC } from '../src/live/evm/feed/venues/flap';
 import { PONS_TOPIC } from '../src/live/evm/feed/venues/pons';
@@ -71,6 +72,26 @@ async function replay(name: string, opts: { cap?: number; worldTokenCap?: number
   return { built, feed, rpc, fixture, chain };
 }
 
+/** Traders holding tokens followed since launch: positions equal their Transfer-derived balances. */
+function expectExactHolders(r: Replay): number {
+  const { world } = r.built.ctx;
+  let checked = 0;
+  for (const token of r.feed.holders.tokens()) {
+    const t = world.tokens.get(token);
+    if (!t) continue;
+    for (const addr of t.traders) {
+      const b = r.feed.holders.balanceOf(token, addr);
+      const pos = world.wallets.get(addr)?.positions.get(token);
+      // Signers credited for tokens delivered elsewhere (bot contracts) hold nothing themselves: skip them.
+      if (b === undefined || b === 0n || !pos) continue;
+      expect(pos.balance).toBeCloseTo(toUnits(b, t.decimals), 6);
+      expect(t.holders.has(addr)).toBe(pos.balance > t.totalSupply * 1e-7);
+      checked++;
+    }
+  }
+  return checked;
+}
+
 const tokensOf = (r: Replay) => r.built.ctx.world.tokensByChain[r.chain].map((a) => r.built.ctx.world.tokens.get(a)!);
 /** The expected trader: tx.from, or (ERC-4337 bundles) not the bundler but a user operation's sender. */
 function expectTrader(r: Replay, wallet: string, hash: string): void {
@@ -123,6 +144,10 @@ describe('Robinhood Chain replay (Pons, Flap, Uniswap V4)', () => {
     expect(s.launchpad).toBe('pons');
     expect(s.marketCapUsd).toBeGreaterThan(0);
     expect(s.priceNative * world.nativeUsd('robinhood')).toBeCloseTo(s.priceUsd, 9);
+
+    // tokens launched in the window are followed from their mint: exact holder balances
+    expect(r.feed.holders.size).toBeGreaterThan(0);
+    expect(expectExactHolders(r)).toBeGreaterThan(0);
   });
 
   it('loads pasted addresses: a curve token, a graduated Pons token, a Pools.trade token; refuses a stock token', async () => {
@@ -197,6 +222,7 @@ describe('BNB Chain replay (four.meme, Flap, PancakeSwap)', () => {
 
     const trenches = analytics.trenches({ chain: 'bsc' });
     expect(trenches.new.length + trenches.almost.length).toBeGreaterThan(0);
+    expect(expectExactHolders(r)).toBeGreaterThan(0);
     for (const s of [...trenches.new, ...trenches.almost]) expect(['flap-bsc', 'fourmeme']).toContain(s.launchpad);
   });
 

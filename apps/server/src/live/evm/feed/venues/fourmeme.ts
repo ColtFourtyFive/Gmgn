@@ -248,6 +248,10 @@ export class FourMemeVenue implements Venue {
     }
   }
 
+  launching(): string[] {
+    return [...this.creates.keys()];
+  }
+
   endWindow(): void {
     this.creates.clear();
     this.adopted.clear();

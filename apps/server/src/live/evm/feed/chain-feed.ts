@@ -20,8 +20,10 @@ import { classifyNarrative } from './narrative';
 import { LogPoller, type LogInterest, type PollWindow } from './poller';
 import { PoolBook, worldReserves, type AmmPool } from './pools';
 import { errorText, type EvmRpc, type RawLog, type RequestBudget } from './rpc';
+import { HolderBook } from './holders';
 import { TxSenders } from './senders';
 import { TrackedTokens } from './tracked';
+import { TransfersVenue } from './venues/transfers';
 import type { FeedContext, FeedEvent, LaunchInput, PoolProbe, Venue } from './venues/types';
 
 export interface ChainFeedOptions {
@@ -36,6 +38,10 @@ export interface ChainFeedOptions {
   confirmations: number;
   rescan: number;
   backfill: number;
+  /** Emitters per eth_getLogs the endpoint accepts (default 500; learned lower from refusals). */
+  logMaxAddresses?: number;
+  /** Block span of an emitter-less eth_getLogs (default the chain's log range). */
+  emitterlessRange?: number | null;
   ipfsGateways: string[];
   pruneWorld: boolean;
   /** Ledger tokens kept for this chain (default: max(500, 2 x maxTrackedTokens)). */
@@ -84,6 +90,11 @@ export interface EvmChainFeedStatus {
   rangeSplits: number;
   evictions: number;
   metadataPending: number;
+  /** Tokens whose holder balances are followed from Transfer logs. */
+  holderTokens: number;
+  /** Emitters per eth_getLogs in use, and whether AMM pools are fetched emitter-less (over that limit). */
+  logMaxAddresses: number;
+  widePoolQueries: boolean;
   venues: Record<string, VenueCounters>;
   recentErrors: FeedError[];
 }
@@ -96,6 +107,8 @@ const MAX_ERRORS = 20;
 const WORLD_TOKENS_FACTOR = 2;
 /** External wallets idle this long with nothing live are dropped from the ledger. */
 const WALLET_IDLE_MS = 6 * 3600_000;
+/** Tokens whose holders are followed from Transfer logs (unrestricted endpoints). */
+const HOLDER_TOKENS_MAX = 3_000;
 
 export class ChainFeed implements FeedContext {
   readonly chain: EvmChainId;
@@ -108,6 +121,8 @@ export class ChainFeed implements FeedContext {
   readonly poller: LogPoller;
   readonly clock: BlockClock;
   readonly senders: TxSenders;
+  /** Exact balances of tokens followed since launch (Transfer logs). */
+  readonly holders = new HolderBook();
   windowTo = 0n;
   private readonly venues: Venue[];
   private readonly counters = new Map<string, VenueCounters>();
@@ -118,6 +133,8 @@ export class ChainFeed implements FeedContext {
   private wake: (() => void) | null = null;
   private unwatch: (() => void) | null = null;
   private lastEventAt: number | null = null;
+  /** Latest head from the WebSocket subscription. */
+  private wsHead: { block: bigint; at: number } | null = null;
   private lastPollAt: number | null = null;
   private failures = 0;
   private lastHousekeeping = 0;
@@ -129,7 +146,8 @@ export class ChainFeed implements FeedContext {
     this.info = EVM_CHAINS[opts.chain];
     this.world = opts.world;
     this.rpc = opts.rpc;
-    this.venues = opts.venues;
+    // Transfers come last: they never take another venue's logs.
+    this.venues = [...opts.venues, new TransfersVenue(this.holders, () => opts.venues)];
     this.wrappedNative = this.info.wrappedNative.toLowerCase();
     this.clockNow = opts.now ?? (() => this.world.now);
     this.meta = new TokenMetadata(opts.rpc, opts.ipfsGateways, opts.fetchJson);
@@ -142,12 +160,16 @@ export class ChainFeed implements FeedContext {
       rescan: opts.rescan,
       // Catch-up worth ~3 minutes of chain time (at least 20 windows), then skip ahead.
       maxLagBlocks: Math.max(this.info.maxLogBlockRange * 20, Math.round(180_000 / this.info.blockTimeMs)),
+      // Block-by-block pool queries (address-limited endpoint): ~1 minute, then skip ahead.
+      maxLagBlocksNarrow: Math.max(20, Math.round(60_000 / this.info.blockTimeMs)),
       backfill: opts.backfill,
       dedupeCap: 50_000,
-      maxAddresses: 500,
+      maxAddresses: opts.logMaxAddresses ?? 500,
       maxTopicValues: 500,
+      ...(opts.emitterlessRange ? { emitterlessRange: opts.emitterlessRange } : {}),
     });
-    for (const v of this.venues) this.counters.set(v.id, { launches: 0, trades: 0, migrations: 0, skipped: 0 });
+    this.holders.capacity = this.holderCapacity();
+    for (const v of opts.venues) this.counters.set(v.id, { launches: 0, trades: 0, migrations: 0, skipped: 0 });
   }
 
   // ---------------------------------------------------------------------------
@@ -159,7 +181,15 @@ export class ChainFeed implements FeedContext {
     this.running = true;
     if (this.opts.ws) {
       try {
-        this.unwatch = this.opts.ws.watchBlockNumber({ onBlockNumber: () => this.wake?.(), onError: (err) => this.error('ws', err), emitOnBegin: false });
+        this.unwatch = this.opts.ws.watchBlockNumber({
+          onBlockNumber: (n) => {
+            // The subscription's head saves the poll's eth_blockNumber; it also wakes the loop early.
+            this.wsHead = { block: n, at: Date.now() };
+            this.wake?.();
+          },
+          onError: (err) => this.error('ws', err),
+          emitOnBegin: false,
+        });
       } catch (err) {
         this.error('ws', err);
       }
@@ -178,6 +208,7 @@ export class ChainFeed implements FeedContext {
 
   private async loop(): Promise<void> {
     while (this.running) {
+      const started = Date.now();
       try {
         await this.pollOnce();
         this.failures = 0;
@@ -197,18 +228,26 @@ export class ChainFeed implements FeedContext {
         };
       });
       this.wake = null;
+      // New-head wake-ups poll at most twice per poll interval (fast chains would burn the budget).
+      const minGap = this.failures > 0 ? 0 : this.opts.pollMs / 2 - (Date.now() - started);
+      if (minGap > 0 && this.running) await new Promise((r) => setTimeout(r, minGap));
     }
   }
 
-  /** Poll the head and process up to MAX_WINDOWS_PER_TICK windows. */
+  /** Poll the head (or take the subscription's) and process up to MAX_WINDOWS_PER_TICK windows. */
   async pollOnce(): Promise<number> {
-    let w = await this.poller.plan();
+    const ws = this.wsHead;
+    let w: PollWindow | null;
+    if (ws && Date.now() - ws.at < 3000 && (this.poller.head === null || ws.block > this.poller.head)) {
+      this.poller.head = ws.block;
+      w = this.poller.nextWindow();
+    } else w = await this.poller.plan();
     this.lastPollAt = this.clockNow();
     let n = 0;
     while (w && n < MAX_WINDOWS_PER_TICK) {
       await this.processWindow(w);
       n++;
-      if (!this.running && n > 0 && this.loopDone) break;
+      if (!this.running && this.loopDone) break;
       w = this.poller.nextWindow();
     }
     return n;
@@ -220,6 +259,8 @@ export class ChainFeed implements FeedContext {
 
   async processWindow(w: PollWindow): Promise<void> {
     this.windowTo = w.to;
+    this.holders.capacity = this.holderCapacity();
+    this.holders.trim();
     const interests: LogInterest[] = [];
     for (const v of this.venues) interests.push(...v.interests(this));
     const logs = await this.poller.fetch(interests, w.from, w.to);
@@ -256,6 +297,16 @@ export class ChainFeed implements FeedContext {
     for (const v of this.venues) v.endWindow?.(this);
     this.poller.markDelivered(all);
     this.poller.commit(w);
+  }
+
+  /**
+   * Tokens whose Transfer logs are followed: their emitter list cannot go out
+   * emitter-less, so an address-limited endpoint (publicnode: 10 per query)
+   * follows only the most active couple of chunks' worth.
+   */
+  private holderCapacity(): number {
+    const per = this.poller.opts.maxAddresses;
+    return per >= 100 ? HOLDER_TOKENS_MAX : per * 2;
   }
 
   private decodeAll(logs: RawLog[]): FeedEvent[] {
@@ -411,6 +462,11 @@ export class ChainFeed implements FeedContext {
 
   trade(t: TokenState, trade: ExternalTrade): void {
     if (t.dormant) this.follow(t, this.tracked.get(t.address)?.venue ?? t.launchpad, trade.at);
+    if (trade.walletTokenBalance === undefined) {
+      // The trader's balance once the transaction is done, from its transfers (tokens followed since launch).
+      const b = this.holders.balanceAfter(trade.txHash, t.address, trade.wallet);
+      if (b !== undefined && b >= 0n) trade = { ...trade, walletTokenBalance: toUnits(b, t.decimals) };
+    }
     const booked = this.world.recordExternalTrade(t, trade);
     this.tracked.touch(t.address, trade.at);
     if (booked) {
@@ -596,6 +652,9 @@ export class ChainFeed implements FeedContext {
       rangeSplits: p.splits,
       evictions: this.tracked.evictions,
       metadataPending: this.meta.pending,
+      holderTokens: this.holders.size,
+      logMaxAddresses: p.maxAddresses,
+      widePoolQueries: p.wideActive,
       venues: Object.fromEntries(this.counters),
       recentErrors: [...this.errors],
     };

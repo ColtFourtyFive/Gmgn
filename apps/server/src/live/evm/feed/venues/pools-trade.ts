@@ -41,6 +41,7 @@ export class PoolsTradeVenue implements Venue {
   readonly id = 'pools-trade';
   /** Created tokens waiting for their pool's first swap (crowd launches wait hours). */
   private readonly pending = new LruMap<string, Pending>(5000);
+  private windowTokens: string[] = [];
 
   constructor(private readonly v4: UniswapV4Venue) {
     v4.addClaimant({ expects: (init) => this.pending.has(init.pool.token), onSwap: (init, ctx) => this.list(init, ctx) });
@@ -69,6 +70,7 @@ export class PoolsTradeVenue implements Venue {
     );
     const pending: Pending = { token: token.toLowerCase(), description: meta.description, website: meta.website, image: meta.image, creator: null, erc20: null };
     this.pending.set(pending.token, pending);
+    this.windowTokens.push(pending.token);
     // The creation tx's sender is the creator.
     return { venue: this, log, kind: 'created', pending, trade: true };
   }
@@ -83,6 +85,14 @@ export class PoolsTradeVenue implements Venue {
     const e = event as CreatedEvent;
     e.pending.creator = ctx.traderOf(e.log);
     if (!e.pending.erc20) this.pending.delete(e.pending.token);
+  }
+
+  launching(): string[] {
+    return this.windowTokens;
+  }
+
+  endWindow(): void {
+    this.windowTokens = [];
   }
 
   /** List the token on its pool's first swap. */

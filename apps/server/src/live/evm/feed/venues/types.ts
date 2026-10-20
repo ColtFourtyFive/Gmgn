@@ -112,6 +112,8 @@ export interface Venue {
   prepare?(events: FeedEvent[], ctx: FeedContext): Promise<void>;
   /** Apply one decoded event to the ledger. */
   apply(event: FeedEvent, ctx: FeedContext): void;
+  /** Tokens whose launch (with its mint) was decoded in this window: their transfers are followed from the start. */
+  launching?(): string[];
   /** End of window: drop per-window scratch state. */
   endWindow?(ctx: FeedContext): void;
   /** ensureToken: load a token this venue launched that the feed has not seen; true when registered. */

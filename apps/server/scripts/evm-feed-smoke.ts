@@ -134,7 +134,8 @@ for (const c of chains) {
     `head ${s.headBlock} processed ${s.processedBlock} lag ${s.lagBlocks} blocks | windows ${s.windows} splits ${s.rangeSplits} skipped ${s.skippedBlocks} | rps ${s.requestsPerSec.toFixed(1)} | connected ${s.connected}`,
   );
   console.log(`native ${CHAINS[c].nativeSymbol} $${s.nativeUsd?.toFixed(2) ?? '-'} (${s.nativePrice?.source ?? 'n/a'}${s.nativePrice?.error ? `, error: ${s.nativePrice.error}` : ''})`);
-  console.log(`tracked ${s.trackedTokens} | ledger tokens ${s.worldTokens} | pools ${s.pools} | metadata pending ${s.metadataPending}`);
+  console.log(`tracked ${s.trackedTokens} | ledger tokens ${s.worldTokens} | pools ${s.pools} | holder books ${s.holderTokens} | metadata pending ${s.metadataPending}`);
+  console.log(`log filters: ${s.logMaxAddresses} emitters per query${s.widePoolQueries ? ', AMM pools fetched emitter-less' : ''}`);
   for (const [venue, v] of Object.entries(s.venues)) {
     if (v.launches + v.trades + v.migrations > 0) console.log(`  ${venue.padEnd(24)} launches ${v.launches}  trades ${v.trades}  migrations ${v.migrations}`);
   }

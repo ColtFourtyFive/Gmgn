@@ -7,10 +7,11 @@ import { describe, expect, it } from 'vitest';
 import type { Hex } from 'viem';
 import { addressTopic, ENTRY_POINTS, TOPIC } from '../src/live/evm/feed/abi';
 import { BlockClock } from '../src/live/evm/feed/clock';
-import { loadEvmFeedSettings } from '../src/live/evm/feed/config';
+import { endpointLogLimits, loadEvmFeedSettings } from '../src/live/evm/feed/config';
 import { BoundedSet, LruMap } from '../src/live/evm/feed/lru';
+import { HolderBook } from '../src/live/evm/feed/holders';
 import { LogPoller, type PollerOptions } from '../src/live/evm/feed/poller';
-import { errorText, isRangeError, isRateLimit, parseRawLog, RequestBudget, type EvmRpc, type LogQuery, type RawLog, type TxInfo } from '../src/live/evm/feed/rpc';
+import { errorText, isRangeError, isRateLimit, parseRawLog, queryShapeLimit, RequestBudget, type EvmRpc, type LogQuery, type RawLog, type TxInfo } from '../src/live/evm/feed/rpc';
 import { isAllowedUrl, isPublicAddress, safeFetchText } from '../src/live/evm/feed/safe-fetch';
 import { TxSenders } from '../src/live/evm/feed/senders';
 import { TrackedTokens } from '../src/live/evm/feed/tracked';
@@ -36,6 +37,9 @@ class FakeRpc implements EvmRpc {
   head = 1000n;
   maxSpan = Infinity;
   rateLimited = false;
+  /** publicnode-like filter limits: emitters per query, and the span of an emitter-less query. */
+  addressLimit = Infinity;
+  emitterlessSpan = Infinity;
   readonly queries: LogQuery[] = [];
   blockCalls: bigint[][] = [];
   txs = new Map<string, TxInfo>();
@@ -51,7 +55,19 @@ class FakeRpc implements EvmRpc {
     this.queries.push(q);
     if (this.rateLimited) throw Object.assign(new Error('rpc'), { shortMessage: 'RPC Request failed.', details: 'method eth_getLogs in batch triggered rate limit', code: -32005 });
     if (Number.isFinite(this.maxSpan) && q.toBlock - q.fromBlock + 1n > BigInt(this.maxSpan)) throw new Error('query returned more than 10000 results');
-    return this.logs.filter((l) => l.blockNumber >= q.fromBlock && l.blockNumber <= q.toBlock && (!q.address || q.address.includes(l.address)));
+    // Messages and codes as publicnode returns them (behind viem's RpcRequestError).
+    if (q.address && q.address.length > this.addressLimit)
+      throw Object.assign(new Error('rpc'), { shortMessage: 'Invalid parameters were provided to the RPC method.', details: `A maximum of ${this.addressLimit} addresses is allowed. No limit on a dedicated node: https://www.allnodes.com/publicnode`, code: -32602 });
+    if (!q.address && q.toBlock - q.fromBlock + 1n > BigInt(Number.isFinite(this.emitterlessSpan) ? this.emitterlessSpan : 1e9))
+      throw Object.assign(new Error('rpc'), { shortMessage: 'RPC Request failed.', details: 'Please specify an address in your request or, to remove restrictions, order a dedicated full node here: https://www.allnodes.com/bnb/host', code: -32701 });
+    const t0 = q.topics?.[0];
+    return this.logs.filter(
+      (l) =>
+        l.blockNumber >= q.fromBlock &&
+        l.blockNumber <= q.toBlock &&
+        (!q.address || q.address.includes(l.address)) &&
+        (!t0 || (Array.isArray(t0) ? t0.includes(l.topics[0]) : t0 === l.topics[0])),
+    );
   }
 
   async blockTimestamps(blocks: bigint[]): Promise<Map<bigint, number>> {
@@ -166,6 +182,60 @@ describe('log poller', () => {
     // pool ids chunked by maxTopicValues
     expect(q.filter((x) => x.address?.[0] === '0xd')).toHaveLength(2);
   });
+
+  const pool = (i: number) => `0xbbbb${i.toString(16).padStart(36, '0')}`;
+
+  it('sends AMM pools emitter-less once they outgrow the address limit, keeping only their logs', async () => {
+    const pools = Array.from({ length: 25 }, (_, i) => pool(i));
+    const stranger = '0xcccc000000000000000000000000000000000001';
+    const logs = [log(901, 0, pools[3]), log(902, 1, stranger), log(903, 2, pools[24], TOPIC.v2Swap), log(903, 3, pools[5], TOPIC.transfer)];
+    const rpc = new FakeRpc(logs);
+    rpc.addressLimit = 10;
+    rpc.emitterlessSpan = 1;
+    const p = new LogPoller(rpc, { ...OPTS, maxAddresses: 10, emitterlessRange: 1 });
+    const interests = [
+      { address: ['0xfac0000000000000000000000000000000000001'], topics: [TOPIC.v2PairCreated] },
+      { address: pools, topics: [[TOPIC.v2Sync, TOPIC.v2Swap]], wide: true },
+    ];
+    const q = p.mergeInterests(interests);
+    expect(q.filter((x) => x.address)).toHaveLength(1); // the factory alone
+    expect(q.filter((x) => !x.address)).toEqual([{ topics: [[TOPIC.v2Sync, TOPIC.v2Swap].sort()], keep: new Set(pools) }]);
+    const got = await p.fetch(interests, 901n, 905n);
+    expect(got.map((l) => l.address)).toEqual([pools[3], pools[24]]); // the stranger's Sync and a Transfer are not ours
+    // one block per emitter-less query; no refusals
+    expect(rpc.queries.filter((x) => !x.address).every((x) => x.fromBlock === x.toBlock)).toBe(true);
+    expect(rpc.queries.filter((x) => !x.address)).toHaveLength(5);
+    expect(p.status()).toMatchObject({ wideActive: true, maxAddresses: 10, emitterlessRange: 1 });
+    // a few pools still go as one address-filtered query
+    const few = p.mergeInterests([{ address: pools.slice(0, 4), topics: [TOPIC.v2Sync], wide: true }]);
+    expect(few).toEqual([{ address: pools.slice(0, 4).sort(), topics: [[TOPIC.v2Sync]] }]);
+  });
+
+  it("learns the node's filter limits from its refusals instead of splitting block ranges", async () => {
+    const pools = Array.from({ length: 30 }, (_, i) => pool(i));
+    const rpc = new FakeRpc([log(950, 0, pools[29]), log(951, 1, pools[0])]);
+    rpc.addressLimit = 10;
+    rpc.emitterlessSpan = 1;
+    const p = new LogPoller(rpc, { ...OPTS }); // assumes 500 / unrestricted
+    const got = await p.fetch([{ address: pools, topics: [TOPIC.v2Sync], wide: true }], 901n, 960n);
+    expect(got).toHaveLength(2);
+    expect(p.status()).toMatchObject({ maxAddresses: 10, emitterlessRange: 1, wideActive: true, splits: 0 });
+    // Transfer-style interests (never emitter-less) chunk to the learned limit
+    const t = p.mergeInterests([{ address: pools, topics: [TOPIC.transfer] }]);
+    expect(t.map((x) => x.address!.length)).toEqual([10, 10, 10]);
+  });
+
+  it('skips ahead sooner while pools are fetched block by block', async () => {
+    const rpc = new FakeRpc();
+    rpc.head = 5000n;
+    const p = new LogPoller(rpc, { ...OPTS, maxAddresses: 2, emitterlessRange: 1, maxLagBlocksNarrow: 100 });
+    p.cursor = 4000n;
+    p.mergeInterests([{ address: [pool(1), pool(2), pool(3), pool(4), pool(5)], topics: [TOPIC.v2Sync], wide: true }]);
+    p.head = 5000n;
+    const w = p.nextWindow()!;
+    expect(p.status().skippedBlocks).toBeGreaterThan(0);
+    expect(5000n - w.from).toBeLessThanOrEqual(100n);
+  });
 });
 
 describe('request budget', () => {
@@ -267,6 +337,48 @@ describe('trader attribution', () => {
   });
 });
 
+describe('holder book', () => {
+  it("gives a wallet its balance after the whole transaction (a trade's own transfer may come after its event)", () => {
+    const z = '0x0000000000000000000000000000000000000000';
+    const b = new HolderBook();
+    b.begin('0xt');
+    const moves = [
+      { token: '0xt', from: z, to: '0xcurve', value: 1000n, txHash: '0x1' }, // mint
+      { token: '0xt', from: '0xcurve', to: '0xa', value: 100n, txHash: '0x2' }, // buy
+      { token: '0xt', from: '0xa', to: '0xb', value: 40n, txHash: '0x3' }, // transfer out...
+      { token: '0xt', from: '0xcurve', to: '0xa', value: 10n, txHash: '0x3' }, // ...and a buy in the same tx
+      { token: '0xother', from: z, to: '0xa', value: 5n, txHash: '0x3' }, // not followed
+    ];
+    b.plan(moves);
+    expect(b.balanceAfter('0x2', '0xt', '0xa')).toBe(100n);
+    expect(b.balanceAfter('0x3', '0xt', '0xa')).toBe(70n);
+    expect(b.balanceAfter('0x3', '0xt', '0xb')).toBe(40n);
+    expect(b.balanceAfter('0x3', '0xother', '0xa')).toBeUndefined();
+    for (const m of moves) b.apply(m);
+    expect(b.balanceOf('0xt', '0xa')).toBe(70n);
+    expect(b.balanceOf('0xt', '0xcurve')).toBe(890n);
+    expect(b.balanceOf('0xt', '0xnobody')).toBe(0n);
+    expect(b.balanceOf('0xother', '0xa')).toBeUndefined();
+    b.drop('0xt');
+    expect(b.has('0xt')).toBe(false);
+  });
+
+  it('past its capacity, the token whose transfers went quiet longest makes room', () => {
+    const z = '0x0000000000000000000000000000000000000000';
+    const b = new HolderBook();
+    b.capacity = 2;
+    b.begin('0xt1');
+    b.begin('0xt2');
+    b.apply({ token: '0xt1', from: z, to: '0xa', value: 1n, txHash: '0x1' }); // t1 active again
+    b.begin('0xt3');
+    expect([...b.tokens()].sort()).toEqual(['0xt1', '0xt3']);
+    b.capacity = 1;
+    b.trim();
+    expect([...b.tokens()]).toEqual(['0xt3']);
+    expect(b.dropped).toBe(2);
+  });
+});
+
 describe('rpc errors and logs', () => {
   it('classifies range vs rate-limit errors from short messages, never the hex request body', () => {
     const viemLike = (details: string, code: number) =>
@@ -279,6 +391,14 @@ describe('rpc errors and logs', () => {
     expect(isRangeError(viemLike('exceed maximum block range: 50', -32000))).toBe(true);
     expect(isRateLimit({ status: 429 })).toBe(true);
     expect(errorText(viemLike('x', 1))).not.toContain('Request body');
+    // filter-shape refusals (publicnode) are neither: splitting the range never helps
+    const tooMany = viemLike('A maximum of 10 addresses is allowed. No limit on a dedicated node: https://www.allnodes.com/publicnode', -32602);
+    expect(queryShapeLimit(tooMany)).toEqual({ kind: 'addresses', max: 10 });
+    expect(isRangeError(tooMany)).toBe(false);
+    const noEmitter = viemLike('Please specify an address in your request or, to remove restrictions, order a dedicated full node here: https://www.allnodes.com/bnb/host', -32701);
+    expect(queryShapeLimit(noEmitter)).toEqual({ kind: 'emitterless' });
+    expect(isRangeError(noEmitter)).toBe(false);
+    expect(queryShapeLimit(viemLike('exceed maximum block range: 50', -32000))).toBeNull();
   });
 
   it('parses JSON-RPC logs (lowercase, bigint blocks, zero timestamps dropped)', () => {
@@ -310,6 +430,14 @@ describe('feed settings', () => {
     expect(s.chains.bsc).toMatchObject({ rps: 25, confirmations: 3 });
     expect(s.ipfsGateways).toEqual(['https://gw.example/ipfs/']);
     expect(loadEvmFeedSettings(chains, {} as NodeJS.ProcessEnv)).toMatchObject({ maxTrackedTokens: 1500, newPairs: true, pruneWorld: true });
+  });
+
+  it('knows the filter limits of publicnode endpoints (overridable)', () => {
+    expect(endpointLogLimits(['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.binance.org'])).toEqual({ maxAddresses: 10, emitterlessRange: 1 });
+    expect(endpointLogLimits(['https://rpc.mainnet.chain.robinhood.com'])).toEqual({ maxAddresses: 500, emitterlessRange: null });
+    const chains = { base: { chain: 'base' as const, rpcUrls: ['https://base-rpc.publicnode.com'], wsUrl: null, privateRpcUrl: null, publicRpcOnly: true } };
+    expect(loadEvmFeedSettings(chains, {} as NodeJS.ProcessEnv).chains.base).toMatchObject({ logMaxAddresses: 10, emitterlessRange: 1 });
+    expect(loadEvmFeedSettings(chains, { BASE_LOG_MAX_ADDRESSES: '5' } as NodeJS.ProcessEnv).chains.base).toMatchObject({ logMaxAddresses: 5 });
   });
 });
 

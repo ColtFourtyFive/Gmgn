@@ -20,7 +20,7 @@ import type { EvmLiveConfig } from '../config';
 import { NativePriceFeed, type NativePriceStatus } from '../price';
 import { ChainFeed, type EvmChainFeedStatus } from './chain-feed';
 import { loadEvmFeedSettings, type EvmFeedSettings } from './config';
-import { RequestBudget, ViemEvmRpc, type EvmRpc } from './rpc';
+import { createUnbatchedClient, RequestBudget, ViemEvmRpc, type EvmRpc } from './rpc';
 import { buildVenues } from './venues/registry';
 
 export interface EvmMarketFeedOptions {
@@ -62,7 +62,10 @@ export class EvmMarketFeed {
       if (!s) continue;
       const info = EVM_CHAINS[cfg.chain];
       const budget = new RequestBudget(s.rps);
-      const rpc = opts.rpcs?.[cfg.chain] ?? new ViemEvmRpc(opts.clients?.[cfg.chain] ?? createEvmPublicClient(cfg), budget, info.multicall3);
+      // eth_getLogs goes through its own unbatched client: one slow log query never holds up a batch.
+      const rpc =
+        opts.rpcs?.[cfg.chain] ??
+        new ViemEvmRpc(opts.clients?.[cfg.chain] ?? createEvmPublicClient(cfg), budget, info.multicall3, undefined, createUnbatchedClient(info.viem, cfg.rpcUrls));
       rpcs[cfg.chain] = rpc;
       const feed = new ChainFeed({
         chain: cfg.chain,
@@ -75,6 +78,8 @@ export class EvmMarketFeed {
         confirmations: s.confirmations,
         rescan: s.rescan,
         backfill: s.backfill,
+        logMaxAddresses: s.logMaxAddresses,
+        emitterlessRange: s.emitterlessRange,
         ipfsGateways: this.settings.ipfsGateways,
         pruneWorld: this.settings.pruneWorld,
         ws: opts.websockets === false || opts.rpcs ? null : createEvmWsClient(cfg),

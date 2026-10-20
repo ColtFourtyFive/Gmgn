@@ -54,6 +54,7 @@ export class ClankerVenue implements Venue {
   private readonly byPool = new LruMap<string, Launch>(2000);
   /** Launches listed recently (dev-buy attribution). */
   private readonly listed = new LruMap<string, Launch>(500);
+  private windowTokens: string[] = [];
 
   constructor(private readonly v4: UniswapV4Venue) {
     v4.addClaimant({
@@ -107,6 +108,7 @@ export class ClankerVenue implements Venue {
       erc20: null,
     };
     this.byPool.set(launch.poolId, launch);
+    this.windowTokens.push(launch.token);
     return { venue: this, log, kind: 'created', launch };
   }
 
@@ -149,6 +151,14 @@ export class ClankerVenue implements Venue {
       socials: meta.socials,
     });
     return !!t;
+  }
+
+  launching(): string[] {
+    return this.windowTokens;
+  }
+
+  endWindow(): void {
+    this.windowTokens = [];
   }
 
   /** ensureToken: a Clanker v4 token on its WETH pool. */

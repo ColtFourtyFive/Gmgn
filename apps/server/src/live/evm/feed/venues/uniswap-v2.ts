@@ -82,13 +82,13 @@ export class UniswapV2Venue implements Venue {
     const pairs = new Set([...this.followedPairs(ctx), ...this.candidates.ids()]);
     this.fetched = pairs;
     const out: LogInterest[] = [{ address: [this.factory], topics: [TOPIC.v2PairCreated] }];
-    if (pairs.size) out.push({ address: [...pairs], topics: [[TOPIC.v2Sync, TOPIC.v2Swap]] });
+    if (pairs.size) out.push({ address: [...pairs], topics: [[TOPIC.v2Sync, TOPIC.v2Swap]], wide: true });
     return out;
   }
 
   followUp(): LogInterest[] {
     const fresh = this.windowNew.filter((p) => !this.fetched.has(p));
-    return fresh.length ? [{ address: fresh, topics: [[TOPIC.v2Sync, TOPIC.v2Swap]] }] : [];
+    return fresh.length ? [{ address: fresh, topics: [[TOPIC.v2Sync, TOPIC.v2Swap]], wide: true }] : [];
   }
 
   decode(log: RawLog, ctx: FeedContext): V2Event | null {

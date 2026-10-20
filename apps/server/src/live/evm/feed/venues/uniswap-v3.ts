@@ -84,13 +84,13 @@ export class UniswapV3Venue implements Venue {
     const pools = new Set([...this.followedPools(ctx).map((p) => p.id), ...this.candidates.ids()]);
     this.fetched = pools;
     const out: LogInterest[] = [{ address: [this.factory], topics: [TOPIC.v3PoolCreated] }];
-    if (pools.size) out.push({ address: [...pools], topics: [this.swapTopic as `0x${string}`] });
+    if (pools.size) out.push({ address: [...pools], topics: [this.swapTopic as `0x${string}`], wide: true });
     return out;
   }
 
   followUp(): LogInterest[] {
     const fresh = this.windowNew.filter((p) => !this.fetched.has(p));
-    return fresh.length ? [{ address: fresh, topics: [this.swapTopic as `0x${string}`] }] : [];
+    return fresh.length ? [{ address: fresh, topics: [this.swapTopic as `0x${string}`], wide: true }] : [];
   }
 
   decode(log: RawLog, ctx: FeedContext): V3Event | null {

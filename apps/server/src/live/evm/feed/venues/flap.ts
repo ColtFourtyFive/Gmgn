@@ -331,6 +331,10 @@ export class FlapVenue implements Venue {
     };
   }
 
+  launching(): string[] {
+    return [...this.launches.keys()];
+  }
+
   endWindow(): void {
     this.launches.clear();
     this.lastSupply.clear();

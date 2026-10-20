@@ -295,6 +295,10 @@ export class PonsVenue implements Venue {
     if (curve) this.forgetCurve(curve);
   }
 
+  launching(): string[] {
+    return [...this.pending.values()].filter((l): l is LaunchEvent => !!l).map((l) => l.token);
+  }
+
   endWindow(): void {
     this.pending.clear();
     this.adopted.clear();

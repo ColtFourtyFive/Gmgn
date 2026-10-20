@@ -5,6 +5,8 @@
 //                              8 on other public RPCs, 25 with a configured provider)
 //   <PREFIX>_FEED_POLL_MS      head poll interval (default: about two blocks, 1-4 s)
 //   <PREFIX>_CONFIRMATIONS     blocks behind the head treated as final (Base / Robinhood 0, BSC / Ethereum 2)
+//   <PREFIX>_LOG_MAX_ADDRESSES emitters per eth_getLogs the endpoint accepts (default 10 on publicnode,
+//                              500 elsewhere; lowered automatically when the endpoint refuses)
 //   EVM_FEED_BACKFILL_BLOCKS   blocks before the head to start from (default 0)
 //   EVM_NEW_PAIRS              list tokens launched straight into a DEX pool ("1" default, "0" off)
 //   EVM_NEW_PAIR_MIN_SWAPS     swaps a fresh pool needs before it is listed (default 2)
@@ -24,6 +26,10 @@ export interface EvmFeedChainSettings {
   backfill: number;
   /** Native volume (whole units) a new pool must trade before it is listed. */
   newPairMinVolume: number;
+  /** Emitters per eth_getLogs the endpoint accepts. */
+  logMaxAddresses: number;
+  /** Block span the endpoint accepts for an emitter-less eth_getLogs (null: the chain's log range). */
+  emitterlessRange: number | null;
 }
 
 export interface EvmFeedSettings {
@@ -45,6 +51,22 @@ const DEFAULTS: Record<EvmChainId, { pollMs: number; confirmations: number; resc
   eth: { pollMs: 4000, confirmations: 2, rescan: 1, publicRps: 8, newPairMinVolume: 0.05 },
 };
 
+/**
+ * Filter limits of the first (preferred) endpoint. publicnode (verified on its
+ * Base, BSC and Ethereum endpoints): at most 10 addresses per query ("A maximum
+ * of 10 addresses is allowed") and emitter-less queries over one block only.
+ */
+export function endpointLogLimits(urls: string[]): { maxAddresses: number; emitterlessRange: number | null } {
+  let host = '';
+  try {
+    host = urls[0] ? new URL(urls[0]).hostname.toLowerCase() : '';
+  } catch {
+    host = '';
+  }
+  if (host === 'publicnode.com' || host.endsWith('.publicnode.com')) return { maxAddresses: 10, emitterlessRange: 1 };
+  return { maxAddresses: 500, emitterlessRange: null };
+}
+
 function num(e: NodeJS.ProcessEnv, key: string): number | null {
   const v = e[key]?.trim();
   if (!v) return null;
@@ -58,6 +80,7 @@ export function loadEvmFeedSettings(chains: Partial<Record<EvmChainId, EvmChainC
     if (!cfg) continue;
     const d = DEFAULTS[cfg.chain];
     const prefix = EVM_CHAINS[cfg.chain].envPrefix;
+    const limits = endpointLogLimits(cfg.rpcUrls);
     out[cfg.chain] = {
       chain: cfg.chain,
       rps: Math.max(1, num(e, `${prefix}_RPC_RPS`) ?? (cfg.publicRpcOnly ? d.publicRps : 25)),
@@ -66,6 +89,8 @@ export function loadEvmFeedSettings(chains: Partial<Record<EvmChainId, EvmChainC
       rescan: d.rescan,
       backfill: Math.max(0, Math.round(num(e, 'EVM_FEED_BACKFILL_BLOCKS') ?? 0)),
       newPairMinVolume: d.newPairMinVolume,
+      logMaxAddresses: Math.max(1, Math.round(num(e, `${prefix}_LOG_MAX_ADDRESSES`) ?? limits.maxAddresses)),
+      emitterlessRange: limits.emitterlessRange,
     };
   }
   const gateways = (e.EVM_IPFS_GATEWAYS?.trim() || 'https://ipfs.filebase.io/ipfs/,https://gateway.pinata.cloud/ipfs/')

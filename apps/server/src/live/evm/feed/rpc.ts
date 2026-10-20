@@ -4,7 +4,7 @@
 // fallback transports) and spends from a per-chain request budget, because
 // public endpoints rate-limit hard.
 
-import { decodeFunctionResult, encodeFunctionData, parseAbi, type Hex, type PublicClient } from 'viem';
+import { createPublicClient, decodeFunctionResult, encodeFunctionData, fallback, http, parseAbi, type Chain, type Hex, type PublicClient } from 'viem';
 
 export interface RawLog {
   /** Emitting contract, lowercase. */
@@ -77,8 +77,21 @@ export function parseRawLog(j: Record<string, unknown>): RawLog {
 
 /** The node refused the query for its size (block span or result count): split the range and retry. */
 export function isRangeError(err: unknown): boolean {
-  if (isRateLimit(err)) return false;
+  if (isRateLimit(err) || queryShapeLimit(err)) return false;
   return /more than \d+|exceed|too (many|large|wide|big)|limit|response size|block range|range (is )?too|query timeout|code -32005/i.test(errorText(err));
+}
+
+/**
+ * The node refused the filter's shape, not its span: too many emitters
+ * ("A maximum of 10 addresses is allowed", publicnode) or no emitter over more
+ * than one block ("Please specify an address in your request").
+ */
+export function queryShapeLimit(err: unknown): { kind: 'addresses'; max: number } | { kind: 'emitterless' } | null {
+  const text = errorText(err);
+  const m = /maximum of (\d+) addresses/i.exec(text);
+  if (m) return { kind: 'addresses', max: Number(m[1]) };
+  if (/specify an address/i.test(text)) return { kind: 'emitterless' };
+  return null;
 }
 
 export function isRateLimit(err: unknown): boolean {
@@ -180,19 +193,43 @@ const MULTICALL_CHUNK = 150;
 const BATCH_CHUNK = 25;
 const RATE_LIMIT_RETRIES = 3;
 
+/** Reject when `p` has not settled within `ms` (the request itself may still finish in the background). */
+export function withDeadline<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export class ViemEvmRpc implements EvmRpc {
   constructor(
     private readonly client: PublicClient,
     private readonly budget: RequestBudget,
     private readonly multicall3: string,
+    /** Longest wait for one JSON-RPC answer, retries included. */
+    private readonly deadlineMs = 25_000,
+    /** Client for eth_getLogs (unbatched: providers throttle log queries inside JSON-RPC batches). */
+    private readonly logsClient: PublicClient = client,
   ) {}
 
   /** One JSON-RPC call within the budget; rate-limit answers are retried with backoff. */
   private async request<T>(method: string, params: unknown[]): Promise<T> {
+    const client = method === 'eth_getLogs' ? this.logsClient : this.client;
     for (let attempt = 0; ; attempt++) {
       await this.budget.take(1);
       try {
-        return (await this.client.request({ method: method as never, params: params as never })) as T;
+        // The client's own retries / fallbacks can stack into minutes on a stuck endpoint: cap the wait so the
+        // window fails fast and is retried on the next poll.
+        return await withDeadline(client.request({ method: method as never, params: params as never }) as Promise<T>, this.deadlineMs, method);
       } catch (err) {
         if (attempt >= RATE_LIMIT_RETRIES || !isRateLimit(err)) throw err;
         await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
@@ -284,4 +321,13 @@ export class ViemEvmRpc implements EvmRpc {
   async storageAt(address: string, slot: Hex): Promise<Hex> {
     return this.request<Hex>('eth_getStorageAt', [address, slot, 'latest']);
   }
+}
+
+/** A read client whose requests are never batched (for eth_getLogs). */
+export function createUnbatchedClient(chain: Chain, urls: string[], timeoutMs = 15_000): PublicClient {
+  const transports = urls.map((u) => http(u, { batch: false, retryCount: 1, retryDelay: 300, timeout: timeoutMs }));
+  // A filter-shape refusal goes straight back to the poller (it adapts the query); the next
+  // endpoint would only hide it behind its own error.
+  const shouldThrow = (err: Error) => queryShapeLimit(err) !== null;
+  return createPublicClient({ chain, transport: transports.length === 1 ? transports[0] : fallback(transports, { rank: false, retryCount: 0, shouldThrow }) });
 }
