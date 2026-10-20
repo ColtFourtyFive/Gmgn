@@ -7,6 +7,7 @@ This brief is the source every marketing doc and asset follows. It replaces the 
 **Trenchscope is a memecoin trading terminal for the trenches.** You trade and track launchpad coins across **Solana, Base, BNB Chain (BSC), Ethereum and Robinhood Chain** from one screen, with **self-custody**: you keep your keys.
 
 - **Timing:** real trading goes live this week. The warm-up teases a real terminal. Launch-day posts say it's live, and are posted only once it is.
+- **Schedule (owner decides before Day 1):** the warm-up is written as Day 1 to Day 7 with launch day after Day 7, which can fall next week. The expected path is that the launch gate passes sooner: launch day is then the first morning after it passes, and the rest of the warm-up compresses around it (`x/WARMUP_WEEK.md` §11.1). If launch posts should instead wait until after Day 7, the owner says so here.
 - **No dates** appear in any post, image or video.
 
 ## Lines
@@ -27,12 +28,13 @@ These are the claims we can make, if the live build has them. Every one exists i
 
 1. **The board:** new launches → near graduation → migrated, in real time, with a curve-progress ring and risk chips on every card.
 2. **Wallet tags:** smart money, KOL, sniper, bundler, insider, dev, whale, fresh wallet and bot.
-   - Every tag has a published definition, shown in its tooltip.
+   - Every tag except KOL runs on a code rule, and our posts publish the rules (ledger §2.2).
+   - **Owner flag:** the in-app tooltips don't state those rules yet, and some are wrong (ledger SC-19t). No post points people at the tooltips until dev rewrites them (check F-8).
 3. **Token audit:** a flag list with a risk level and rug ratio. Holder breakdown by tag. Who funded whom (funding links).
 4. **The risk prompt:** a high-risk buy lists its reasons and asks you to confirm.
 5. **Orders:** market, limit and auto. Auto exits cover take-profit, stop-loss, trailing and a **dev-sell exit**.
    - Also: presets, an anti-MEV option, and all-in cost (fees, impact) before you confirm.
-6. **Speed:** keyboard-first hotkeys and a command palette.
+6. **Speed:** keyboard-first hotkeys and `/` search (ledger SC-30). There's no command palette in the app: it comes back into this list only once the live build has one (owner check F-5, ledger SC-44).
 7. **Tracking:** copy trading, sniper tasks, signals, a wallet monitor, watchlist and alerts.
    - Portfolio and PnL with fees counted.
 8. **Multi-chain:** the five chains above from one terminal.
@@ -55,6 +57,7 @@ These are the claims we can make, if the live build has them. Every one exists i
   - Re-record on live data after launch and swap the assets in.
 - **AI shots** (the trailer and teasers) carry **`AI-generated`**. Turn on X's "Made with AI" label.
 - **Chains in footage:** the current UI lists four chains (SOL, BSC, Base, ETH). Robinhood Chain appears in copy, and in UI only once the live build has it.
+- **Chain marks in footage:** the UI's round chain marks are filled with the chains' brand colours (and eth's is `Ξ`), which this brief forbids. They're recoloured to neutral before any capture, or kept out of frame (ledger §7.11, check F-7).
 
 ## Disclaimers
 
@@ -68,6 +71,7 @@ These are the claims we can make, if the live build has them. Every one exists i
 
 ## Owner checks before launch
 
+- [ ] **Launch build (before Day 1):** each chain the warm-up names, and self-custody, are in the launch build (ledger C-0). This covers teasers only, never "live".
 - [ ] **Chains:** real execution works on each chain the copy names.
 - [ ] **Custody:** self-custody is true. Users hold their keys, and you never touch funds.
 - [ ] **Features:** every feature in a post is in the live build.
