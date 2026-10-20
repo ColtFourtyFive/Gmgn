@@ -8,9 +8,13 @@ import { useState } from 'react';
 import { create } from 'zustand';
 import { TriangleAlert } from 'lucide-react';
 import { Button, Checkbox, Modal } from '@/components/ui';
+import { copy } from '@/copy';
 import { isLiveMode } from '@/lib/mode';
 
 export const LIVE_ACK_KEY = 'ts.liveTradeAck';
+
+/** The dialog only opens in live mode. */
+const LIVE = { mode: 'live' } as const;
 
 /** Acknowledged in this page session (covers browsers where storage is unavailable). */
 let sessionAck = false;
@@ -63,7 +67,7 @@ export function resetLiveTradeAck(): void {
 export function LiveTradeAckDialog() {
   const open = useAckPrompt((s) => s.waiting.length > 0);
   return (
-    <Modal open={open} onClose={() => settle(false)} size="sm" title="Real funds on Solana mainnet" description="Read this once before your first trade.">
+    <Modal open={open} onClose={() => settle(false)} size="sm" title={copy('liveAck.title', LIVE)} description="Read this once before your first trade.">
       <AckBody />
     </Modal>
   );
@@ -76,12 +80,12 @@ function AckBody() {
       <div className="flex items-start gap-2 rounded border border-warn/40 bg-warn/10 p-2.5 text-sm text-fg">
         <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warn" aria-hidden />
         <ul className="flex list-disc flex-col gap-1 pl-4">
-          <li>Orders execute on Solana mainnet with the SOL and tokens in your wallet.</li>
+          <li>{copy('liveAck.wallet', LIVE)}</li>
           <li>Trades are final and can’t be reversed. Memecoins can lose all their value within minutes.</li>
           <li>Network and priority fees are paid even when a transaction fails.</li>
         </ul>
       </div>
-      <Checkbox checked={checked} onChange={setChecked} label="I understand that orders execute on Solana mainnet with real funds" />
+      <Checkbox checked={checked} onChange={setChecked} label={copy('liveAck.checkbox', LIVE)} />
       <div className="-mx-4 -mb-4 mt-1 flex justify-end gap-2 border-t border-line px-4 py-3">
         <Button variant="ghost" onClick={() => settle(false)} data-autofocus>
           Cancel

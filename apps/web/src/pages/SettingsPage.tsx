@@ -1,27 +1,19 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { isChainId, type ChainId, type UserSettings } from '@trenchscope/shared';
-import { EyeOff, Monitor, Save, Settings, ShieldCheck, SlidersHorizontal, UserRound } from 'lucide-react';
+import { Save, Settings } from 'lucide-react';
 import { AccountGate, useSignedIn } from '@/components/account';
-import { AccountSection } from '@/components/account/settings/AccountSection';
-import { BlacklistSection } from '@/components/account/settings/BlacklistSection';
-import { DisplaySettingsForm } from '@/components/account/settings/DisplaySettingsForm';
-import { SecuritySection } from '@/components/account/settings/SecuritySection';
 import { dirtyChains, sameSettings, savable, validateSettings } from '@/components/account/settings/model';
-import { TradingSettings } from '@/components/account/settings/TradingSettings';
+import { visibleSettingsSections, type SettingsSectionProps } from '@/components/account/settings/registry';
 import { UnsavedChangesGuard } from '@/components/account/settings/UnsavedChangesGuard';
 import { Page, PageHeader } from '@/components/layout';
 import { Button, ErrorState, Kbd, Panel, Tabs } from '@/components/ui';
-import { useActiveChain, useEnabledChains, useHotkeys, useIsLive } from '@/hooks';
+import { useCopy } from '@/copy';
+import { useActiveChain, useEnabledChains, useHotkeys, useMode } from '@/hooks';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
-
-type Section = 'trading' | 'display' | 'blacklist' | 'account' | 'security';
-const SECTIONS: Section[] = ['trading', 'display', 'blacklist', 'account'];
-/** Live adds account security (2FA, withdrawal whitelist). */
-const LIVE_SECTIONS: Section[] = [...SECTIONS, 'security'];
 
 export default function SettingsPage() {
   const signedIn = useSignedIn();
@@ -65,11 +57,11 @@ function SettingsLoader() {
 }
 
 function Header({ actions }: { actions?: ReactNode }) {
-  const live = useIsLive();
+  const text = useCopy();
   return (
     <PageHeader
       title="Settings"
-      subtitle={live ? 'Trading presets, display preferences, blacklist, your account and security' : 'Trading presets, display preferences, blacklist and your account'}
+      subtitle={text('settings.subtitle')}
       icon={<Settings size={16} />}
       actions={actions}
     />
@@ -78,10 +70,12 @@ function Header({ actions }: { actions?: ReactNode }) {
 
 function SettingsEditor({ saved }: { saved: UserSettings }) {
   const activeChain = useActiveChain();
-  const live = useIsLive();
+  const mode = useMode();
+  const account = useSession((s) => s.account);
   const [params, setParams] = useSearchParams();
-  const sectionParam = params.get('section') as Section | null;
-  const section: Section = sectionParam && (live ? LIVE_SECTIONS : SECTIONS).includes(sectionParam) ? sectionParam : 'trading';
+  const sections = useMemo(() => visibleSettingsSections(mode, account), [mode, account]);
+  const sectionParam = params.get('section');
+  const section = sections.find((s) => s.id === sectionParam) ?? sections[0];
   const chainParam = params.get('chain');
   const enabledChains = useEnabledChains();
   const chain: ChainId = isChainId(chainParam) && enabledChains.includes(chainParam) ? chainParam : activeChain;
@@ -92,7 +86,6 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
   const errors = useMemo(() => validateSettings(draft), [draft]);
   const errorCount = Object.keys(errors).length;
   const changedChains = useMemo(() => dirtyChains(draft, saved), [draft, saved]);
-  const displayDirty = JSON.stringify(savable(draft).display) !== JSON.stringify(savable(saved).display);
 
   const setParam = (key: string, value: string | null) =>
     setParams(
@@ -148,6 +141,8 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
   }, [dirty]);
 
   const dot = <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="unsaved changes" />;
+  const sectionProps: SettingsSectionProps = { draft, saved, setDraft, errors, changedChains, chain, onChain: (c) => setParam('chain', c) };
+  const Section = section.component;
 
   return (
     <>
@@ -160,33 +155,25 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
         }
       />
       <Tabs
-        value={section}
-        onChange={(s) => setParam('section', s === 'trading' ? null : s)}
+        value={section.id}
+        onChange={(id) => setParam('section', id === sections[0].id ? null : id)}
         aria-label="Settings sections"
         className="mb-3"
-        items={[
-          { value: 'trading', label: <span className="inline-flex items-center gap-1.5">Trading{changedChains.size > 0 && dot}</span>, icon: <SlidersHorizontal size={13} /> },
-          { value: 'display', label: <span className="inline-flex items-center gap-1.5">Display{displayDirty && dot}</span>, icon: <Monitor size={13} /> },
-          { value: 'blacklist', label: 'Blacklist', icon: <EyeOff size={13} /> },
-          { value: 'account', label: 'Account', icon: <UserRound size={13} /> },
-          ...(live ? [{ value: 'security' as const, label: 'Security', icon: <ShieldCheck size={13} /> }] : []),
-        ]}
+        items={sections.map((s) => ({
+          value: s.id,
+          label: s.dirty ? (
+            <span className="inline-flex items-center gap-1.5">
+              {s.title}
+              {s.dirty(sectionProps) && dot}
+            </span>
+          ) : (
+            s.title
+          ),
+          icon: <s.icon size={13} />,
+        }))}
       />
       <div role="tabpanel">
-        {section === 'trading' && (
-          <TradingSettings
-            chain={chain}
-            onChain={(c) => setParam('chain', c)}
-            value={draft.trade[chain]}
-            onChange={(next) => setDraft((d) => ({ ...d, trade: { ...d.trade, [chain]: next } }))}
-            errors={errors}
-            dirty={changedChains}
-          />
-        )}
-        {section === 'display' && <DisplaySettingsForm value={draft.display} onChange={(display) => setDraft((d) => ({ ...d, display }))} errors={errors} />}
-        {section === 'blacklist' && <BlacklistSection />}
-        {section === 'account' && <AccountSection />}
-        {section === 'security' && <SecuritySection />}
+        <Section {...sectionProps} />
       </div>
 
       {dirty && (

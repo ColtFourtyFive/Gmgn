@@ -58,3 +58,8 @@ export function sameSettings(a: UserSettings, b: UserSettings): boolean {
 export function dirtyChains(draft: UserSettings, saved: UserSettings): Set<ChainId> {
   return new Set(CHAIN_IDS.filter((c) => JSON.stringify(draft.trade[c]) !== JSON.stringify(saved.trade[c])));
 }
+
+/** Display preferences differ, theme aside (for the "unsaved" dot on the Display tab). */
+export function displayDirty(draft: UserSettings, saved: UserSettings): boolean {
+  return JSON.stringify(savable(draft).display) !== JSON.stringify(savable(saved).display);
+}

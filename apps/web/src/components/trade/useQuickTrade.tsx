@@ -3,8 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { formatCompact, formatNative, type ChainId, type SwapRequest } from '@trenchscope/shared';
 import { ConfirmDialog } from '@/components/account/ConfirmDialog';
 import { Checkbox } from '@/components/ui';
+import { useCopy } from '@/copy';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
-import { useIsLive } from '@/hooks/useMode';
 import { useSwap } from '@/hooks/useSwap';
 import { nativeSymbol } from '@/lib/chain';
 import { isLiveMode } from '@/lib/mode';
@@ -58,7 +58,7 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
 } {
   const trade = useTradeSettings(chain);
   const { confirmTrades } = useDisplaySettings();
-  const live = useIsLive();
+  const text = useCopy(chain);
   const { swap, pending } = useSwap();
   const qc = useQueryClient();
   const [active, setActive] = useState<string | null>(null);
@@ -114,13 +114,9 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
       onConfirm={() => confirm && (!risky || ack) && run(confirm)}
       title={confirm ? (risky ? `High-risk token: ${name}` : `${label} of ${name}?`) : ''}
       description={
-        live
-          ? risky
-            ? `${label} with preset ${trade.activeBuyPreset}. Automated security checks flagged this token. This trade uses real funds on Solana mainnet.`
-            : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. Executes on Solana mainnet with real funds.`
-          : risky
-            ? `${label} with preset ${trade.activeBuyPreset}. Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.`
-            : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. Paper trade — no real funds.`
+        risky
+          ? `${label} with preset ${trade.activeBuyPreset}. ${text('trade.confirm.flagged')}`
+          : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. ${text('trade.confirm.funds')}`
       }
       confirmLabel={gated ? `${verb} anyway` : verb}
       tone={side === 'sell' ? 'sell' : 'buy'}

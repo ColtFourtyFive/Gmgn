@@ -1,72 +1,26 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
-import { isChainId } from '@trenchscope/shared';
+import { Suspense, useEffect } from 'react';
+import { Route, Routes } from 'react-router-dom';
 import AppShell from '@/components/layout/AppShell';
-import { switchChainPath } from '@/components/layout/nav';
-import { useEnabledChains, useIsLive } from '@/hooks/useMode';
-import { lastChain, rememberChain } from '@/lib/chain';
-import { defaultChain } from '@/lib/mode';
+import { ChainGuard } from '@/routeGuards';
+import { ROUTES, routePath, type AppRoute } from '@/routes';
 import { useSession } from '@/store/session';
 
-const TrenchesPage = lazy(() => import('@/pages/TrenchesPage'));
-const TrendingPage = lazy(() => import('@/pages/TrendingPage'));
-const NewPairsPage = lazy(() => import('@/pages/NewPairsPage'));
-const NarrativesPage = lazy(() => import('@/pages/NarrativesPage'));
-const TokenPage = lazy(() => import('@/pages/TokenPage'));
-const WalletPage = lazy(() => import('@/pages/WalletPage'));
-const LeaderboardPage = lazy(() => import('@/pages/LeaderboardPage'));
-const MonitorPage = lazy(() => import('@/pages/MonitorPage'));
-const SignalsPage = lazy(() => import('@/pages/SignalsPage'));
-const CopyTradePage = lazy(() => import('@/pages/CopyTradePage'));
-const SniperPage = lazy(() => import('@/pages/SniperPage'));
-const LaunchPage = lazy(() => import('@/pages/LaunchPage'));
-const CalloutsPage = lazy(() => import('@/pages/CalloutsPage'));
-const PortfolioPage = lazy(() => import('@/pages/PortfolioPage'));
-const WatchlistPage = lazy(() => import('@/pages/WatchlistPage'));
-const AlertsPage = lazy(() => import('@/pages/AlertsPage'));
-const RewardsPage = lazy(() => import('@/pages/RewardsPage'));
-const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
-const UiGalleryPage = lazy(() => import('@/pages/UiGalleryPage'));
-
-/**
- * Validates :chain and remembers it. Unknown chains redirect to the last used
- * chain (demo) or the first chain this deployment serves (live); a known chain
- * the deployment does not serve (live: anything but Solana) opens the same
- * section on the first served chain.
- */
-export function ChainGuard({ children }: { children: React.ReactNode }) {
-  const { chain } = useParams();
-  const { pathname, search } = useLocation();
-  const enabled = useEnabledChains();
-  const live = useIsLive();
-  const valid = isChainId(chain);
-  const served = valid && enabled.includes(chain);
-  useEffect(() => {
-    if (served) rememberChain(chain);
-  }, [chain, served]);
-  if (!valid) return <Navigate to={`/${live ? defaultChain() : lastChain()}/trenches`} replace />;
-  if (!served) return <Navigate to={{ pathname: switchChainPath(pathname, defaultChain()) ?? `/${defaultChain()}/trenches`, search }} replace />;
-  return <>{children}</>;
-}
-
-/** Pages the live deployment does not offer (token launch): live visitors land on the chain's trenches. */
-export function DemoOnly({ children }: { children: React.ReactNode }) {
-  const live = useIsLive();
-  const { chain } = useParams();
-  if (live) return <Navigate to={`/${isChainId(chain) ? chain : defaultChain()}/trenches`} replace />;
-  return <>{children}</>;
-}
-
-/** `/` opens the last used chain's trenches, keeping the query string (referral links are `/?ref=CODE`). */
-export function RootRedirect() {
-  const { search, hash } = useLocation();
-  useEnabledChains(); // re-resolve once meta confirms the chains
-  return <Navigate to={{ pathname: `/${defaultChain()}/trenches`, search, hash }} replace />;
-}
+export { ChainGuard, DemoOnly, RootRedirect } from '@/routeGuards';
 
 function PageFallback() {
   return <div className="flex h-full min-h-[40vh] items-center justify-center text-sm text-muted">Loading…</div>;
+}
+
+/** A row's element: the page inside its guard, inside ChainGuard when chain-scoped. */
+function routeElement({ component: Page, chainScoped, guard: Guard }: AppRoute) {
+  const page = Guard ? (
+    <Guard>
+      <Page />
+    </Guard>
+  ) : (
+    <Page />
+  );
+  return chainScoped ? <ChainGuard>{page}</ChainGuard> : page;
 }
 
 export default function App() {
@@ -75,38 +29,13 @@ export default function App() {
     void init();
   }, [init]);
 
-  const chainRoute = (path: string, el: React.ReactNode) => <Route path={`/:chain/${path}`} element={<ChainGuard>{el}</ChainGuard>} />;
-
   return (
     <AppShell>
       <Suspense fallback={<PageFallback />}>
         <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          {chainRoute('trenches', <TrenchesPage />)}
-          {chainRoute('trending', <TrendingPage />)}
-          {chainRoute('new-pairs', <NewPairsPage />)}
-          {chainRoute('narratives', <NarrativesPage />)}
-          {chainRoute('token/:address', <TokenPage />)}
-          {chainRoute('address/:address', <WalletPage />)}
-          {chainRoute('leaderboard', <LeaderboardPage />)}
-          {chainRoute('monitor', <MonitorPage />)}
-          {chainRoute('signals', <SignalsPage />)}
-          {chainRoute('copytrade', <CopyTradePage />)}
-          {chainRoute('sniper', <SniperPage />)}
-          {chainRoute(
-            'launch',
-            <DemoOnly>
-              <LaunchPage />
-            </DemoOnly>,
-          )}
-          {chainRoute('callouts', <CalloutsPage />)}
-          <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/watchlist" element={<WatchlistPage />} />
-          <Route path="/alerts" element={<AlertsPage />} />
-          <Route path="/rewards" element={<RewardsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/_ui" element={<UiGalleryPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+          {ROUTES.map((r) => (
+            <Route key={routePath(r)} path={routePath(r)} element={routeElement(r)} />
+          ))}
         </Routes>
       </Suspense>
     </AppShell>
