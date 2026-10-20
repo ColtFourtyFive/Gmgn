@@ -963,6 +963,12 @@ export interface SwapRequest extends QuoteRequest {
 
 export interface SwapReceipt {
   ok: boolean;
+  /**
+   * Outcome; absent means 'filled' when ok, else 'failed'. 'pending' (live mode): the transaction was
+   * sent (txHash set) and its result is not known yet. It may still land, so a pending swap must never
+   * be treated as nothing spent: the final receipt follows as a 'fill' push on the user channel.
+   */
+  status?: 'filled' | 'pending' | 'failed';
   error?: string;
   trade?: Trade;
   nativeAmount: number;
