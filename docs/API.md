@@ -9,12 +9,19 @@ Errors: non-2xx with `{ error: string, code?: string }`. Unknown token/wallet �
 `:chain` is one of `sol | bsc | base | eth`. Query params that carry objects (filters) are
 JSON-encoded strings (`?filters=%7B...%7D`).
 
+The server runs in **demo** (`MODE=demo`, simulator + paper balances) or **live** (`MODE=live`, real
+Solana) mode; `GET /api/meta` says which (`mode`, `enabledChains`). In live mode only `sol` is served:
+a request naming another chain in its path, query or body answers `400 chain_not_enabled` (`all`
+stays allowed), and so does a WebSocket `sub` to such a channel (as an `error` frame). Live-only
+endpoints, rules and error codes are in [Live mode](#live-mode) below; the runbook is
+[LIVE.md](LIVE.md).
+
 ## Meta & search
 
 | Method | Path | Query / body | Response |
 |---|---|---|---|
 | GET | `/api/health` | | `{ ok, now, tokens, clients, tps }` |
-| GET | `/api/meta` | | `MetaResponse` (`chains[].congestion` and congestion-scaled `chains[].priorityFee`, see below) |
+| GET | `/api/meta` | | `MetaResponse` (`chains[].congestion` and congestion-scaled `chains[].priorityFee`, see below; `mode`, `enabledChains`, `demoUrl`; live: `live` = `LiveStatus` `{ feedConnected, lastEventAt, rpcHealthy, signer, tradingEnabled, trackedTokens, problems }`, `launchpads` = pump.fun only, `platformFeeRate` from `PLATFORM_FEE_BPS`) |
 | GET | `/api/search` | `q` (name, symbol, token address, wallet address, KOL label), `chain?` (a chain or `all`) | `SearchResult` (max 20 tokens, 10 wallets) |
 
 ### Network congestion
@@ -141,11 +148,12 @@ label "N more checks", carrying the rest); impacts add up to `100 − score` (be
 | POST | `/api/auth/guest` | `{ referralCode? }` | `AuthResponse` (instant paper account; `account.isGuest` true) |
 | POST | `/api/auth/register` | `{ username, password, referralCode? }` | `AuthResponse` (called with a guest's token, upgrades that guest in place; a code binds only before the account's first trade, so a guest that already traded keeps `referredBy: null`) |
 | POST | `/api/auth/login` | `{ username, password }` | `AuthResponse` (401 `invalid_credentials` for a wrong username or password; a 🔒 endpoint's 401 for a missing or revoked session is `unauthorized`) |
+| POST | `/api/auth/password` 🔒 | `{ currentPassword, newPassword, code? }` | `AuthResponse` (every session of the account is signed out and a fresh one returned; live: `newPassword` 10+ characters and, with 2FA on, a TOTP `code`) |
 | POST | `/api/auth/logout` 🔒 | | `{ ok: true }` |
 | GET | `/api/me` 🔒 | | `Account` |
 | GET | `/api/settings` 🔒 | | `UserSettings` |
 | PUT | `/api/settings` 🔒 | deep-partial `UserSettings` | `UserSettings` |
-| POST | `/api/wallet/faucet` 🔒 | `{ chain }` | `UserWallet` (tops the paper wallet back up to the starter balance; 1/min/chain) |
+| POST | `/api/wallet/faucet` 🔒 | `{ chain }` | `UserWallet` (tops the paper wallet back up to the starter balance; 1/min/chain; live: `403 not_available_in_live`) |
 | GET | `/api/follows` 🔒 | `?chain=` | `FollowedWallet[]` (`label` / `tags`: the wallet's current public label and platform tags) |
 | POST | `/api/follows` 🔒 | `{ chain, address, remark?, group?, notify? }` | `FollowedWallet` |
 | PATCH | `/api/follows/:chain/:address` 🔒 | `{ remark?, group?, notify? }` | `FollowedWallet` |
@@ -245,8 +253,8 @@ fires on sells by its own account's wallets (a launcher's own sells).
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| GET | `/api/launch/config` | | `LaunchConfig`: launchpad curves per chain (graduation market cap at the current native price), `launchFeeNative`, `glyphs` + `glyphNarratives`, `reservedTickers`, `limits` |
-| POST | `/api/launch` 🔒 | `LaunchRequest` | `LaunchResponse` `{ token: TokenDetail, receipts: SwapReceipt[] }` |
+| GET | `/api/launch/config` | | `LaunchConfig`: launchpad curves per chain (graduation market cap at the current native price), `launchFeeNative`, `glyphs` + `glyphNarratives`, `reservedTickers`, `limits` (live: `403 not_available_in_live`) |
+| POST | `/api/launch` 🔒 | `LaunchRequest` | `LaunchResponse` `{ token: TokenDetail, receipts: SwapReceipt[] }` (live: `403 not_available_in_live`) |
 
 Reserved tickers (`LaunchConfig.reservedTickers`): well-known memecoins, the chains' native and stable
 assets (`SOL`, `ETH`, `BNB`, `USDC`, `USDT`, `WETH`) and the brand (`TRENCH`, `TRENCHSCOPE`). A symbol, or a
@@ -284,6 +292,97 @@ A-Z0-9 removed (so `Ѕ.О.L`, `ＵＳＤＴ`, `ΒΝΒ` and `Trеnch Ѕcope` are 
   (`level: 'success'`). Launched tokens are never pruned.
 - At most 5 launches per account per hour (429 `rate_limited`, `retry-after` = seconds until the oldest
   launch of the hour ages out).
+
+## Live mode
+
+Everything above applies in live mode too (same DTOs, same channels), with real data: tokens come
+from the PumpPortal feed (pump.fun launches, trades, migrations) or load on demand from the chain
+when a page, search or trade names an unseen mint (404 when it is not a mint we can price);
+`TokenSummary` / `TokenRef` may carry an https `imageUrl` from the token's metadata; a token's
+`launchpad` is `pump` (or `''` for tokens from other venues) and wallets' / tokens' `createdAt` may be
+`0` when unknown. The differences:
+
+### Accounts and security
+
+- `POST /api/auth/guest` → `403 guest_disabled`. `POST /api/auth/register` requires a 10+ character
+  password and provisions the account's embedded Solana wallet before the account exists: no signer or
+  a provider failure → `503 wallets_unavailable` and nothing is created. `Account.wallets` holds `sol`
+  only (its address is the embedded wallet); `Account.twoFactorEnabled` is set.
+- `POST /api/auth/login` takes `code` (a TOTP or recovery code) when 2FA is on: missing or wrong →
+  `401 totp_required`. Sessions expire after `LIVE_SESSION_TTL_DAYS` (14) without use (sliding).
+- Faucet and token launch (`/api/launch`, `/api/launch/config`) → `403 not_available_in_live`.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/security` 🔒 | | `SecurityStatus` `{ twoFactorEnabled, whitelist, whitelistDelayMs, recentEvents }` |
+| POST | `/api/security/2fa/setup` 🔒 | | `TotpSetup` `{ secret, otpauthUrl }` (pending until enabled; `409 two_factor_enabled` when on; `503 two_factor_unavailable` without `SECRETS_KEY`) |
+| POST | `/api/security/2fa/enable` 🔒 | `{ code }` | `TotpEnableResponse` `{ enabled: true, recoveryCodes }` (10 codes, shown once) |
+| POST | `/api/security/2fa/disable` 🔒 | `{ code }` (TOTP or recovery code) | `{ enabled: false }`; every session is signed out, the caller's too |
+| POST | `/api/security/whitelist` 🔒 | `{ chain: 'sol', address, label, code }` (TOTP) | `WhitelistEntry` (usable from `activeAt` = now + `WHITELIST_DELAY_HOURS`; relabelling keeps `activeAt`; at most 20) |
+| POST | `/api/security/whitelist/remove` 🔒 | `{ chain: 'sol', address, code }` (TOTP) | `{ ok: true }` |
+
+Each TOTP code works once (replay-protected per 30 s step). Five invalid codes within 10 minutes
+lock code checks for 15 minutes (`429 rate_limited` with `retry-after`). Recovery codes work for
+sign-in and for turning 2FA off only. In demo mode the security routes answer `403 not_available_in_demo`.
+
+### Funding (embedded wallet)
+
+| Method | Path | Body / query | Response |
+|---|---|---|---|
+| GET | `/api/wallet/deposit` 🔒 | `?chain=sol` | `DepositInfo` `{ chain, address, feeReserve, commitment }` |
+| GET | `/api/wallet/transfers` 🔒 | `?limit=` (1-200, default 50) | `WalletTransfer[]` newest first (deposits and withdrawals) |
+| POST | `/api/wallet/refresh` 🔒 | `{ chain: 'sol' }` | `UserWallet` re-read from chain (throttled to one read per 3 s; `503 wallets_unavailable` without RPC) |
+| POST | `/api/wallet/withdraw` 🔒 | `WithdrawRequest` `{ chain: 'sol', to, mint?, amount, code, clientId? }` | `WalletTransfer` (`confirmed`, `failed`, or `sent` while still confirming in the background) |
+
+- Balances (SOL and every SPL / Token-2022 holding) are read from chain every 20 s for accounts active
+  in the last 15 minutes and shortly after each fill or withdrawal, and pushed on `user` → `balance`.
+  Holdings of tokens the World has not seen are loaded on demand. Deposits from other wallets are
+  detected by signature scan, listed in `/transfers` and notified.
+- Withdrawals check, in order (each refusal audited): 2FA enabled (`403 two_factor_required`), a valid
+  TOTP `code` (`401 totp_required`), a valid destination (`400 invalid_input`), an active whitelisted
+  address (`403 address_not_whitelisted`), at most 3 per minute and 20 per hour (`429 rate_limited`),
+  then the balance (`400 insufficient_balance`: SOL keeps `feeReserve` = 0.003 SOL back; SPL needs SOL
+  for the fee and the destination token account's rent). `amount` is in display units and is rounded
+  **down** to the mint's real decimals. A retry with the same `clientId` returns the recorded transfer
+  and never sends twice. In demo mode these routes answer `403 not_available_in_demo`.
+
+### Trading
+
+- Quotes are real: the pump.fun curve from chain reserves while a token is on its curve, otherwise
+  the Jupiter Swap API (`Quote.venue` names the route). `platformFeeNative` uses `PLATFORM_FEE_BPS`.
+- Swaps sign and send a real transaction from the account's embedded wallet: anti-MEV presets go to the
+  Jito block engine only (with the preset's tip), others to RPC with preflight. A 200 receipt with
+  `ok: false` covers trade-level failures (no route or liquidity, insufficient SOL, proceeds below
+  fees, an order aborted by its guard, expired before landing). Slippage is enforced on-chain by the
+  instruction's bound (minimum out, or the curve's maximum SOL cost). A receipt with `ok: false` **and a `txHash`** means the transaction
+  was sent and is still confirming (or landed but its fill could not be read yet): its fill is pushed
+  on `user` → `fill` when it lands; nothing is ever re-sent. Swap `clientId`s replay their first
+  receipt for 15 minutes.
+- `503 trading_unavailable`: no RPC, no signer, the account's wallet not provisioned, the router or
+  RPC unreachable, signing refused, or a malformed fee wallet. `502 tx_failed`: the RPC or block engine
+  refused the transaction (preflight), or it landed and failed on-chain (the message names the reason,
+  e.g. slippage exceeded); nothing but the network fee is spent in the latter case.
+- Orders, TP/SL, copy trades and snipes use the same path; a 502/503 becomes a failed receipt for them
+  (copy-trade auto-pause counts it).
+
+### Live error codes
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `chain_not_enabled` | A chain other than `enabledChains` in path / query / body (WS: `error` frame on `sub`) |
+| 400 | `insufficient_balance` | Withdrawal above the spendable balance |
+| 401 | `totp_required` | 2FA code missing or wrong (sign-in, withdrawal, whitelist, password change) |
+| 403 | `guest_disabled` | Guest sign-up in live mode |
+| 403 | `not_available_in_live` | Faucet, token launch, launch config |
+| 403 | `not_available_in_demo` | Live-only wallet and security routes on a demo server |
+| 403 | `two_factor_required` | Withdrawal without 2FA enabled |
+| 403 | `address_not_whitelisted` | Withdrawal destination not an active whitelisted address |
+| 409 | `two_factor_enabled` | 2FA setup while it is already on |
+| 429 | `rate_limited` | 2FA code lock, withdrawal rate, sign-in and swap limits (with `retry-after`) |
+| 502 | `tx_failed` | Transaction refused at send or failed on-chain |
+| 503 | `wallets_unavailable` | No signer / provider failure at registration, no RPC for wallet reads |
+| 503 | `trading_unavailable` | Trading prerequisites missing or a dependency unreachable |
+| 503 | `two_factor_unavailable` | `SECRETS_KEY` missing or wrong (2FA can neither be set up nor checked) |
 
 ## WebSocket `/ws`
 
@@ -334,7 +433,8 @@ Every response (API, errors and the served SPA) carries:
 - `content-security-policy`: `default-src 'self'`; `script-src 'self'` plus the `'sha256-…'` hash of each
   inline `<script>` in the built `index.html` (computed at startup from `WEB_DIST`; the theme bootstrap);
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (style attributes in component and chart
-  markup); `font-src 'self' https://fonts.gstatic.com data:`; `img-src 'self' data: blob:`;
+  markup); `font-src 'self' https://fonts.gstatic.com data:`; `img-src 'self' data: blob:` (live mode
+  adds `https:` for token images from their metadata);
   `connect-src 'self' ws: wss:`; `manifest-src 'self'`; `worker-src 'self'`; `object-src 'none'`;
   `base-uri 'self'`; `form-action 'self'`; `frame-ancestors 'none'`.
 - `x-content-type-options: nosniff`, `referrer-policy: strict-origin-when-cross-origin`,

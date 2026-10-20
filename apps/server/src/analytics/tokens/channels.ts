@@ -264,7 +264,14 @@ export class TokenChannels {
       onUnsubscribe: forgetList,
     });
     hub.register('token', {
-      onSubscribe: (sub) => this.onTokenSubscribe(sub),
+      onSubscribe: (sub) => {
+        // Live mode: a mint not loaded yet (subscribed before or without the REST page) loads first.
+        const [, chain, address] = sub.ch.split(':');
+        if (this.ctx.config.mode === 'live' && chain && address && isChainId(chain) && !this.tokenFor(sub.ch) && this.ctx.market.ensureToken) {
+          return this.ctx.market.ensureToken(chain, address).then(() => this.onTokenSubscribe(sub));
+        }
+        return this.onTokenSubscribe(sub);
+      },
       onUnsubscribe: (sub) => this.onTokenUnsubscribe(sub),
     });
 

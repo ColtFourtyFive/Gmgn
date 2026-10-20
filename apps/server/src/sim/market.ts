@@ -162,6 +162,17 @@ export class MarketSim implements MarketSource {
     return null;
   }
 
+  /** Simulated tokens exist or they do not: a plain lookup. */
+  async ensureToken(chain: ChainId, address: string): Promise<TokenState | null> {
+    const t = this.world.tokens.get(address);
+    return t && t.chain === chain ? t : null;
+  }
+
+  ensureWallet(chain: ChainId, address: string): WalletState | null {
+    const w = this.world.wallets.get(address);
+    return w && w.chain === chain ? w : null;
+  }
+
   seedPopulation(): void {
     const rng = this.world.rng;
     this.roster.seed();

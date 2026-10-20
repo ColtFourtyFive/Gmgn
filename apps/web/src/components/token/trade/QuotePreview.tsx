@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import { Compact, Native, Pct, Price, Usd } from '@/components/common';
 import { Skeleton, Spinner } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useIsLive } from '@/hooks/useMode';
 import { api } from '@/lib/api';
 import { errorMessage, formatNativeFor } from '@/lib/format';
 import { useSession } from '@/store/session';
@@ -130,7 +131,14 @@ export function QuotePreview(props: QuotePreviewProps) {
 }
 
 function QuoteBody({ query, chain, symbol, side, nativeUsd, signedIn, hasAmount }: QuotePreviewProps) {
-  if (!signedIn) return <p className="rounded border border-dashed border-line px-2 py-1.5 text-xs text-muted">Live quotes (output, price impact, fees) appear once you start paper trading.</p>;
+  const live = useIsLive();
+  if (!signedIn) {
+    return (
+      <p className="rounded border border-dashed border-line px-2 py-1.5 text-xs text-muted">
+        Live quotes (output, price impact, fees) appear once you {live ? 'sign in' : 'start paper trading'}.
+      </p>
+    );
+  }
   if (!hasAmount) return null;
   const q = query.data;
   if (query.isError && !q) {

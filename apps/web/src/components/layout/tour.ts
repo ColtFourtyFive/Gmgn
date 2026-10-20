@@ -16,6 +16,8 @@ export interface TourStep {
   body: string;
   /** Copy for the phone tour when the desktop copy mentions hover or hotkeys. */
   phoneBody?: string;
+  /** Copy for the live deployment when the demo copy mentions paper wallets or other chains. */
+  liveBody?: string;
   /**
    * Selectors of the element to highlight, in order of preference: the first
    * selector with a visible match wins. No match shows the card centered.
@@ -38,6 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'chain',
     title: 'Pick a chain',
     body: 'Solana, BNB Chain, Base or Ethereum: every page follows this switch, and your paper wallet has funds on each.',
+    liveBody: 'Trenchscope trades Solana: pump.fun launches and their DEX pools, from your own embedded wallet. Deposit SOL from the account menu to start.',
     // A data hook, not the accessible name: Select names its trigger with aria-labelledby.
     target: ['[data-tour="chain"]'],
     placement: 'bottom-end',
@@ -101,11 +104,11 @@ export function tourPage(pathname: string): TourPage {
   return activeSection(pathname) === 'trenches' ? 'trenches' : 'other';
 }
 
-/** Steps of the tour on a page, desktop or phone (phones get their own copy where a step has one). */
-export function resolveTourSteps(steps: TourStep[], ctx: { page: TourPage; mobile: boolean }): TourStep[] {
+/** Steps of the tour on a page, desktop or phone (phones get their own copy where a step has one; live its live copy). */
+export function resolveTourSteps(steps: TourStep[], ctx: { page: TourPage; mobile: boolean; live?: boolean }): TourStep[] {
   return steps
     .filter((s) => (!s.page || s.page === ctx.page) && !(ctx.mobile && s.desktopOnly))
-    .map((s) => (ctx.mobile && s.phoneBody ? { ...s, body: s.phoneBody } : s));
+    .map((s) => (ctx.live && s.liveBody ? { ...s, body: s.liveBody } : ctx.mobile && s.phoneBody ? { ...s, body: s.phoneBody } : s));
 }
 
 /** Where a tour started on `pathname` begins: Trenches unless already on a page with its own steps (null = stay). */

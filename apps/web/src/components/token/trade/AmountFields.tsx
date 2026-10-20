@@ -7,6 +7,7 @@ import { Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native, Pct, Price, Usd } from '@/components/common';
 import { Button, NumberInput, SegmentedControl } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 
 function quickClass(active: boolean, tone: 'buy' | 'sell') {
   return clsx(
@@ -40,6 +41,7 @@ export const BuyAmount = forwardRef<HTMLInputElement, BuyAmountProps>(function B
 ) {
   const symbol = CHAINS[chain].nativeSymbol;
   const over = balance !== null && value !== null && max !== null && value > max;
+  const live = useIsLive();
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -54,7 +56,7 @@ export const BuyAmount = forwardRef<HTMLInputElement, BuyAmountProps>(function B
           )}
           {onTopUp && balance !== null && (max === null || max <= quickAmounts[0]) && (
             <Button size="xs" variant="ghost" className="!h-5 !px-1 text-accent" loading={topUpPending} onClick={onTopUp}>
-              Top up
+              {live ? 'Deposit' : 'Top up'}
             </Button>
           )}
         </span>

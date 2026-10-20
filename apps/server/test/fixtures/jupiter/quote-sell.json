@@ -1,0 +1,28 @@
+{
+  "inputMint": "<MINT>",
+  "inAmount": "35000000000000",
+  "outputMint": "So11111111111111111111111111111111111111112",
+  "outAmount": "950000000",
+  "otherAmountThreshold": "902500000",
+  "swapMode": "ExactIn",
+  "slippageBps": 500,
+  "platformFee": null,
+  "priceImpactPct": "0.0101",
+  "routePlan": [
+    {
+      "swapInfo": {
+        "ammKey": "<AMM>",
+        "label": "Pump.fun Amm",
+        "inputMint": "<MINT>",
+        "outputMint": "So11111111111111111111111111111111111111112",
+        "inAmount": "35000000000000",
+        "outAmount": "950000000",
+        "feeAmount": "2375000",
+        "feeMint": "So11111111111111111111111111111111111111112"
+      },
+      "percent": 100
+    }
+  ],
+  "contextSlot": 300000200,
+  "timeTaken": 0.01
+}

@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, defineConfig, devices } from '@playwright/test';
 
-const PORT = 8799;
+// E2E_PORT lets parallel runs (several worktrees / engineers) use their own API port.
+const PORT = Number(process.env.E2E_PORT) || 8799;
 const BASE_URL = `http://localhost:${PORT}`;
 const WEB_DIST = fileURLToPath(new URL('./dist', import.meta.url));
 const SERVER_DIR = fileURLToPath(new URL('../server', import.meta.url));

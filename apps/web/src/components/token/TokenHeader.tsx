@@ -7,7 +7,7 @@ import { memo } from 'react';
 import { getLaunchpad, shortAddress, type TokenDetail } from '@trenchscope/shared';
 import { Copy as CopyIcon, Ellipsis, Eye, EyeOff, Flame, Link2, Loader2, Rocket, ShieldAlert, Waves } from 'lucide-react';
 import clsx from 'clsx';
-import { Age, ChainIcon, CurveProgress, LaunchpadBadge, SocialLinks, TokenAvatar, Usd } from '@/components/common';
+import { Age, ChainIcon, CurveProgress, ExplorerLink, LaunchpadBadge, SocialLinks, TokenAvatar, Usd } from '@/components/common';
 import { WatchStar } from '@/components/account';
 import { isBlacklisted, useBlacklist, useHideItems } from '@/components/discovery';
 import { Badge, CopyButton, IconButton, Menu, Popover, Tooltip } from '@/components/ui';
@@ -140,7 +140,7 @@ export const TokenHeader = memo(function TokenHeader({ token: t, compact, classN
   return (
     <header className={clsx('panel flex min-w-0 flex-col gap-2 p-2.5 sm:p-3', className)}>
       <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={compact ? 40 : 48} progress={t.status === 'migrated' ? undefined : t.progress} launchpadColor={lp?.color} />
+        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={compact ? 40 : 48} progress={t.status === 'migrated' ? undefined : t.progress} launchpadColor={lp?.color} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <h1 className="truncate text-lg font-bold leading-tight text-fg">{t.symbol}</h1>
@@ -153,9 +153,10 @@ export const TokenHeader = memo(function TokenHeader({ token: t, compact, classN
                 {shortAddress(t.address, 4, 4)}
               </span>
               <CopyButton text={t.address} label="Copy contract address" />
+              <ExplorerLink chain={t.chain} kind="token" value={t.address} size={12} />
             </span>
             <LaunchpadBadge launchpad={t.launchpad} />
-            <Tooltip content={`Created ${new Date(t.createdAt).toLocaleString()}`}>
+            <Tooltip content={t.createdAt > 0 ? `Created ${new Date(t.createdAt).toLocaleString()}` : 'Creation time unknown'}>
               <span className="inline-flex items-center gap-1 text-muted" tabIndex={0}>
                 <Age ts={t.createdAt} className="font-medium text-fg" />
               </span>

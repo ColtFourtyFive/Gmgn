@@ -13,7 +13,9 @@ let closing = false;
 const shutdown = async (signal: string) => {
   if (closing) return;
   closing = true;
-  console.log(`[trenchscope] ${signal} received, ${config.snapshotEveryMs > 0 ? 'saving snapshot...' : 'shutting down (SNAPSHOT_EVERY_MS=0: persistence off, nothing saved)'}`);
+  // Live mode always writes accounts / trading / money records to the durable store on close.
+  const saving = config.snapshotEveryMs > 0 ? 'saving snapshot...' : config.mode === 'live' ? 'saving the durable store (no snapshot: SNAPSHOT_EVERY_MS=0)...' : 'shutting down (SNAPSHOT_EVERY_MS=0: persistence off, nothing saved)';
+  console.log(`[trenchscope] ${signal} received, ${saving}`);
   // Never hang on the way out (a stuck socket or feed close): exit before the supervisor's grace period
   // (compose stop_grace_period / systemd TimeoutStopSec, 60 s in deploy/) ends in a SIGKILL.
   setTimeout(() => {

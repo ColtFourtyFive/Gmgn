@@ -15,6 +15,7 @@ import { Button, computePosition, IconButton } from '@/components/ui';
 import { useOverlay } from '@/components/ui/overlay';
 import { useActiveChain } from '@/hooks/useActiveChain';
 import { useIsMobile, usePrefersReducedMotion } from '@/hooks/useMediaQuery';
+import { useIsLive } from '@/hooks/useMode';
 import { startTour, tourSeen, useTour } from '@/store/tour';
 import { resolveTourSteps, sheetEdge, TOUR_STEPS, tourPage, tourStartPath, unionBox, type Box, type TourStep } from './tour';
 
@@ -85,7 +86,8 @@ function TourRun() {
   }, [pathname, startPath]);
 
   const page = tourPage(pathname);
-  const steps = useMemo(() => resolveTourSteps(TOUR_STEPS, { page, mobile }), [page, mobile]);
+  const live = useIsLive();
+  const steps = useMemo(() => resolveTourSteps(TOUR_STEPS, { page, mobile, live }), [page, mobile, live]);
   const index = Math.min(useTour((s) => s.index), steps.length - 1);
   const step = steps[index];
   const box = useTargetBox(step, reducedMotion);

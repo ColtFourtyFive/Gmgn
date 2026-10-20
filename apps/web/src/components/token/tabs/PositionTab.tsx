@@ -10,6 +10,7 @@ import { Age, Compact, Native, Pct, Price, StatTile, Usd } from '@/components/co
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { useQuickTrade } from '@/components/trade/useQuickTrade';
 import { Button, DataTable, EmptyState, ErrorState, Heading, Skeleton, type Column } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { PositionEventBadge } from '@/components/wallet';
 import { serverNow } from '@/hooks/useNow';
 import { useTradeSettings } from '@/hooks/useSettings';
@@ -69,6 +70,7 @@ function useTokenFills(token: TokenDetail) {
 
 export function PositionTab({ token, position, loading, error, onRetry, maxHeight }: { token: TokenDetail; position: Position | null; loading: boolean; error: unknown; onRetry: () => void; maxHeight: number | string }) {
   const signedIn = useSession((s) => !!s.token);
+  const live = useIsLive();
   const fills = useTokenFills(token);
   const trade = useTradeSettings(token.chain);
   // Quick sells honor "Confirm trades" like every other one-click order.
@@ -107,11 +109,11 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
       <EmptyState
         icon={<Wallet size={18} />}
         title="Track your position here"
-        description={`Paper trade ${token.symbol} to see your balance, average entry and live PnL.`}
+        description={`${live ? 'Trade' : 'Paper trade'} ${token.symbol} to see your balance, average entry and live PnL.`}
         action={
           <span className="flex flex-wrap justify-center gap-2">
-            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, 'quick')}>
-              Start paper trading
+            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, live ? 'register' : 'quick')}>
+              {live ? 'Create account' : 'Start paper trading'}
             </Button>
             <Button variant="outline" size="sm" icon={<LogIn size={13} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
               Log in

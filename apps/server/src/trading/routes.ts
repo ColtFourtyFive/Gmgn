@@ -3,7 +3,7 @@
 // authentication is checked before input validation.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { requireAccount, type AppContext } from '../context';
+import { HttpError, requireAccount, type AppContext } from '../context';
 import { parse } from './common';
 import {
   activityQuerySchema,
@@ -106,10 +106,16 @@ export async function registerTradingRoutes(app: FastifyInstance, ctx: AppContex
 
   // ---- token launch ----
 
-  app.get('/api/launch/config', async () => trading.launches.config());
+  app.get('/api/launch/config', async () => {
+    // The launch config describes the simulator's launchpads: nothing to launch on in live mode.
+    if (ctx.config.mode === 'live') throw new HttpError(403, 'token launch is not available in live mode', 'not_available_in_live');
+    return trading.launches.config();
+  });
 
   app.post('/api/launch', async (req) => {
     const id = auth(req);
+    // Live mode trades real tokens only: launching (simulated curves, bundle wallets) is demo-only.
+    if (ctx.config.mode === 'live') throw new HttpError(403, 'token launch is not available in live mode', 'not_available_in_live');
     return trading.launches.launch(id, parse(launchSchema, req.body));
   });
 

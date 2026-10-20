@@ -46,6 +46,8 @@ export class Trading implements TradingApi {
   readonly portfolio: Portfolio;
 
   private readonly world: AppContext['world'];
+  /** Live mode: called after a fill so the durable store saves the trading state soon (set by the app). */
+  onDurableChange: (() => void) | null = null;
 
   constructor(ctx: AppContext, opts: TradingOptions = {}) {
     this.world = ctx.world;
@@ -84,6 +86,7 @@ export class Trading implements TradingApi {
       this.launches.followSell(ticket, receipt);
     }
     this.portfolio.record(accountId);
+    this.onDurableChange?.();
     return created;
   }
 

@@ -4,15 +4,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type Position, type PresetId, type TokenDetail, type UserSettings, PRESET_LABELS } from '@trenchscope/shared';
-import { FlaskConical } from 'lucide-react';
+import { FlaskConical, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { Tabs } from '@/components/ui';
+import { useDepositInfo } from '@/components/funds/queries';
 import { useDeposit } from '@/components/layout/AccountControls';
 import { useHotkeys } from '@/hooks/useHotkeys';
+import { useIsLive } from '@/hooks/useMode';
 import { scrollBehavior } from '@/hooks/useMediaQuery';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
 import type { DeepPartial } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
+import { useModeStore } from '@/lib/mode';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 import { feeReserve, maxBuyAmount } from '../model';
@@ -49,6 +52,9 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
   const wallet = useSession((s) => s.account?.wallets[chain] ?? null);
   const [unit] = useChartUnit();
   const { deposit, pending: topUpPending } = useDeposit(chain);
+  const live = useIsLive();
+  // Live charges the server's configured fee; demo always the default.
+  const feeRate = useModeStore((s) => (s.mode === 'live' ? (s.platformFeeRate ?? PLATFORM_FEE_RATE) : PLATFORM_FEE_RATE));
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +100,9 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
   );
 
   const balance = signedIn && wallet ? wallet.nativeBalance : null;
-  const reserve = preset ? feeReserve(CHAINS[chain].baseNetworkFee, preset.priorityFee, preset.tip, preset.antiMev) : 0;
+  // Live: Max also keeps the server's reserve for network fees and token-account rent (DepositInfo.feeReserve).
+  const liveReserve = useDepositInfo(chain, live && signedIn && chain === 'sol').data?.feeReserve ?? 0;
+  const reserve = Math.max(preset ? feeReserve(CHAINS[chain].baseNetworkFee, preset.priorityFee, preset.tip, preset.antiMev) : 0, live ? liveReserve : 0);
   const maxBuy = balance === null ? null : maxBuyAmount(balance, reserve);
 
   const formProps: TradeFormProps = {
@@ -158,10 +166,17 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
         {mode === 'limit' && <LimitForm {...formProps} defaultTrigger={unit} />}
         {mode === 'auto' && <AutoForm {...formProps} />}
       </div>
-      <p className="flex items-center gap-1 border-t border-line px-2.5 py-1.5 text-2xs text-faint">
-        <FlaskConical size={11} className="text-accent" aria-hidden />
-        Paper trading on simulated markets · {formatPercent(PLATFORM_FEE_RATE, { sign: false, digits: 1 })} platform fee
-      </p>
+      {live ? (
+        <p className="flex items-center gap-1 border-t border-line px-2.5 py-1.5 text-2xs text-faint">
+          <Zap size={11} className="text-up" aria-hidden />
+          Live on Solana mainnet · real funds · {formatPercent(feeRate, { sign: false, digits: 1 })} platform fee
+        </p>
+      ) : (
+        <p className="flex items-center gap-1 border-t border-line px-2.5 py-1.5 text-2xs text-faint">
+          <FlaskConical size={11} className="text-accent" aria-hidden />
+          Paper trading on simulated markets · {formatPercent(PLATFORM_FEE_RATE, { sign: false, digits: 1 })} platform fee
+        </p>
+      )}
     </section>
   );
 }

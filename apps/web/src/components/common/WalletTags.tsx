@@ -3,6 +3,7 @@ import type { WalletTag } from '@trenchscope/shared';
 import { Boxes, Bot, Brain, Code, Crosshair, Crown, Megaphone, Sandwich, Sprout, Star, User, VenetianMask, Waves, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useIsLive } from '@/hooks/useMode';
 
 export interface WalletTagMeta {
   label: string;
@@ -40,11 +41,14 @@ export interface WalletTagBadgeProps {
 export const WalletTagBadge = memo(function WalletTagBadge({ tag, showLabel, className }: WalletTagBadgeProps) {
   const meta = WALLET_TAG_META[tag];
   const Icon = meta.icon;
+  const live = useIsLive();
+  // The viewer's own wallet is a paper wallet only in demo.
+  const description = live && tag === 'you' ? 'Your own wallet.' : meta.description;
   return (
     <Tooltip
       content={
         <>
-          <span className="font-semibold">{meta.label}</span> — {meta.description}
+          <span className="font-semibold">{meta.label}</span> — {description}
         </>
       }
     >

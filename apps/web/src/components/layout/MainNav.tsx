@@ -4,7 +4,8 @@ import type { ChainId } from '@trenchscope/shared';
 import { ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { Menu, Popover } from '@/components/ui';
-import { activeSection, NAV_ITEMS, type NavItem } from './nav';
+import { useMode } from '@/hooks/useMode';
+import { activeSection, navItemsFor, type NavItem } from './nav';
 
 // The nav clips its overflow (measure-and-fold), so the focus ring is drawn inside the item.
 const ITEM = 'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2.5 text-sm font-medium transition-colors focus-visible:outline-offset-[-2px]';
@@ -34,7 +35,8 @@ export function MainNav({ chain, className }: { chain: ChainId; className?: stri
   const section = activeSection(pathname);
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(NAV_ITEMS.length);
+  const items = navItemsFor(useMode());
+  const [visible, setVisible] = useState(items.length);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -59,17 +61,17 @@ export function MainNav({ chain, className }: { chain: ChainId; className?: stri
     ro?.observe(container);
     ro?.observe(measure); // re-measure once web fonts load
     return () => ro?.disconnect();
-  }, []);
+  }, [items.length]);
 
-  const shown = NAV_ITEMS.slice(0, visible);
-  const overflow = NAV_ITEMS.slice(visible);
+  const shown = items.slice(0, visible);
+  const overflow = items.slice(visible);
   const overflowActive = overflow.some((i) => i.section === section);
 
   return (
     <nav aria-label="Primary" ref={containerRef} className={clsx('relative flex min-w-0 flex-1 items-center overflow-hidden', className)} style={{ gap: GAP }}>
       {/* Invisible measuring row: natural widths of every item plus the More button. */}
       <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex" style={{ gap: GAP }}>
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <span key={item.key} className={ITEM}>
             <Label item={item} />
           </span>

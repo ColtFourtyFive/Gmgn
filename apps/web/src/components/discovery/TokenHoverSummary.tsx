@@ -46,7 +46,7 @@ export function TokenHoverSummary({ token: t, devTags = [] }: TokenHoverSummaryP
     // The card is portaled but React still bubbles its clicks to the row / card that opened it.
     <div className="flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2.5">
-        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={40} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} />
+        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={40} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate font-semibold text-fg">{t.symbol}</span>

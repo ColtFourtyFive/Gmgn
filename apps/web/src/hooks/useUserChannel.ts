@@ -6,6 +6,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { formatCompact, formatPrice, type AppNotification, type ChainId, type SwapReceipt, type UserWallet } from '@trenchscope/shared';
 import { routes } from '@/lib/chain';
 import { formatNativeFor } from '@/lib/format';
+import { isLiveMode } from '@/lib/mode';
 import { playCue } from '@/lib/sounds';
 import { useChannel } from '@/lib/ws';
 import { useSession } from '@/store/session';
@@ -151,6 +152,11 @@ export function handleUserEvent(qc: QueryClient, type: string, data: unknown): v
     case 'balance': {
       const w = data as UserWallet;
       useSession.getState().setAccountBalance(w.chain, w.nativeBalance, w.nativeBalanceUsd);
+      // Live: a deposit landed or a withdrawal settled; refresh the transfer history (and token balances).
+      if (isLiveMode()) {
+        void qc.invalidateQueries({ queryKey: ['live-wallet'] });
+        void qc.invalidateQueries({ queryKey: ['portfolio'] });
+      }
       break;
     }
     case 'order':

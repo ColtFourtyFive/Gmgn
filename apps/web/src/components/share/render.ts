@@ -1,11 +1,13 @@
 // Canvas renderer of the PnL share card (1200×675, the X / Telegram preview
 // ratio): Trenchscope mark, chain, token avatar and ticker, the PnL in $ and
 // %, a price sparkline with the entry line, entry / exit MC, hold time and a
-// paper-trading footer. Colors mirror the index.css theme tokens so the image
-// looks the same whatever theme the page shows.
+// footer (demo: paper trading on the simulated market; live: Solana). Colors
+// mirror the index.css theme tokens so the image looks the same whatever
+// theme the page shows.
 
 import { CHAINS } from '@trenchscope/shared';
 import { hashString } from '@/components/common/color';
+import { isLiveMode } from '@/lib/mode';
 import { shareStats, signedUsd, type PnlShareData } from './model';
 
 export const CARD_WIDTH = 1200;
@@ -331,7 +333,7 @@ export function renderPnlCard(canvas: HTMLCanvasElement, d: PnlShareData, opts: 
   // Footer.
   ctx.font = `500 18px ${SANS}`;
   ctx.fillStyle = p.faint;
-  ctx.fillText('Paper trade on Trenchscope’s simulated market · not financial advice', PAD, H - 30);
+  ctx.fillText(isLiveMode() ? 'Traded on Solana with Trenchscope · not financial advice' : 'Paper trade on Trenchscope’s simulated market · not financial advice', PAD, H - 30);
   ctx.textAlign = 'right';
   const date = new Date(d.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   ctx.fillText(d.trader ? `${d.trader} · ${date}` : date, W - PAD, H - 30);

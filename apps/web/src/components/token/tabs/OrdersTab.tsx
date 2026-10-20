@@ -7,6 +7,7 @@ import { ListOrdered, LogIn, X } from 'lucide-react';
 import { Age } from '@/components/common';
 import { OrderAmount, OrderKindCell, OrderResult, OrderStatusBadge, OrderTrigger, SideBadge } from '@/components/account';
 import { Button, DataTable, EmptyState, ErrorState, IconButton, SegmentedControl, type Column } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
@@ -17,6 +18,7 @@ import { useTokenUi } from '../store';
 
 export function OrdersTab({ token, maxHeight }: { token: TokenDetail; maxHeight: number | string }) {
   const signedIn = useSession((s) => !!s.token);
+  const live = useIsLive();
   const qc = useQueryClient();
   const [status, setStatus] = useState<'open' | 'history'>('open');
   const open = useTokenOrders(token.chain, token.address, 'open');
@@ -96,8 +98,8 @@ export function OrdersTab({ token, maxHeight }: { token: TokenDetail; maxHeight:
         description="Place limit, take-profit, stop-loss, dev-sell and migration orders from the trade panel."
         action={
           <span className="flex flex-wrap justify-center gap-2">
-            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, 'quick')}>
-              Start paper trading
+            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, live ? 'register' : 'quick')}>
+              {live ? 'Create account' : 'Start paper trading'}
             </Button>
             <Button variant="outline" size="sm" icon={<LogIn size={13} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
               Log in

@@ -9,12 +9,14 @@ import { formatNative, type CreateOrderRequest, type StrategySpec, type SwapRequ
 import { Code, Rocket, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native } from '@/components/common';
+import { ensureLiveTradeAck } from '@/components/trade/LiveTradeAck';
 import { DEFAULT_STRATEGY, describeStrategy, EMPTY_STRATEGY, isStrategyEmpty, StrategyEditor, strategyOrderCount } from '@/components/trade/StrategyEditor';
 import { Button, Heading, SegmentedControl, Select } from '@/components/ui';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
 import { api } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
 import { errorMessage } from '@/lib/format';
+import { isLiveMode } from '@/lib/mode';
 import { requireAuth } from '@/store/session';
 import { toast } from '@/store/toasts';
 import { useCreateOrder } from '../queries';
@@ -173,6 +175,7 @@ function AutoSell({ token, presetId, position, signedIn }: TradeFormProps) {
     requireAuth(async () => {
       const reqs = strategyOrders(ladder, base, migrated);
       if (reqs.length === 0) return;
+      if (isLiveMode() && !(await ensureLiveTradeAck())) return;
       setLadderPending(true);
       let ok = 0;
       let lastError: unknown = null;

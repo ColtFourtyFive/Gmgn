@@ -28,7 +28,7 @@ import {
   useWalletProfileQuery,
   WalletHeader,
 } from '@/components/wallet';
-import { useLocalStorage } from '@/hooks';
+import { useIsLive, useLocalStorage } from '@/hooks';
 import { routes, useChain } from '@/lib/chain';
 import { useSession } from '@/store/session';
 
@@ -81,6 +81,7 @@ function validPeriod(p: unknown): WalletPeriod {
 
 function Wallet({ chain, address }: { chain: ChainId; address: string }) {
   const navigate = useNavigate();
+  const liveMode = useIsLive();
   const q = useWalletProfileQuery(chain, address);
   const profile = q.data;
   const [storedPeriod, setPeriod] = useLocalStorage<WalletPeriod>('ts.wallet.period', '7d');
@@ -134,7 +135,11 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
               icon={<SearchX size={18} />}
               title="Wallet not found"
               titleAs="h1"
-              description={`No ${chain.toUpperCase()} wallet with the address ${shortAddress(address, 6, 6)} has traded on Trenchscope's simulated market.`}
+              description={
+                liveMode
+                  ? `Trenchscope hasn't seen the ${chain.toUpperCase()} wallet ${shortAddress(address, 6, 6)} trade a tracked token yet.`
+                  : `No ${chain.toUpperCase()} wallet with the address ${shortAddress(address, 6, 6)} has traded on Trenchscope's simulated market.`
+              }
               action={
                 <Button size="sm" variant="outline" onClick={() => navigate(routes.leaderboard(chain))}>
                   Browse top wallets

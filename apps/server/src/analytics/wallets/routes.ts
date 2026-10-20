@@ -59,6 +59,8 @@ function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
 function findWallet(ctx: AppContext, chain: ChainId, address: string): WalletState {
   let w = ctx.world.getWallet(address);
   if (!w && address.startsWith('0x')) w = ctx.world.getWallet(address.toLowerCase());
+  // Live mode: any valid address is a wallet page, even before the feed saw it trade.
+  if (!w && ctx.config.mode === 'live') w = ctx.market.ensureWallet?.(chain, address) ?? undefined;
   if (!w || w.chain !== chain) throw new HttpError(404, 'wallet not found', 'not_found');
   return w;
 }

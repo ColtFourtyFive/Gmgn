@@ -34,7 +34,7 @@ export const TokenCell = memo(function TokenCell({ token: t, rank, ageTs, devTag
         aria-label={`${t.symbol} summary`}
         trigger={
           <span className="block rounded-full">
-            <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={dense ? 28 : 32} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
+            <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={dense ? 28 : 32} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
           </span>
         }
       >

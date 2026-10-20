@@ -2,8 +2,10 @@
 
 Trenchscope is a web-only memecoin trading terminal: our own spinoff of the GMGN product surface
 (Trenches, Trending, token pages with audits, smart-money tracking, copy trading, sniping, limit /
-TP / SL / trailing orders, token launches) running against a **deterministic market simulator**
-with **paper trading**.
+TP / SL / trailing orders, token launches). It runs in one of two modes per deployment: **demo**
+(`MODE=demo`, default), against a **deterministic market simulator** with **paper trading**; or
+**live** (`MODE=live`), against real Solana data with real swaps from per-user embedded wallets
+(see [Live mode](#live-mode) below and the runbook in [LIVE.md](LIVE.md)).
 
 ```
 ┌───────────────────────────── apps/web (Vite + React) ─────────────────────────────┐
@@ -31,9 +33,17 @@ with **paper trading**.
 │                       score, leaderboards, feeds, signals, call-outs                   │
 │ sim/        world.ts      ledger: tokens, curves, pools, wallets, positions, candles   │
 │             engine.ts     tick loop + warmup fast-forward                              │
-│             market.ts     agent market: launches, fates, rugs, migrations, pruning     │
+│             market.ts     agent market (demo): launches, fates, rugs, migrations       │
 │             behaviors/    roster, launch, fate, trader, scheduler                      │
 │             congestion.ts per-chain network congestion                                 │
+│ live/       config.ts · services.ts (RPC connection, signer) · market.ts (LiveMarket)  │
+│             feed/       PumpPortal client, message schemas, ingest, tracked-token cap  │
+│             enrich/     metadata (SSRF-guarded), prices, on-chain security, lookup     │
+│             execution/  LiveVenue: pump curve / Jupiter, tx assembly, Jito, confirm,   │
+│                         fill parsing, per-account send lanes                           │
+│             signer/     Turnkey (production), local-dev keystore (development)         │
+│             wallets/    balance sync, deposits, withdrawals, /api/wallet/* routes      │
+│ store/      SQLite durable store (live): state blobs, audit, fills, transfers          │
 └────────────────────────────────────────────────────────────────────────────────────────┘
                  packages/shared: types (API contract), chains, math, formatters
 ```
@@ -82,6 +92,10 @@ with **paper trading**.
 
 ## Persistence
 
+Demo mode persists through snapshots only (below). Live mode adds the durable store (see
+[Live mode](#durable-store-live)): accounts and trading state are restored from the store and written
+as `null` into snapshots; world, market and analytics still use the snapshot.
+
 `persistence.ts` writes the world + every module's `serialize()` output with `node:v8` to
 `DATA_DIR/snapshot.bin` (atomic rename) every `SNAPSHOT_EVERY_MS` (15 minutes by default) and on
 shutdown; `SNAPSHOT_EVERY_MS=0` turns persistence off (no snapshot is restored at boot or written, not
@@ -99,10 +113,110 @@ tokens and wallets tracked. Without a snapshot the server seeds a population and
   and determinism, classifier evaluations, money/PnL math, order triggers, auth and hub behaviour.
 - `apps/web/src/**/*.test.*`: component and hook tests (vitest + jsdom).
 - `apps/web/e2e`: Playwright end-to-end suite against the real server serving the built app.
-- `apps/server/scripts`: `sim-report.ts` (market realism report) and `soak.ts` (memory/snapshot soak).
+- `apps/server/scripts`: `sim-report.ts` (market realism report), `soak.ts` (memory/snapshot soak) and
+  `fake-pumpportal.ts` (dev/test: a local stand-in for the PumpPortal feed).
+- Live mode: `live-*.test.ts`, `store.test.ts`, `security.test.ts`, `accounts-live.test.ts` and
+  `live-integration.test.ts`, all offline (fixtures, fake RPC, local feed server).
 
-## Swapping in real data
+## Live mode
 
-The simulator sits behind the `World` ledger and its events. A real-chain adapter would populate
-`World` from an indexer (trades, pools, balances) and route user orders to a signer instead of
-`executeSwap`; analytics, trading rules, API and UI stay unchanged.
+The simulator sits behind the `World` ledger and its events, so live mode swaps two seams and keeps
+everything else (analytics, orders, copy trading, sniping, alerts, API, WebSocket, UI):
+
+- **`MarketSource`** (`context.ts`): `MarketSim` (demo) or `LiveMarket` (`live/market.ts`), chosen in
+  `app.ts` by `config.mode`. Optional `ensureToken` / `ensureWallet` load a mint or wallet the World has
+  not seen (live: from chain, shared in-flight lookups, negative cache; demo: plain lookups); token
+  routes, search, the token channel, wallet routes, follows, copy trading and alerts call them.
+- **`Venue`** (`trading/execution.ts`): `SimVenue` (demo, the ledger with simulated latency, congestion
+  and MEV) or `LiveVenue` (`live/execution/venue.ts`). The `Executor` keeps idempotency, rate limits,
+  in-flight sell reservations and the post-fill fan-out for both.
+
+Live mode serves Solana only: an HTTP `preValidation` hook and a hub channel guard refuse other chains
+(`chain_not_enabled`); guests, the faucet and token launches are disabled.
+
+### Live data flow
+
+```
+PumpPortal WS ──► feed/pumpportal.ts (one socket; subscribeNewToken + subscribeMigration always,
+                  token / account trade subscriptions diffed and batched; ping/stale/backoff)
+             ──► feed/messages.ts (zod; bad frames counted and dropped; text sanitized)
+             ──► LiveMarket queue ──(engine tick, never during a snapshot hold)──► feed/ingest.ts
+                    create  → World.addExternalToken (launch curve) + the dev's initial buy
+                    trade   → World.recordExternalTrade (post-trade reserves, newTokenBalance,
+                              dedupe by signature|wallet|token; unknown mints parked until loaded)
+                    migrate → World.completeCurve + migrateExternal (canonical PumpSwap pool, LP burned)
+             ──► World events ──► analytics ──► REST + hub channels (unchanged)
+enrich/: metadata.ts (IPFS gateways; https only, private-address and DNS-rebinding guards, size and
+         time caps) · prices.ts (Jupiter Price v3: SOL/USD, held / protected tokens) · security.ts
+         (mint/freeze authorities, top holders → World.syncHolderBalance) · lookup.ts (on-demand mints)
+         · budget.ts (LIVE_RPC_RPS shared budget, page loads first)
+feed/tracker.ts: at most LIVE_MAX_TRACKED_TOKENS streamed; idle ones dropped; tokens held by an
+         account, watch-listed, pinned by orders / alerts or open in a client are protected.
+```
+
+### Live execution flow
+
+```
+POST /api/trade/swap (or an order / copy / snipe) ─► Executor ─► LiveVenue.run
+  per-account lane (shared with withdrawals):
+    plan   pump curve (SDK math on chain reserves) while on a SOL-quoted curve, else Jupiter v1 quote
+    check  SOL balance − lamports committed to this account's unconfirmed sends ≥ spend + fees + rent
+    build  v0 tx: compute budget · [buy: platform fee] · swap (curve or Jupiter route + lookup tables)
+           · [sell: platform fee on min-out, after unwrap] · [anti-MEV: Jito tip last]
+    sign   SignerApi (Turnkey) → same message bytes + valid ed25519 signature checked
+    send   Jito block engine (anti-MEV, bundleOnly) or RPC with preflight; refusals vs ambiguous errors
+  confirm  signature status until lastValidBlockHeight (rebroadcast the same bytes, never re-sign);
+           timeout → tracked in the background, receipt carries the txHash
+  settle   getTransaction → balance deltas (token, SOL, fee, tip, rent) → World.recordExternalTrade
+           on the account's wallet (or fees added when the feed booked it first) → LiveFillRecord
+           → fan-out: exit orders, `fill` + `balance` pushes, rewards volume
+```
+
+Embedded wallets: registration calls `SignerApi.createWallet` first and creates the account's World
+wallet **at the embedded address**, so feed trades of that address and our own fills land on one
+position. `live/wallets/` keeps balances in sync from chain (`World.syncWalletBalances`, reads that
+raced the account's own transaction dropped), scans deposits from a persisted cursor, and runs
+withdrawals (2FA, whitelist, rate limit; recorded `pending` → `sent` with signature before broadcast →
+`confirmed` / `failed`; resumed after a restart, never re-sent).
+
+### Durable store (live)
+
+`store/sqlite.ts` (`node:sqlite`, WAL, `synchronous=FULL`, file mode 0600, versioned migrations):
+
+| Table | Content |
+|---|---|
+| `state` | Module blobs (`accounts`, `trading`, `live-wallets` cursors) with a codec that keeps bigint / Map / Set |
+| `audit` | Append-only (UPDATE / DELETE refused by triggers): sign-ins, 2FA, whitelist, swaps sent / refused / failed, withdrawals |
+| `fills` | Confirmed swaps, unique per (account, signature) |
+| `transfers` | Deposits and withdrawals, upserted by id, unique `clientId` per account, a final status never reopened |
+
+`store/sync.ts` writes accounts at most 500 ms after a change (immediately for registration, 2FA,
+whitelist, session revocation and code checks) and trading every 3 s when changed, ~500 ms after a
+fill and on close. Live mode always opens the store, whatever `SNAPSHOT_EVERY_MS` says.
+
+### Security in live mode
+
+TOTP (RFC 6238, SHA-1, 30 s, ±1 step, replay-protected, `node:crypto` only) with secrets sealed by
+AES-256-GCM under `SECRETS_KEY`; salted recovery codes; a code-check lockout; a delayed withdrawal
+whitelist; sliding session expiry; password change revoking every session. The server never holds raw
+keys in production (Turnkey signs within its policies); the local-dev signer is refused when
+`NODE_ENV=production`.
+
+### The web app in live mode
+
+`lib/mode.ts` holds the mode from `/api/meta` (cached per origin so a live site does not flash demo
+copy); `useMode` / `useIsLive` / `useEnabledChains` / `useLiveStatus` read it. In live mode the chain
+switcher becomes a static Solana chip and routes to other chains redirect; guest quick start, the
+faucet, token launch and simulated-market notices disappear; sign-in gains a 2FA step; the account
+menu adds Deposit (address + QR), Withdraw (whitelisted destinations, TOTP, exact base-unit amounts,
+one `clientId` per attempt) and Security (2FA enrolment with one-time recovery codes, whitelist,
+password change, security events); a one-time real-funds acknowledgement precedes the first trade;
+the header shows Live with a health dot and a banner appears when trading is unavailable.
+
+### Testing live mode without the network
+
+Every external service is replaced by fixtures or local fakes: `test/fixtures/pumpportal`, `rpc`
+(a fake `Connection`) and `jupiter`; a local `ws` server for the feed; stubbed `fetch` and DNS.
+`apps/server/scripts/fake-pumpportal.ts` (dev/test only) serves synthetic or replayed PumpPortal
+frames, and `test/live-integration.test.ts` boots the whole app in live mode against it with the
+local-dev signer and an on-disk store.

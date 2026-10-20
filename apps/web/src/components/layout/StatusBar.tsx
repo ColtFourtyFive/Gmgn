@@ -1,12 +1,14 @@
-import { CHAIN_IDS, CHAINS, formatNative, type ChainMarketInfo, type CongestionLabel } from '@trenchscope/shared';
-import { Activity, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { CHAINS, formatNative, type ChainMarketInfo, type CongestionLabel } from '@trenchscope/shared';
+import { Activity, Radar, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { ChainIcon, Pct, SimBanner, Usd } from '@/components/common';
 import { Tooltip } from '@/components/ui';
 import { useMeta } from '@/hooks/useMeta';
+import { useEnabledChains, useIsLive, useLiveStatus } from '@/hooks/useMode';
 import { useNow } from '@/hooks/useNow';
 import { realtime, useChannelState, useConnectionState, type ConnectionState } from '@/lib/ws';
 import { toggleDockTab, useDock, type DockTab } from '@/store/dock';
+import { LiveStatusIndicator, TryDemoLink } from './ModeIndicators';
 
 const CONN: Record<ConnectionState, { label: string; dot: string }> = {
   open: { label: 'Live', dot: 'bg-up' },
@@ -71,13 +73,20 @@ function DockToggles({ className }: { className?: string }) {
   );
 }
 
-/** Desktop footer: realtime connection + latency, native prices and network load, sim throughput (≥lg), dock toggles. */
+/**
+ * Desktop footer: realtime connection + latency, native prices and network
+ * load of the served chains, sim throughput (≥lg; live: tokens tracked), dock
+ * toggles, and the demo notice (live: the live stack's status and Try demo).
+ */
 export function StatusBar({ className }: { className?: string }) {
   const conn = useConnectionState();
   useNow(); // re-read the (non-reactive) ping latency every second
   const latency = realtime.latency;
   const live = useChannelState<ChainMarketInfo[]>('market', 'market');
   const meta = useMeta().data;
+  const chains = useEnabledChains();
+  const liveMode = useIsLive();
+  const liveStatus = useLiveStatus();
   const markets = live ?? meta?.chains ?? [];
   const tps = meta?.sim.tradesPerSecond;
 
@@ -92,7 +101,7 @@ export function StatusBar({ className }: { className?: string }) {
       </Tooltip>
       <Divider />
       <ul className="flex items-center gap-3" aria-label="Native asset prices and network load">
-        {CHAIN_IDS.map((c) => {
+        {chains.map((c) => {
           const m = markets.find((x) => x.chain === c);
           return (
             <li key={c} className="flex items-center gap-1">
@@ -105,12 +114,26 @@ export function StatusBar({ className }: { className?: string }) {
         })}
       </ul>
       <Divider className="hidden lg:block" />
-      <span className="hidden items-center gap-1 lg:flex">
-        <Activity size={12} aria-hidden />
-        <span className="num text-fg">{tps === undefined ? '--' : tps.toFixed(1)}</span> trades/s
-      </span>
+      {liveMode ? (
+        <span className="hidden items-center gap-1 lg:flex" title="Tokens tracked from the live feed">
+          <Radar size={12} aria-hidden />
+          <span className="num text-fg">{liveStatus ? liveStatus.trackedTokens.toLocaleString() : '--'}</span> tokens
+        </span>
+      ) : (
+        <span className="hidden items-center gap-1 lg:flex">
+          <Activity size={12} aria-hidden />
+          <span className="num text-fg">{tps === undefined ? '--' : tps.toFixed(1)}</span> trades/s
+        </span>
+      )}
       <DockToggles className="mx-auto" />
-      <SimBanner />
+      {liveMode ? (
+        <span className="flex min-w-0 items-center gap-3">
+          <LiveStatusIndicator compact />
+          <TryDemoLink />
+        </span>
+      ) : (
+        <SimBanner />
+      )}
     </footer>
   );
 }

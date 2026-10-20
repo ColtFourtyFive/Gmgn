@@ -1,0 +1,244 @@
+// Feed events -> World. Turns PumpPortal create / trade / migrate events into
+// the ledger's external-ingest calls:
+//   create   addExternalToken (launchpad 'pump', dev = creator, created at receipt)
+//            registered at its launch curve (initial liquidity, launch market cap),
+//            then the creator's initial buy is booked as the token's first trade
+//   trade    recordExternalTrade with the post-trade virtual reserves while on the
+//            curve (World completes the curve when its real tokens run out), or the
+//            pool's reserves / execution price on PumpSwap afterwards
+//   migrate  completeCurve + migrateExternal into the token's canonical PumpSwap pool
+// The trader's newTokenBalance is passed as the authoritative post-trade balance.
+// Events are deduplicated by signature (a bounded window), and the World again by
+// (signature, wallet, token), since our own fills arrive from a second source.
+
+import { LIVE_DEXES, LIVE_LAUNCHPADS, type LaunchpadConfig } from '@trenchscope/shared';
+import type { PoolRuntime, TokenState, World } from '../../sim/world';
+import { classifyNarrative } from '../enrich/narratives';
+import type { CreateEvent, FeedEvent, MigrateEvent, TradeEvent } from './messages';
+
+export const PUMP: LaunchpadConfig = LIVE_LAUNCHPADS.find((l) => l.id === 'pump')!;
+const PUMPSWAP = LIVE_DEXES.find((d) => d.id === 'pumpswap')!;
+/** pump.fun mints: 6 decimals, fixed supply. */
+export const PUMP_DECIMALS = 6;
+/** Virtual tokens a pump.fun curve holds beyond its real (sellable) tokens. */
+export const PUMP_VIRTUAL_TOKEN_OFFSET = PUMP.virtualTokens - PUMP.curveTokens;
+/** Tokens a completed curve leaves for the pool (supply minus what the curve sold). */
+export const PUMP_POOL_TOKENS = PUMP.totalSupply - PUMP.curveTokens;
+/** Below this many real tokens a curve is complete (float noise of the feed's UI amounts). */
+const CURVE_DUST_TOKENS = 1;
+/** Signatures remembered for dedupe. */
+const DEDUPE_WINDOW = 50_000;
+
+/** Real reserves of a pump.fun curve from its virtual reserves (the virtual offsets are fixed per curve). */
+export function pumpCurveFromVirtual(vSol: number, vTokens: number): { virtualNative: number; virtualTokens: number; realNative: number; realTokens: number } {
+  let realTokens = vTokens - PUMP_VIRTUAL_TOKEN_OFFSET;
+  if (realTokens < CURVE_DUST_TOKENS) realTokens = 0;
+  return { virtualNative: vSol, virtualTokens: vTokens, realNative: Math.max(0, vSol - PUMP.virtualNative), realTokens };
+}
+
+export type IngestResult =
+  | { status: 'ok'; token: TokenState }
+  | { status: 'duplicate' }
+  /** A trade / migration of a token the World does not have (load it, then replay). */
+  | { status: 'unknown_token'; mint: string }
+  | { status: 'ignored'; reason: string };
+
+export interface IngestStats {
+  creates: number;
+  trades: number;
+  migrations: number;
+  duplicates: number;
+  unknownToken: number;
+  ignored: number;
+}
+
+export interface IngestOptions {
+  /** Time stamp for events (the feed carries none): the sim clock, which follows wall time live. */
+  now: () => number;
+  /** Address of a mint's canonical PumpSwap pool (pump SDK), '' when unavailable. */
+  pumpPoolAddress?: (mint: string) => string;
+}
+
+export class FeedIngestor {
+  readonly stats: IngestStats = { creates: 0, trades: 0, migrations: 0, duplicates: 0, unknownToken: 0, ignored: 0 };
+  /** Recent event keys (insertion order = age), for dedupe. */
+  private readonly seen = new Set<string>();
+
+  constructor(
+    private readonly world: World,
+    private readonly opts: IngestOptions,
+  ) {}
+
+  apply(e: FeedEvent): IngestResult {
+    switch (e.kind) {
+      case 'create':
+        return this.create(e);
+      case 'trade':
+        return this.trade(e);
+      case 'migrate':
+        return this.migrate(e);
+    }
+  }
+
+  /** Forget an event so it can be applied again (a trade parked until its token loaded). */
+  forget(e: FeedEvent): void {
+    this.seen.delete(keyOf(e));
+  }
+
+  private firstSight(e: FeedEvent): boolean {
+    const key = keyOf(e);
+    if (this.seen.has(key)) {
+      this.stats.duplicates++;
+      return false;
+    }
+    this.seen.add(key);
+    if (this.seen.size > DEDUPE_WINDOW) {
+      let excess = this.seen.size - DEDUPE_WINDOW;
+      for (const k of this.seen) {
+        if (excess-- <= 0) break;
+        this.seen.delete(k);
+      }
+    }
+    return true;
+  }
+
+  private create(e: CreateEvent): IngestResult {
+    if (e.pool && e.pool !== 'pump') {
+      this.stats.ignored++;
+      return { status: 'ignored', reason: `launchpad ${e.pool} is not supported` };
+    }
+    if (!this.firstSight(e)) return { status: 'duplicate' };
+    const known = this.world.tokens.get(e.mint);
+    if (known) return { status: 'ok', token: known };
+    const at = this.opts.now();
+    // Register at the launch state of the curve: the reported (post-buy) reserves less the creator's
+    // initial buy, along the constant product (pump.fun fees are charged on top of the curve).
+    let pre = { virtualNative: PUMP.virtualNative, virtualTokens: PUMP.virtualTokens };
+    const post = e.vSolInBondingCurve && e.vTokensInBondingCurve ? pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve) : null;
+    if (post) {
+      const vTokens = post.virtualTokens + e.initialBuy;
+      pre = { virtualTokens: vTokens, virtualNative: (post.virtualNative * post.virtualTokens) / vTokens };
+    }
+    const start = pumpCurveFromVirtual(pre.virtualNative, pre.virtualTokens);
+    const symbol = e.symbol || e.mint.slice(0, 4).toUpperCase();
+    const name = e.name || symbol;
+    const { narrative, glyph } = classifyNarrative(name, symbol);
+    const token = this.world.addExternalToken({
+      chain: 'sol',
+      address: e.mint,
+      launchpad: PUMP.id,
+      symbol,
+      name,
+      description: '',
+      imageUrl: null,
+      metadataUri: e.uri || null,
+      creator: e.trader,
+      createdAt: at,
+      decimals: PUMP_DECIMALS,
+      totalSupply: PUMP.totalSupply,
+      status: 'curve',
+      curve: { ...start, initialRealTokens: PUMP.curveTokens, feeRate: PUMP.feeRate },
+      pool: null,
+      socials: {},
+      narrative,
+      logoGlyph: glyph,
+    });
+    this.stats.creates++;
+    if (e.initialBuy > 0) {
+      this.world.recordExternalTrade(token, {
+        wallet: e.trader,
+        side: 'buy',
+        nativeAmount: e.solAmount,
+        tokenAmount: e.initialBuy,
+        at,
+        txHash: e.signature,
+        ...(post ? { curve: post } : {}),
+        walletTokenBalance: e.newTokenBalance ?? e.initialBuy,
+      });
+    }
+    return { status: 'ok', token };
+  }
+
+  private trade(e: TradeEvent): IngestResult {
+    if (!(e.tokenAmount > 0)) {
+      this.stats.ignored++;
+      return { status: 'ignored', reason: 'empty trade' };
+    }
+    const t = this.world.tokens.get(e.mint);
+    if (!t || t.chain !== 'sol') {
+      this.stats.unknownToken++;
+      return { status: 'unknown_token', mint: e.mint };
+    }
+    if (!this.firstSight(e)) return { status: 'duplicate' };
+    const at = this.opts.now();
+    const onCurve = !e.pool || e.pool === 'pump';
+    // A PumpSwap trade of a token we still have on its curve: the migration event was missed.
+    if (!onCurve && !t.pool && t.launchpad === PUMP.id) this.migrateToPool(t, at);
+    if (t.dormant) t.dormant = false;
+    const trade = this.world.recordExternalTrade(t, {
+      wallet: e.trader,
+      side: e.side,
+      nativeAmount: e.solAmount,
+      tokenAmount: e.tokenAmount,
+      at,
+      txHash: e.signature,
+      ...this.reservesAfter(t, e, onCurve),
+      ...(e.newTokenBalance !== undefined ? { walletTokenBalance: e.newTokenBalance } : {}),
+    });
+    if (!trade) {
+      this.stats.duplicates++;
+      return { status: 'duplicate' };
+    }
+    this.stats.trades++;
+    return { status: 'ok', token: t };
+  }
+
+  /** The reserves a trade reports, in the World's terms. */
+  private reservesAfter(t: TokenState, e: TradeEvent, onCurve: boolean): { curve?: ReturnType<typeof pumpCurveFromVirtual>; pool?: { native: number; tokens: number }; priceNative?: number } {
+    if (onCurve && t.curve && t.status !== 'migrated' && e.vSolInBondingCurve && e.vTokensInBondingCurve) {
+      return { curve: pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve) };
+    }
+    if (!t.pool) return {};
+    if (e.solInPool && e.tokensInPool) return { pool: { native: e.solInPool, tokens: e.tokensInPool } };
+    if (!(e.solAmount > 0)) return {};
+    // Only the trade itself is known: move the pool's SOL side by the flow and price it at the trade.
+    const price = e.solAmount / e.tokenAmount;
+    const native = Math.max(t.pool.native * 0.01, t.pool.native + (e.side === 'buy' ? e.solAmount : -e.solAmount));
+    return { pool: { native, tokens: native / price } };
+  }
+
+  private migrate(e: MigrateEvent): IngestResult {
+    const t = this.world.tokens.get(e.mint);
+    if (!t || t.chain !== 'sol') {
+      this.stats.unknownToken++;
+      return { status: 'unknown_token', mint: e.mint };
+    }
+    if (!this.firstSight(e)) return { status: 'duplicate' };
+    if (t.status === 'migrated') return { status: 'duplicate' };
+    this.migrateToPool(t, this.opts.now());
+    this.stats.migrations++;
+    return { status: 'ok', token: t };
+  }
+
+  /**
+   * The completed curve's liquidity moves into its PumpSwap pool: the curve's real SOL against the
+   * tokens the curve never sold, LP burned (pump.fun migrations burn it).
+   */
+  private migrateToPool(t: TokenState, at: number): void {
+    if (t.status === 'curve') this.world.completeCurve(t, at);
+    const realNative = t.curve?.realNative ?? 0;
+    const pool: Omit<PoolRuntime, 'createdAt' | 'initialLiquidityUsd'> = {
+      address: this.opts.pumpPoolAddress?.(t.address) ?? '',
+      dex: PUMPSWAP.name,
+      feeRate: PUMPSWAP.feeRate,
+      native: Math.max(realNative - PUMP.migrationFeeNative, 1e-6),
+      tokens: Math.max(1, t.totalSupply - (t.curve?.initialRealTokens ?? PUMP.curveTokens) + Math.max(0, t.curve?.realTokens ?? 0)),
+      lpBurnedRate: 1,
+    };
+    this.world.migrateExternal(t, pool, at);
+  }
+}
+
+function keyOf(e: FeedEvent): string {
+  return e.kind === 'trade' ? `t|${e.signature}|${e.mint}|${e.trader}|${e.side}` : `${e.kind[0]}|${e.signature}|${e.mint}`;
+}

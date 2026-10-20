@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { Check, LogIn, Rocket } from 'lucide-react';
+import { Check, LogIn, Rocket, UserPlus } from 'lucide-react';
 import { SimBanner } from '@/components/common';
 import { Button, ErrorState, Skeleton, SkeletonText } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useSession } from '@/store/session';
 
 export interface AccountGateProps {
@@ -23,7 +24,8 @@ export function useSignedIn(): boolean {
 
 /**
  * Renders `children` for signed-in users. Signed-out visitors get a friendly
- * explanation and a "Start paper trading" button (opens the auth modal);
+ * explanation and a "Start paper trading" button (live: "Create account"),
+ * which opens the auth modal;
  * while a stored token is being verified a skeleton avoids flashing the gate,
  * and once an attempt failed (API down or erroring) the error with a Retry
  * (the session store keeps retrying in the background too).
@@ -33,6 +35,7 @@ export function AccountGate({ icon, title, description, features, children }: Ac
   const verifying = useSession((s) => !!s.token && !s.ready);
   const restoreError = useSession((s) => s.restoreError);
   const restoring = useSession((s) => s.restoring);
+  const live = useIsLive();
   if (signedIn) return <>{children}</>;
   if (verifying && restoreError != null) {
     return (
@@ -63,14 +66,24 @@ export function AccountGate({ icon, title, description, features, children }: Ac
           </ul>
         )}
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button variant="primary" icon={<Rocket size={14} />} onClick={() => useSession.getState().promptAuth(true, 'quick')}>
-            Start paper trading
-          </Button>
+          {live ? (
+            <Button variant="primary" icon={<UserPlus size={14} />} onClick={() => useSession.getState().promptAuth(true, 'register')}>
+              Create account
+            </Button>
+          ) : (
+            <Button variant="primary" icon={<Rocket size={14} />} onClick={() => useSession.getState().promptAuth(true, 'quick')}>
+              Start paper trading
+            </Button>
+          )}
           <Button variant="outline" icon={<LogIn size={14} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
             Log in
           </Button>
         </div>
-        <p className="text-xs text-faint">Free guest account in one click — every chain comes pre-funded with paper money.</p>
+        <p className="text-xs text-faint">
+          {live
+            ? 'Your account comes with its own Solana wallet. Deposit SOL to trade; withdrawals need two-factor authentication.'
+            : 'Free guest account in one click — every chain comes pre-funded with paper money.'}
+        </p>
         <SimBanner />
       </section>
     </div>

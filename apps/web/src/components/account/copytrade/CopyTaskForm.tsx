@@ -2,8 +2,10 @@ import { useId, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatNative, type ChainId, type CopyTradeTask, type PresetId, type Range, type StrategySpec } from '@trenchscope/shared';
 import { Save } from 'lucide-react';
+import { ensureLiveTradeAck } from '@/components/trade/LiveTradeAck';
 import { DEFAULT_STRATEGY, StrategyEditor } from '@/components/trade/StrategyEditor';
 import { Button, Drawer, Field, focusFirstError, Input, NumberInput, RangeInput, SegmentedControl, Toggle } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api, ApiError } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
@@ -118,6 +120,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const sym = nativeSymbol(chain);
+  const liveMode = useIsLive();
 
   const set = <K extends keyof CopyForm>(key: K, value: CopyForm[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -129,7 +132,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
     const e: Errors = {};
     const addrErr = addressError(chain, f.target, 'wallet address');
     if (addrErr) e.target = addrErr;
-    else if (sameAddress(chain, f.target, own)) e.target = 'That is your own paper wallet — pick another trader to copy.';
+    else if (sameAddress(chain, f.target, own)) e.target = `That is your own ${liveMode ? '' : 'paper '}wallet — pick another trader to copy.`;
     if (f.label.trim().length > 32) e.label = 'Keep the label to 32 characters.';
     if (f.buyMode === 'fixed' && !(f.buyAmount && f.buyAmount > 0)) e.buyAmount = `Enter a buy amount in ${sym}.`;
     if (f.buyMode === 'ratio' && !(f.buyRatioPct && f.buyRatioPct > 0 && f.buyRatioPct <= 10000)) e.buyRatio = 'Enter a size between 0.01% and 10,000% of the target’s buy.';
@@ -173,6 +176,8 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
       blacklist: form.blacklist,
       presetId: form.presetId,
     };
+    // Live: a new task buys with real funds on its own, so the one-time acknowledgement comes first.
+    if (!task && liveMode && !(await ensureLiveTradeAck())) return;
     setPending(true);
     try {
       const saved = task ? await api.updateCopyTask(task.id, body) : await api.createCopyTask(body);
@@ -245,7 +250,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
             ]}
           />
           {form.buyMode === 'fixed' ? (
-            <Field label={`Amount per copied buy (${sym})`} htmlFor={`${ids}-amount`} error={shown.buyAmount} hint={`Paper balance: ${formatNative(balance, sym)}`}>
+            <Field label={`Amount per copied buy (${sym})`} htmlFor={`${ids}-amount`} error={shown.buyAmount} hint={`${liveMode ? 'Balance' : 'Paper balance'}: ${formatNative(balance, sym)}`}>
               <NumberInput
                 id={`${ids}-amount`}
                 value={form.buyAmount}
@@ -330,7 +335,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
         <FormSection title="Before you start">
           <Note tone="warn" title="Copy trading is risky">
             Targets can dump on their copiers, your fills land after theirs (worse prices), and a busy wallet can drain your balance quickly. Caps and filters limit
-            the damage. This is paper trading on a simulated market.
+            the damage. {liveMode ? 'Copied trades execute on Solana mainnet with real funds.' : 'This is paper trading on a simulated market.'}
           </Note>
           {shown.form && <Note tone="error">{shown.form}</Note>}
         </FormSection>

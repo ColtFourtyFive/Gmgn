@@ -106,7 +106,8 @@ export class CopyTrader {
   /** Validated input -> task fields: the target must be another existing wallet on the chain. */
   private resolve(accountId: string, input: CopyTaskInput): Omit<CopyTradeTask, 'id' | 'createdAt' | 'stats'> {
     const target = normalizeAddress(input.target);
-    const wallet = this.ctx.world.getWallet(target);
+    // Live mode: a valid address not seen yet becomes an observed wallet (its trades are then streamed).
+    const wallet = this.ctx.world.getWallet(target) ?? (this.ctx.config.mode === 'live' ? this.ctx.market.ensureWallet?.(input.chain, target) : undefined);
     if (!wallet || wallet.chain !== input.chain) throw notFound('wallet');
     if (wallet.accountId === accountId) throw badRequest('you cannot copy your own wallet');
     return {

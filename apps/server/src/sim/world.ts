@@ -346,6 +346,14 @@ export interface WorldSnapshot {
   tokensByChain: Record<ChainId, string[]>;
 }
 
+/** Insert `item` into `list` kept ascending by time (appends in the common, already-newest case). */
+function insertByTime<T>(list: T[], item: T, at: number, timeOf: (x: T) => number): void {
+  let i = list.length;
+  while (i > 0 && timeOf(list[i - 1]) > at) i--;
+  if (i === list.length) list.push(item);
+  else list.splice(i, 0, item);
+}
+
 const TRADE_RING = 1500;
 /** Trades per token kept in snapshots. */
 const SNAPSHOT_TRADES = 100;
@@ -803,11 +811,63 @@ export class World extends EventEmitter {
     t.athMarketCapUsd = price * t.totalSupply;
     t.initialLiquidityUsd = t.pool ? t.pool.initialLiquidityUsd : (t.curve?.virtualNative ?? 0) * this.nativeUsd(t.chain);
     this.tokens.set(t.address, t);
-    this.tokensByChain[t.chain].push(t.address);
+    // tokensByChain stays in creation order (lists scan it newest first and stop at the first old
+    // token): a token loaded on demand, created long ago, is filed at its place, not at the end.
+    insertByTime(this.tokensByChain[t.chain], t.address, t.createdAt, (a) => this.tokens.get(a)?.createdAt ?? 0);
     creator.createdTokens.push(t.address);
-    if (spec.status === 'curve') this.chains[t.chain].launches.push(spec.createdAt);
+    // Only launches of the last hour count (the 1h counter is kept sorted for pruneCounters).
+    if (spec.status === 'curve' && spec.createdAt >= this.now - 3600_000) insertByTime(this.chains[t.chain].launches, spec.createdAt, spec.createdAt, (x) => x);
     this.emit('tokenCreated', t);
     return t;
+  }
+
+  /**
+   * Live mode: a holder's balance as the chain reports it (top-holder reads), without a trade.
+   * A balance that fell keeps its average cost per token; tokens of unknown cost (a new holder, or
+   * more than we saw bought) enter at the current price, so they show no made-up profit.
+   */
+  syncHolderBalance(t: TokenState, address: string, balance: number): void {
+    if (!Number.isFinite(balance) || balance < 0) return;
+    const wallet = this.ensureWallet(t.chain, address);
+    let pos = wallet.positions.get(t.address);
+    const before = pos?.balance ?? 0;
+    if (Math.abs(before - balance) <= Math.max(before, balance) * 1e-9) return;
+    const dust = balance <= t.totalSupply * DUST_RATE;
+    if (!pos) {
+      if (dust) return;
+      pos = {
+        token: t.address,
+        balance: 0,
+        costBasisUsd: 0,
+        boughtUsd: 0,
+        soldUsd: 0,
+        boughtTokens: 0,
+        soldTokens: 0,
+        boughtNative: 0,
+        soldNative: 0,
+        buys: 0,
+        sells: 0,
+        realizedPnlUsd: 0,
+        firstBuyAt: null,
+        lastActiveAt: this.now,
+        closedAt: null,
+      };
+      wallet.positions.set(t.address, pos);
+    }
+    if (balance < before) pos.costBasisUsd *= before > 0 ? balance / before : 0;
+    else pos.costBasisUsd += (balance - before) * this.priceUsd(t);
+    pos.balance = dust ? 0 : balance;
+    if (dust) {
+      pos.costBasisUsd = 0;
+      pos.closedAt ??= this.now;
+      t.holders.delete(address);
+    } else {
+      pos.closedAt = null;
+      t.holders.add(address);
+    }
+    // A position the World holds must be reachable from the token (pruning drops it through traders).
+    t.traders.add(address);
+    t.version++;
   }
 
   /**
@@ -853,6 +913,77 @@ export class World extends EventEmitter {
       completes,
       walletTokenBalance: e.walletTokenBalance,
     });
+  }
+
+  /**
+   * Live mode: a real wallet's balances as the chain reports them. `native` (null = unknown)
+   * replaces the native balance. With `tokens` (mint -> amount, every token the wallet holds)
+   * positions follow the chain: a balance moved by transfers we never saw keeps its average cost
+   * per token, a token held but never bought here opens a position without cost basis, and a
+   * held position missing from `tokens` closes. Returns the positions changed and the held mints
+   * the World does not track.
+   */
+  syncWalletBalances(wallet: WalletState, native: number | null, tokens?: Map<string, number>): { changed: string[]; unknown: string[] } {
+    if (native !== null && Number.isFinite(native) && native >= 0) wallet.native = native;
+    const changed: string[] = [];
+    const unknown: string[] = [];
+    if (!tokens) return { changed, unknown };
+    const at = this.now;
+    const apply = (t: TokenState, pos: PositionState, amount: number) => {
+      const dust = amount <= t.totalSupply * DUST_RATE;
+      if (pos.balance > 0 && amount < pos.balance) pos.costBasisUsd *= amount / pos.balance;
+      pos.balance = dust ? 0 : amount;
+      if (dust) {
+        pos.costBasisUsd = 0;
+        pos.closedAt ??= at;
+        t.holders.delete(wallet.address);
+      } else {
+        pos.closedAt = null;
+        t.holders.add(wallet.address);
+      }
+      t.version++;
+      changed.push(t.address);
+    };
+    for (const [mint, amount] of tokens) {
+      if (!Number.isFinite(amount) || amount < 0) continue;
+      const t = this.tokens.get(mint);
+      if (!t) {
+        if (amount > 0) unknown.push(mint);
+        continue;
+      }
+      if (t.chain !== wallet.chain) continue;
+      let pos = wallet.positions.get(mint);
+      const before = pos?.balance ?? 0;
+      if (Math.abs(before - amount) <= Math.max(before, amount) * 1e-12) continue;
+      if (!pos) {
+        if (amount <= t.totalSupply * DUST_RATE) continue;
+        pos = {
+          token: mint,
+          balance: 0,
+          costBasisUsd: 0,
+          boughtUsd: 0,
+          soldUsd: 0,
+          boughtTokens: 0,
+          soldTokens: 0,
+          boughtNative: 0,
+          soldNative: 0,
+          buys: 0,
+          sells: 0,
+          realizedPnlUsd: 0,
+          firstBuyAt: null,
+          lastActiveAt: at,
+          closedAt: null,
+        };
+        wallet.positions.set(mint, pos);
+      }
+      apply(t, pos, amount);
+    }
+    for (const [mint, pos] of wallet.positions) {
+      if (pos.balance <= 0 || tokens.has(mint)) continue;
+      const t = this.tokens.get(mint);
+      if (t) apply(t, pos, 0);
+    }
+    return { changed, unknown };
   }
 
   /** The curve is complete on-chain (the launchpad's complete event): trading pauses until migration. */

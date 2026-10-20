@@ -19,6 +19,7 @@ import { accountKeys } from '@/components/account/queries';
 import { Compact, Native, Pct, Price, TokenAvatar, TokenLink, Usd } from '@/components/common';
 import { isNotFound, tokenKeys } from '@/components/token/queries';
 import { Button, EmptyState, ErrorState, Heading, Skeleton, Spinner } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
@@ -151,6 +152,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
   const signedIn = useSession((s) => !!s.token);
   const balance = useSession((s) => s.account?.wallets[chain]?.nativeBalance);
   const settings = useTradeSettings(chain);
+  const live = useIsLive();
   const detail = useQuery({
     queryKey: tokenKeys.detail(chain, address),
     queryFn: () => api.token(chain, address),
@@ -241,7 +243,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
           </p>
         </>
       ) : (
-        <SignInCta>Paper trade {t.symbol} in one click: sign in for an instant guest wallet.</SignInCta>
+        <SignInCta>{live ? `Trade ${t.symbol} in one click: sign in to your account.` : `Paper trade ${t.symbol} in one click: sign in for an instant guest wallet.`}</SignInCta>
       )}
       {!onPage && (
         <Link to={routes.token(chain, t.address)} className="link inline-flex items-center gap-1 self-start text-xs text-muted">
@@ -261,7 +263,7 @@ const PositionRow = memo(function PositionRow({ row }: { row: TokenPositionRow }
   return (
     <li className="flex items-center gap-2 border-b border-line/60 px-3 py-2 transition-colors last:border-b-0 hover:bg-panel-2">
       <Link to={routes.token(row.chain, row.token)} title={`Open ${symbol}`} className="group/pos flex min-w-0 flex-1 items-center gap-2">
-        <TokenAvatar seed={row.tokenInfo.logoSeed} glyph={row.tokenInfo.logoGlyph} size={28} />
+        <TokenAvatar seed={row.tokenInfo.logoSeed} glyph={row.tokenInfo.logoGlyph} imageUrl={row.tokenInfo.imageUrl} size={28} />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate font-semibold text-fg transition-colors group-hover/pos:text-accent">{symbol}</span>

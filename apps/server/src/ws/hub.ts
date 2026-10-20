@@ -119,6 +119,8 @@ export class Hub {
   /** channel -> subscriptions */
   private channels = new Map<string, Set<Subscription>>();
   private authResolver: AuthResolver = () => null;
+  /** Refuses a channel name before its provider sees it (live mode: chains it does not serve); null = allowed. */
+  private channelGuard: ((ch: string) => string | null) | null = null;
   private seq = 0;
   /** accountId -> its subscriptions to the private `user` channel. */
   private userSubs = new Map<string, Set<Subscription>>();
@@ -133,6 +135,11 @@ export class Hub {
 
   setAuthResolver(fn: AuthResolver): void {
     this.authResolver = fn;
+  }
+
+  /** Install a check run on every `sub`: a returned string refuses the channel with that message. */
+  setChannelGuard(fn: (ch: string) => string | null): void {
+    this.channelGuard = fn;
   }
 
   /** Register a provider for channels named `<prefix>` or `<prefix>:...`. */
@@ -258,6 +265,11 @@ export class Hub {
         }
         if (provider.requiresAuth && !client.accountId) {
           this.sendTo(client, { op: 'error', message: 'auth required', ch: msg.ch });
+          return;
+        }
+        const refused = this.channelGuard?.(msg.ch) ?? null;
+        if (refused) {
+          this.sendTo(client, { op: 'error', message: refused, ch: msg.ch });
           return;
         }
         if (!client.subs.has(msg.ch) && client.subs.size >= MAX_SUBS_PER_CLIENT) {

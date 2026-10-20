@@ -5,6 +5,8 @@ import type { ChainTradeSettings, Position, PresetId, TokenDetail, TradePreset }
 import { CircleCheck, CircleX, TrendingUp } from 'lucide-react';
 import { Compact, Native, Price } from '@/components/common';
 import { Button } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
+import { openFunds } from '@/store/funds';
 import { useSession } from '@/store/session';
 import { swapErrorHint } from '../model';
 import type { TradeSide } from '../store';
@@ -29,15 +31,16 @@ export interface TradeFormProps {
   onRaiseSlippage: () => void;
 }
 
-/** Signed-out replacement for the submit button (quick start, or log in to an existing account). */
-export function StartTradingCta({ label = 'Start paper trading' }: { label?: string }) {
+/** Signed-out replacement for the submit button (quick start, or log in to an existing account; live: create an account). */
+export function StartTradingCta({ label }: { label?: string }) {
+  const live = useIsLive();
   return (
     <div className="flex flex-col gap-1">
-      <Button variant="primary" block icon={<TrendingUp size={14} />} onClick={() => useSession.getState().promptAuth(true, 'quick')}>
-        {label}
+      <Button variant="primary" block icon={<TrendingUp size={14} />} onClick={() => useSession.getState().promptAuth(true, live ? 'register' : 'quick')}>
+        {label ?? (live ? 'Create account to trade' : 'Start paper trading')}
       </Button>
       <p className="text-center text-2xs text-muted">
-        Instant guest account with a paper balance — no wallet, no real funds.{' '}
+        {live ? 'Your own Solana wallet, funded by you.' : 'Instant guest account with a paper balance — no wallet, no real funds.'}{' '}
         <button type="button" className="font-medium text-accent hover:underline" onClick={() => useSession.getState().promptAuth(true, 'login')}>
           Log in
         </button>
@@ -58,6 +61,7 @@ export function SummaryRow({ label, children }: { label: string; children: React
 
 /** Outcome of the last manual trade, inline under the submit button. */
 export function TradeResultLine({ result, token, onRaiseSlippage, onDismiss }: { result: TradeResult | null; token: TokenDetail; onRaiseSlippage: () => void; onDismiss: () => void }) {
+  const live = useIsLive();
   if (!result) return null;
   if (result.ok) {
     const r = result.receipt;
@@ -76,7 +80,7 @@ export function TradeResultLine({ result, token, onRaiseSlippage, onDismiss }: {
       </div>
     );
   }
-  const hint = swapErrorHint(result.error);
+  const hint = swapErrorHint(result.error, live);
   return (
     <div role="alert" className="flex items-start gap-1.5 rounded border border-down/30 bg-down/5 px-2 py-1.5 text-xs">
       <CircleX size={13} className="mt-px shrink-0 text-down" aria-hidden />
@@ -86,6 +90,11 @@ export function TradeResultLine({ result, token, onRaiseSlippage, onDismiss }: {
         {hint?.raiseSlippage && (
           <Button size="xs" variant="outline" className="mt-1" onClick={onRaiseSlippage}>
             Raise slippage
+          </Button>
+        )}
+        {hint?.deposit && (
+          <Button size="xs" variant="primary" className="mt-1" onClick={() => openFunds('deposit')}>
+            Deposit SOL
           </Button>
         )}
       </div>

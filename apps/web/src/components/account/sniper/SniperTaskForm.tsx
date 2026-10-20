@@ -2,8 +2,10 @@ import { useId, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatNative, type ChainId, type PresetId, type SniperKind, type SniperTask, type StrategySpec } from '@trenchscope/shared';
 import { Crosshair } from 'lucide-react';
+import { ensureLiveTradeAck } from '@/components/trade/LiveTradeAck';
 import { DEFAULT_STRATEGY, StrategyEditor } from '@/components/trade/StrategyEditor';
 import { Button, Drawer, Field, focusFirstError, Input, NumberInput, SegmentedControl, Toggle } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
@@ -118,6 +120,7 @@ function SniperTaskDrawer({ onClose, chain, task, initial }: SniperTaskFormProps
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const sym = nativeSymbol(chain);
+  const liveMode = useIsLive();
 
   const set = <K extends keyof SniperForm>(key: K, value: SniperForm[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -166,6 +169,8 @@ function SniperTaskDrawer({ onClose, chain, task, initial }: SniperTaskFormProps
       strategy,
       presetId: form.presetId,
     };
+    // Live: a new sniper buys with real funds on its own, so the one-time acknowledgement comes first.
+    if (!task && liveMode && !(await ensureLiveTradeAck())) return;
     setPending(true);
     try {
       const saved = task ? await api.updateSniperTask(task.id, body) : await api.createSniperTask(body);
@@ -300,7 +305,7 @@ function SniperTaskDrawer({ onClose, chain, task, initial }: SniperTaskFormProps
           {task && task.buysDone > 0 && <p className="text-xs text-muted">{task.buysDone} buy{task.buysDone === 1 ? '' : 's'} done so far — raise max buys to keep sniping.</p>}
           {budget > balance && (
             <Note tone="warn">
-              Up to {formatNative(budget, sym)} could be spent, more than your {formatNative(balance, sym)} paper balance. Later snipes fail once the balance runs out.
+              Up to {formatNative(budget, sym)} could be spent, more than your {formatNative(balance, sym)} {liveMode ? '' : 'paper '}balance. Later snipes fail once the balance runs out.
             </Note>
           )}
           <Field label="Trade preset" hint="Higher presets pay more priority fee to land earlier in the block.">
@@ -317,8 +322,8 @@ function SniperTaskDrawer({ onClose, chain, task, initial }: SniperTaskFormProps
 
         <FormSection title="Before you arm it">
           <Note tone="warn" title="Sniping is high risk">
-            Most fresh launches go to zero, devs and bundlers often dump on the first buyers, and every snipe pays fees. Keep sizes small and use exits. Paper
-            trading on a simulated market.
+            Most fresh launches go to zero, devs and bundlers often dump on the first buyers, and every snipe pays fees. Keep sizes small and use exits.{' '}
+            {liveMode ? 'Snipes execute on Solana mainnet with real funds.' : 'Paper trading on a simulated market.'}
           </Note>
           {shown.form && <Note tone="error">{shown.form}</Note>}
         </FormSection>

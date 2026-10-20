@@ -5,6 +5,7 @@ export { useHotkeys, isTypingTarget, MOD_KEY, type HotkeyMap } from './useHotkey
 export { useLocalStorage } from './useLocalStorage';
 export { useMediaQuery, useBreakpoint, useIsMobile, usePrefersReducedMotion, scrollBehavior, BREAKPOINTS } from './useMediaQuery';
 export { useMeta, useClockSync } from './useMeta';
+export { useDemoUrl, useEnabledChains, useIsLive, useLiveStatus, useMode, useModeSync } from './useMode';
 export { useNow, serverNow, setClockOffset } from './useNow';
 export { useOpenLink, opensNewTab, isMiddleClick, type LinkGesture } from './useOpenLink';
 export { useStickyError } from './useStickyError';

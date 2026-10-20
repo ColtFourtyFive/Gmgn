@@ -186,6 +186,16 @@ export interface MarketSource extends MarketApi {
   liveStatus(): LiveStatus | null;
   serialize(): unknown;
   restore(data: unknown): void;
+  /**
+   * The token at `address` on `chain`. Live mode loads a mint the World has not seen from the
+   * chain (and starts streaming it); the simulator only looks it up. Null when there is none.
+   */
+  ensureToken?(chain: ChainId, address: string): Promise<TokenState | null>;
+  /**
+   * The wallet at `address` on `chain`. Live mode registers a valid address the World has not
+   * seen as an observed wallet; the simulator only looks it up. Null when there is none.
+   */
+  ensureWallet?(chain: ChainId, address: string): WalletState | null;
 }
 
 /** An account's embedded wallet held by the key-management provider (never a raw key). */
@@ -255,8 +265,8 @@ export interface DurableStore {
   getState(key: string): unknown;
   putState(key: string, value: unknown): void;
   appendAudit(rec: AuditRecord): void;
-  /** Newest first. */
-  auditFor(accountId: string, limit: number): AuditRecord[];
+  /** Newest first; only the given actions when `actions` is set. */
+  auditFor(accountId: string, limit: number, actions?: readonly string[]): AuditRecord[];
   /** False (and nothing written) when (accountId, signature) is already recorded. */
   appendFill(fill: LiveFillRecord): boolean;
   /** Newest first. */

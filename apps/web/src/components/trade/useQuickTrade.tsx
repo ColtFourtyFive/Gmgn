@@ -4,10 +4,13 @@ import { formatNative, type ChainId, type SwapRequest } from '@trenchscope/share
 import { ConfirmDialog } from '@/components/account/ConfirmDialog';
 import { Checkbox } from '@/components/ui';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
+import { useIsLive } from '@/hooks/useMode';
 import { useSwap } from '@/hooks/useSwap';
 import { nativeSymbol } from '@/lib/chain';
+import { isLiveMode } from '@/lib/mode';
 import { requireAuth } from '@/store/session';
 import { checkTradeGates, GateReasons, hasGates, type TradeGates } from './gates';
+import { ensureLiveTradeAck } from './LiveTradeAck';
 
 /** A one-click market order: buy a native amount or sell a percent of the position. */
 export type QuickOrder = { side: 'buy'; amount: number } | { side: 'sell'; percent: number };
@@ -48,6 +51,7 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
 } {
   const trade = useTradeSettings(chain);
   const { confirmTrades } = useDisplaySettings();
+  const live = useIsLive();
   const { swap, pending } = useSwap();
   const qc = useQueryClient();
   const [active, setActive] = useState<string | null>(null);
@@ -70,15 +74,20 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
     if (pending || checking || !token) return;
     const placed = { order: o, token, symbol };
     requireAuth(() => {
-      setChecking(quickOrderKey(o));
-      void checkTradeGates(qc, request(o, token)).then((gates) => {
-        setChecking(null);
-        const held: Held = { ...placed, gates };
-        if (hasGates(gates) || confirmTrades) {
-          setAck(false);
-          setConfirm(held);
-        } else run(held);
-      });
+      const gate = () => {
+        setChecking(quickOrderKey(o));
+        void checkTradeGates(qc, request(o, token)).then((gates) => {
+          setChecking(null);
+          const held: Held = { ...placed, gates };
+          if (hasGates(gates) || confirmTrades) {
+            setAck(false);
+            setConfirm(held);
+          } else run(held);
+        });
+      };
+      // Live: the one-time real-funds acknowledgement comes before the gates (demo stays synchronous).
+      if (isLiveMode()) void ensureLiveTradeAck().then((ok) => ok && gate());
+      else gate();
     });
   };
 
@@ -96,9 +105,13 @@ export function useQuickTrade(chain: ChainId, token: string, symbol?: string): {
       onConfirm={() => confirm && (!risky || ack) && run(confirm)}
       title={confirm ? (risky ? `High-risk token: ${name}` : `${label} of ${name}?`) : ''}
       description={
-        risky
-          ? `${label} with preset ${trade.activeBuyPreset}. Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.`
-          : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. Paper trade — no real funds.`
+        live
+          ? risky
+            ? `${label} with preset ${trade.activeBuyPreset}. Automated security checks flagged this token. This trade uses real funds on Solana mainnet.`
+            : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. Executes on Solana mainnet with real funds.`
+          : risky
+            ? `${label} with preset ${trade.activeBuyPreset}. Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.`
+            : `Market ${side ?? 'order'} with preset ${side === 'sell' ? trade.activeSellPreset : trade.activeBuyPreset}. Paper trade — no real funds.`
       }
       confirmLabel={gated ? `${verb} anyway` : verb}
       tone={side === 'sell' ? 'sell' : 'buy'}

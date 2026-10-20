@@ -64,7 +64,7 @@ function HitRow({ hit, id, active, onPick, onHover }: { hit: Hit; id: string; ac
     const t = hit.token;
     body = (
       <>
-        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={28} />
+        <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={28} />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="flex items-center gap-1.5">
             <span className="truncate font-semibold text-fg">{t.symbol}</span>

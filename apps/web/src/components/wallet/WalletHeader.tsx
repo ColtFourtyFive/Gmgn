@@ -3,9 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { shortAddress, WALLET_PERIODS, type ChainId, type WalletPeriod, type WalletProfile, type WalletTag } from '@trenchscope/shared';
 import { Clock, Copy, Hourglass, Landmark, PieChart, Share2, Users, Wallet } from 'lucide-react';
 import clsx from 'clsx';
-import { AddressLink, Age, ChainBadge, Compact, FlashValue, Native, Usd, WalletAvatar, WalletTags } from '@/components/common';
+import { AddressLink, Age, ChainBadge, Compact, ExplorerLink, FlashValue, Native, Usd, WalletAvatar, WalletTags } from '@/components/common';
 import { Button, CopyButton, SegmentedControl, Tooltip } from '@/components/ui';
-import { copyText, useNow } from '@/hooks';
+import { copyText, useIsLive, useNow } from '@/hooks';
 import { routes } from '@/lib/chain';
 import { toast } from '@/store/toasts';
 import { FollowButton } from './FollowButton';
@@ -75,6 +75,7 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
   const remark = (record ? record.remark : p.remark) || null;
   const name = remark || p.label || shortAddress(p.address, 6, 6);
   const displayName = p.label || remark;
+  const live = useIsLive();
 
   return (
     <section className="panel flex flex-col gap-3 p-3 md:p-4" aria-label="Wallet overview">
@@ -96,6 +97,7 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
                 <span className="sm:hidden">{shortAddress(p.address, 6, 6)}</span>
               </span>
               <CopyButton text={p.address} label="Copy address" />
+              <ExplorerLink chain={chain} kind="address" value={p.address} size={12} />
               {tags.length > 0 && <WalletTags tags={tags} max={8} showLabel />}
             </div>
           </div>
@@ -137,8 +139,9 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
         <Meta icon={<Clock size={12} />} label="Last active">
           <LastActive ts={p.lastActiveAt} />
         </Meta>
-        <Meta icon={<Hourglass size={12} />} label="Wallet age" title={`First funded ${new Date(p.createdAt).toLocaleString()}`}>
-          <Age ts={p.createdAt} />
+        {/* createdAt 0: the first funding is not known (live wallets seen only through recent trades). */}
+        <Meta icon={<Hourglass size={12} />} label="Wallet age" title={p.createdAt > 0 ? `First funded ${new Date(p.createdAt).toLocaleString()}` : 'First funding not indexed'}>
+          {p.createdAt > 0 ? <Age ts={p.createdAt} /> : <span className="text-muted">unknown</span>}
         </Meta>
         {p.fundedBy && (
           <Meta icon={<Landmark size={12} />} label="Funded by">
@@ -148,7 +151,7 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
         )}
         {p.xFollowers !== null && (
           <Meta icon={<XMark size={11} />} label="Followers">
-            <Tooltip content={`${p.label ?? 'This wallet'} has ${followersLabel(p.xFollowers)} on X (simulated)`}>
+            <Tooltip content={`${p.label ?? 'This wallet'} has ${followersLabel(p.xFollowers)} on X${live ? '' : ' (simulated)'}`}>
               <span tabIndex={0}>
                 <Compact value={p.xFollowers} className="font-semibold" />
               </span>
@@ -164,7 +167,7 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
         <div className="flex flex-wrap items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-2 text-sm" role="note">
           <Wallet size={14} className="shrink-0 text-accent" />
           <span className="font-medium text-fg">This is your wallet.</span>
-          <span className="text-muted">Positions, orders and PnL of your paper trading live in Portfolio.</span>
+          <span className="text-muted">Positions, orders and PnL of your {live ? '' : 'paper '}trading live in Portfolio.</span>
           <Link to={routes.portfolio()} className="ml-auto text-xs font-medium text-accent hover:underline">
             Open portfolio →
           </Link>

@@ -54,6 +54,7 @@ Memecoin traders work in a market where most launches die within hours (on refer
 
 ### 1.5 Constraints that shape v1
 - **No blockchain RPC and no market-data API access** in the build/runtime environment. v1 runs entirely on a **deterministic market simulator** (§5) with **paper trading** (simulated balances). There are no real funds, real keys or on-chain transactions.
+  - *Update (live mode):* the owner decided Trenchscope ships as a real trading platform. `MODE=live` adds real Solana data and trading (PumpPortal feed, Solana RPC, Jupiter, Jito, Turnkey embedded wallets); the simulator remains the default **demo** deployment. Status in Appendix G, operations in `docs/LIVE.md`.
 - **Web app only.** No Telegram bot, no browser extension, no native mobile app. Useful bot and extension features are folded into the web app (§9.7): quick paste-CA trade box, web push, an in-app social pulse in place of the X tracker, and floating panels in place of the extension overlays. The layout is responsive (desktop, tablet, phone; installable PWA is P1).
 - Simulated chains in v1: `sol`, `bsc`, `base`, `eth` (`packages/shared/src/chains.ts`). Launchpad and DEX names are fictional (Moonpit, Bonkfire, Rayforge, FourPad, BNB Rocket, ClawLab, BaseDrop, EtherForge; DEX: TrenchSwap).
 - Every simulated surface is clearly labelled: a persistent **SIM** badge in the header and a "Simulated market, no real funds" line in the footer. Shared PnL cards carry an unremovable "SIMULATED" watermark.
@@ -136,7 +137,7 @@ Design for P-1 and P-2 first, keep the default UI comfortable for P-5, and expos
 | `Signer` | sign | no-op (paper) | enclave / KMS |
 
 - **AR-11 (P0)** Provider responses carry `provenance {providerId, fetchedAt, commitment}`. The UI shows a "SIM" source badge.
-- **AR-12 (P1)** Modes: `sim` (all Sim), `paper` (real data, sim execution), `replay` (archived events, virtual clock), `live`. v1 ships `sim` only.
+- **AR-12 (P1)** Modes: `sim` (all Sim), `paper` (real data, sim execution), `replay` (archived events, virtual clock), `live`. v1 ships `sim` only. *Update:* `live` (Solana) is now implemented as `MODE=live` and `sim` as `MODE=demo`; `paper` and `replay` remain unbuilt (Appendix G).
 
 ---
 
@@ -2267,3 +2268,26 @@ Status of the §13.1 P0 scope in the current build. ✅ shipped · ◐ partial (
 | 17 | Non-functional | ✅ | Realtime WS with resubscribe, subscript-zero formatting, theme tokens, responsive layouts, accessibility checks (axe) in E2E, auth + rate limits + CSP + input sanitisation, determinism and persistence tests, Playwright E2E suite. |
 
 Beyond P0, v1 also ships these P1/P2 items: token launch with bundle wallets, PnL share cards, command palette, narratives, rewards & referrals, wallet copy scores and style titles, follow import/export, call-outs.
+
+---
+
+## Appendix G: Live mode implementation status
+
+`MODE=live` turns a deployment into a real Solana trading platform; `MODE=demo` (default) keeps the
+simulator exactly as in Appendix F. Runbook: `docs/LIVE.md`; contract: `docs/API.md` "Live mode".
+✅ built and tested offline · ◐ partial · ⏳ not built. **Nothing below has been exercised against the
+real services** (they were unreachable from the build environment); everything is tested against
+fixtures and local fakes and must pass the verification list in `docs/LIVE.md` §10 before real funds.
+
+| Area | Status | Notes |
+|---|---|---|
+| Mode switch, meta, chain gating | ✅ | `MODE`, `/api/meta` `mode` / `enabledChains` / `live` status with configuration `problems`; other chains refused over HTTP and WebSocket (`chain_not_enabled`); demo snapshot never loaded in live and vice versa. |
+| Market data (pump.fun) | ✅ | PumpPortal feed: launches, curve trades, migrations into PumpSwap, PumpSwap trades; batching, reconnect with resubscribe, liveness; tracked-token cap and idle sweep with protected tokens; on-demand mints from RPC (pump curve, PumpSwap pool, Jupiter-priced). ⏳ other launchpads. |
+| Enrichment | ✅ | Metadata (SSRF-guarded, IPFS gateways), SOL/USD and token prices (Jupiter Price v3), mint/freeze authorities and top holders from RPC under a request budget, narratives, KOL list. ◐ PumpSwap reserves only from trades. |
+| Execution | ✅ | Direct pump.fun curve buys/sells; Jupiter Swap API v1 for everything else; platform fee to `FEE_WALLET_ADDRESS`; compute budget from presets; Jito anti-MEV sends; confirmation by blockhash expiry with rebroadcast, background tracking; fills parsed from chain and booked into the shared ledger; orders, TP/SL, copy trading and sniping on the same path. ⏳ direct PumpSwap route; durable swap idempotency across restarts. |
+| Embedded wallets | ✅ | Turnkey (one wallet per account, signing via the API within org policies); local-dev encrypted keystore for development, refused in production. ⏳ sub-organization per user. |
+| Funding | ✅ | Deposit address + QR, deposit detection, balance sync, withdrawals (SOL / SPL) gated by 2FA, whitelist delay and rate limits, idempotent and resumable. |
+| Account security | ✅ | No guests; 10+ character passwords; TOTP 2FA with sealed secrets, replay protection, lockout and recovery codes; sliding session expiry; password change; audit log; security events in the UI. ⏳ `SECRETS_KEY` rotation, admin 2FA recovery. |
+| Durable store | ✅ | SQLite (WAL, fsync, 0600): accounts, trading, audit, fills, transfers; write-through; independent of snapshots. ◐ positions are not rebuilt from `fills` after a restart without a snapshot. |
+| Web | ✅ | Mode-aware shell (Live badge and health, trading-unavailable banner, "Try demo"), Solana-only navigation, real-funds acknowledgement, deposit / withdraw dialogs, security settings, token images, Solscan links. ◐ no live E2E run. |
+| Operations | ◐ | Runbook, env reference, fake PumpPortal for dev/test, offline integration test. ⏳ admin/diagnostics endpoint, staging verification against real services, mainnet smoke test. |

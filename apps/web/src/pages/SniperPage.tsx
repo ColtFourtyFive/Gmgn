@@ -10,6 +10,7 @@ import { SniperTaskForm } from '@/components/account/sniper/SniperTaskForm';
 import { Age, ChainIcon, Native, StatTile } from '@/components/common';
 import { Page, PageHeader } from '@/components/layout';
 import { Button, EmptyState, ErrorState, Panel, Skeleton } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
 import { errorMessage } from '@/lib/format';
@@ -21,6 +22,7 @@ type DrawerState = { task: SniperTask | null; initial?: { kind?: SniperKind; dev
 export default function SniperPage() {
   const chain = useChain();
   const signedIn = useSignedIn();
+  const live = useIsLive();
   const [params, setParams] = useSearchParams();
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const tasks = useQuery({ queryKey: accountKeys.sniperTasks, queryFn: api.sniperTasks, enabled: signedIn, refetchInterval: 10_000 });
@@ -57,7 +59,11 @@ export default function SniperPage() {
       <AccountGate
         icon={<Crosshair size={22} />}
         title="Be first into the next runner"
-        description="Snipers watch every launch and migration in the simulated market and buy instantly when a token matches your rules."
+        description={
+          live
+            ? 'Snipers watch every pump.fun launch and migration and buy instantly, with your wallet, when a token matches your rules.'
+            : 'Snipers watch every launch and migration in the simulated market and buy instantly when a token matches your rules.'
+        }
         features={['New launches, curve migrations or specific dev wallets', 'Keyword, launchpad, socials and dev-holding filters', 'Automatic take-profit / stop-loss on every snipe']}
       >
         <SniperBody
@@ -98,6 +104,7 @@ function SniperBody({
   const qc = useQueryClient();
   const { toggle, pending } = useToggleSniperTask();
   const [deleting, setDeleting] = useState<SniperTask | null>(null);
+  const live = useIsLive();
   const [deletePending, setDeletePending] = useState(false);
 
   const list = useMemo(() => (data ?? []).filter((t) => t.chain === chain).sort((a, b) => b.createdAt - a.createdAt), [data, chain]);
@@ -201,7 +208,7 @@ function SniperBody({
             ))}
           </div>
           <Note tone="warn" title="Sniping is high risk">
-            Most new launches fail, and devs or bundlers often sell into the first buyers. Keep sizes small and always attach exits. Paper trading only.
+            Most new launches fail, and devs or bundlers often sell into the first buyers. Keep sizes small and always attach exits. {live ? 'Snipes spend real SOL from your wallet.' : 'Paper trading only.'}
           </Note>
         </>
       )}

@@ -11,6 +11,8 @@ export interface ToastInput {
   body?: string;
   /** In-app route rendered as a link under the body. */
   link?: { to: string; label?: string };
+  /** A button under the body (e.g. "Deposit" after an insufficient-balance error); dismisses the toast. */
+  action?: { label: string; run: () => void };
   /** Auto-dismiss delay; 0 keeps the toast until closed. Defaults by kind (longer with a link). */
   durationMs?: number;
 }
@@ -62,7 +64,7 @@ export const useToasts = create<ToastState>((set) => ({
       for (const old of next.slice(0, Math.max(0, next.length - MAX_VISIBLE))) clearTimer(old.id);
       return { toasts: next.slice(-MAX_VISIBLE) };
     });
-    const ms = input.durationMs ?? (input.link ? Math.max(LINK_MIN_MS, DEFAULT_DURATION[input.kind]) : DEFAULT_DURATION[input.kind]);
+    const ms = input.durationMs ?? (input.link || input.action ? Math.max(LINK_MIN_MS, DEFAULT_DURATION[input.kind]) : DEFAULT_DURATION[input.kind]);
     if (ms > 0) startTimer(id, ms);
     return id;
   },

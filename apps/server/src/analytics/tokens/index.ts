@@ -629,6 +629,8 @@ export class TokenAnalytics {
       name: t.name,
       logoSeed: t.logoSeed,
       logoGlyph: t.logoGlyph,
+      // Live tokens' real image (simulated tokens have none: the field stays absent).
+      ...(t.imageUrl ? { imageUrl: t.imageUrl } : {}),
       narrative: t.narrative,
       launchpad: t.launchpad,
       status: t.status,
@@ -697,6 +699,7 @@ export class TokenAnalytics {
       name: t.name,
       logoSeed: t.logoSeed,
       logoGlyph: t.logoGlyph,
+      ...(t.imageUrl ? { imageUrl: t.imageUrl } : {}),
       priceUsd,
       marketCapUsd: priceUsd * t.totalSupply,
       liquidityUsd: world.liquidityUsd(t),

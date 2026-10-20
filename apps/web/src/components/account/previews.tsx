@@ -73,7 +73,7 @@ export function TokenPreview({ chain, address }: { chain: ChainId; address: stri
   if (!t) return null;
   return (
     <div className="flex items-center gap-2.5 rounded border border-line bg-panel-2 px-2.5 py-2">
-      <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={28} />
+      <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={28} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">
           <span className="font-semibold text-fg">{t.symbol}</span> <span className="text-muted">{t.name}</span>

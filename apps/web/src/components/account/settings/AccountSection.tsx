@@ -1,17 +1,21 @@
 import { Link } from 'react-router-dom';
-import { CHAIN_IDS, CHAINS } from '@trenchscope/shared';
-import { Compass, Gift, LogOut, UserPlus, UserRound, Wallet } from 'lucide-react';
-import { AddressLink, Age, ChainIcon, Native, WalletAvatar } from '@/components/common';
+import { CHAINS } from '@trenchscope/shared';
+import { Compass, Gift, LogOut, ShieldCheck, UserPlus, UserRound, Wallet } from 'lucide-react';
+import { AddressLink, Age, ChainIcon, ExplorerLink, Native, WalletAvatar } from '@/components/common';
+import { FundsActions } from '@/components/funds/LiveWalletPanel';
 import { requestSignOut } from '@/components/layout/SignOutDialog';
 import { Badge, Button, CopyButton, Panel } from '@/components/ui';
+import { useEnabledChains, useIsLive } from '@/hooks/useMode';
 import { routes } from '@/lib/chain';
 import { useSession } from '@/store/session';
 import { startTour } from '@/store/tour';
 import { DetailRow, Note } from '../FormBits';
 
-/** Profile facts, paper wallets, referral shortcut, the onboarding tour and sign-out. */
+/** Profile facts, paper wallets (live: the Solana wallet with Deposit / Withdraw), referral shortcut, the onboarding tour and sign-out. */
 export function AccountSection() {
   const account = useSession((s) => s.account);
+  const live = useIsLive();
+  const chains = useEnabledChains();
   if (!account) return null;
 
   return (
@@ -73,9 +77,9 @@ export function AccountSection() {
         </div>
       </Panel>
 
-      <Panel title="Paper wallets" icon={<Wallet size={14} />} subtitle="One per chain">
+      <Panel title={live ? 'Wallet' : 'Paper wallets'} icon={<Wallet size={14} />} subtitle={live ? 'Your embedded Solana wallet' : 'One per chain'}>
         <ul className="flex flex-col divide-y divide-line">
-          {CHAIN_IDS.map((c) => {
+          {chains.map((c) => {
             const w = account.wallets[c];
             if (!w) return null;
             return (
@@ -83,16 +87,32 @@ export function AccountSection() {
                 <ChainIcon chain={c} size={20} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-fg">{CHAINS[c].name}</p>
-                  <AddressLink chain={c} address={w.address} className="text-xs text-muted" />
+                  <span className="flex min-w-0 items-center gap-0.5">
+                    <AddressLink chain={c} address={w.address} className="text-xs text-muted" />
+                    <ExplorerLink chain={c} kind="address" value={w.address} />
+                  </span>
                 </div>
                 <Native value={w.nativeBalance} chain={c} className="text-sm font-semibold text-fg" />
               </li>
             );
           })}
         </ul>
-        <p className="mt-2 text-xs text-faint">
-          Top wallets up from the <Link to={routes.portfolio()} className="text-accent hover:underline">Portfolio</Link> page (Deposit, once a minute per chain).
-        </p>
+        {live ? (
+          <div className="mt-2 flex flex-col gap-2">
+            <FundsActions />
+            <p className="text-xs text-faint">
+              Withdrawals need two-factor authentication and a whitelisted address:{' '}
+              <Link to={routes.settings('security')} className="inline-flex items-center gap-0.5 text-accent hover:underline">
+                <ShieldCheck size={12} aria-hidden /> Security settings
+              </Link>
+              .
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-faint">
+            Top wallets up from the <Link to={routes.portfolio()} className="text-accent hover:underline">Portfolio</Link> page (Deposit, once a minute per chain).
+          </p>
+        )}
       </Panel>
     </div>
   );

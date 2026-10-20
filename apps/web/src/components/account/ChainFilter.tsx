@@ -1,6 +1,7 @@
-import { CHAIN_IDS, isChainId } from '@trenchscope/shared';
+import { isChainId } from '@trenchscope/shared';
 import { CHAIN_SHORT, ChainIcon } from '@/components/common';
 import { SegmentedControl, type TabItem } from '@/components/ui';
+import { useEnabledChains } from '@/hooks/useMode';
 import type { ChainScope } from './queries';
 
 export interface ChainFilterProps {
@@ -12,11 +13,13 @@ export interface ChainFilterProps {
   className?: string;
 }
 
-/** "All · SOL · BSC · Base · ETH" pill switcher for account pages. */
+/** "All · SOL · BSC · Base · ETH" pill switcher for account pages (the served chains; nothing when only one is served). */
 export function ChainFilter({ value, onChange, counts, size = 'sm', className }: ChainFilterProps) {
+  const chains = useEnabledChains();
+  if (chains.length <= 1) return null;
   const items: TabItem<ChainScope>[] = [
     { value: 'all', label: 'All', count: counts?.all },
-    ...CHAIN_IDS.map((c) => ({ value: c, label: CHAIN_SHORT[c], icon: <ChainIcon chain={c} size={12} />, count: counts?.[c] })),
+    ...chains.map((c) => ({ value: c, label: CHAIN_SHORT[c], icon: <ChainIcon chain={c} size={12} />, count: counts?.[c] })),
   ];
   return <SegmentedControl value={value} onChange={onChange} items={items} size={size} aria-label="Chain" className={className} />;
 }

@@ -7,6 +7,7 @@ import { CalendarDays, ChartColumn, Gauge, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, FlashValue, Pct, Usd } from '@/components/common';
 import { Panel, Tooltip } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { CopyScoreGauge, StyleBadges, StyleTitle } from './StyleBits';
 import { distributionTotal, PNL_BUCKETS } from './utils';
 
@@ -120,6 +121,7 @@ export interface PnlCardProps {
 }
 
 export const PnlCard = memo(function PnlCard({ stats: s, period, className }: PnlCardProps) {
+  const live = useIsLive();
   return (
     <Panel title="PnL" subtitle={PERIOD_LABEL[period]} icon={<Wallet size={14} />} className={className} bodyClassName="flex flex-col gap-3">
       <div>
@@ -132,7 +134,7 @@ export const PnlCard = memo(function PnlCard({ stats: s, period, className }: Pn
         </div>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-        <Stat label="Unrealized PnL" hint="Paper PnL of positions still held, at the current price">
+        <Stat label="Unrealized PnL" hint={`${live ? 'PnL' : 'Paper PnL'} of positions still held, at the current price`}>
           <FlashValue value={s.unrealizedPnlUsd}>
             <Usd value={s.unrealizedPnlUsd} colored signed />
           </FlashValue>

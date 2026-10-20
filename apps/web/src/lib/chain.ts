@@ -50,5 +50,5 @@ export const routes = {
   watchlist: () => '/watchlist',
   alerts: () => '/alerts',
   rewards: () => '/rewards',
-  settings: (section?: 'trading' | 'display' | 'blacklist' | 'account') => (section && section !== 'trading' ? `/settings?section=${section}` : '/settings'),
+  settings: (section?: 'trading' | 'display' | 'blacklist' | 'account' | 'security') => (section && section !== 'trading' ? `/settings?section=${section}` : '/settings'),
 };

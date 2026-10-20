@@ -16,7 +16,8 @@ export interface AgeProps {
  */
 export function Age({ ts, suffix = '', className }: AgeProps) {
   const now = useNow();
-  if (ts === null || ts === undefined || !Number.isFinite(ts)) return <span className={clsx('num text-faint', className)}>--</span>;
+  // 0 (or less) = unknown: live tokens loaded from chain whose creation time could not be read.
+  if (ts === null || ts === undefined || !Number.isFinite(ts) || ts <= 0) return <span className={clsx('num text-faint', className)}>--</span>;
   return (
     <time dateTime={new Date(ts).toISOString()} title={new Date(ts).toLocaleString()} className={clsx('num whitespace-nowrap', className)}>
       {formatAge(ts, now)}
