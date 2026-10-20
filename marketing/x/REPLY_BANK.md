@@ -19,7 +19,7 @@
 | **[TS]** | Mentions Trenchscope under **someone else's** post. Fires only on its **Trigger**: a question in that post or thread that it answers. No question, no [TS] (§1.2) |
 | **[ANS]** | An answer about us (§2.9). Under our own posts, answer freely. Under someone else's post it counts as [TS] and needs the question asked to us |
 | **[SAFE]** | A scam or impersonator warning (§2.10). Never counts against the budget. Names no feature, carries no link |
-| **[gate X]** | Needs the owner check X (ledger §8) ticked first: **C-1** per chain, **K-1** custody, **K-2** how automated orders sign, **F-1** feature in the live build, **T-1** token, **Fees**. Not ticked → don't post it |
+| **[gate X]** | Needs the owner check X (ledger §8) ticked first: **C-0** before launch (each chain named and self-custody are in the launch build; teasers only), **C-1** per chain and **K-1** custody for anything after launch, **K-2** how automated orders sign, **F-1** feature in the live build, **T-1** token, **Fees**. Not ticked → don't post it |
 | **[stat]** | Real-market number (AMBER). Keep the "~" and the time window, re-verify first (S-1), have the STAT line ready |
 | **[truth]** | Only true if the asset or the moment matches. Check it first, or don't post it |
 | **+RISK** | After the launch gate passes, this one ends with RISK (`memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.`, 92). Its body is ≤ 186, so it fits. Before launch it goes without RISK, as the warm-up posts do, unless the legal check (L-1) says otherwise |
@@ -61,7 +61,7 @@ These matter more than any single line in this file. One spam label costs more r
 14. **Pace like a person:** no more than 8–10 replies an hour, spread across the posting windows. Twenty replies in ten minutes reads as a bot.
 15. **On our own posts, answer every real reply within the first hour**, each one in fresh words. Mutual replies carry the most weight in ranking (CT_PLAYBOOK §3.2).
 16. **Never DM anyone first, and never ask for a seed phrase, a private key, a "wallet sync" or funds**, not even as a joke. Help people in public, or point them to `[SUPPORT]`. That's the promise in CUSTODY, and the account keeps it in every reply.
-17. **Nothing says "live" in this bank.** Before the launch gate passes: no "live", "trade now", "sign up", "try it", "launching", "soon" or link. "is it live?" gets "not yet" (R52), never "soon" (MNC-01, MNC-13). After launch, the gated launch-day posts carry the news; replies say "yes" and point to the pinned post.
+17. **Nothing says "live" in this bank.** Before the launch gate passes: no "live", "trade now", "sign up", "try it", "launching", "soon" or link. (The warm-up's single `soon.` is D7-P4, a post, never a reply: ledger MNC-01.) "is it live?" gets "not yet" (R52), never "soon" (MNC-01, MNC-13). After launch, the gated launch-day posts carry the news; replies say "yes" and point to the pinned post.
 18. **Chains are supported chains, never partners.** Solana, Base, BNB Chain (BSC), Ethereum, Robinhood Chain; short forms sol, base, bsc, eth, robinhood chain. Never "robinhood" on its own, never "official", "partnered" or "powered by" (MNC-14). A chain that fails its check (C-1) leaves every reply.
 19. **No token talk.** No token, airdrop, points, rewards, rebates or "wen" jokes, from us or about us (MNC-02). "wen token?" gets silence until the owner decides (R53, T-1).
 20. **No profit, safety or speed words.** No "profit", "earn", "returns", "safe", "protects", "detects", "predicts", "fastest", "first", "only" about us (MNC-03, 06, 08, 09, 17). "take-profit" and "stop-loss" are order names, so they're fine.
@@ -72,10 +72,10 @@ These matter more than any single line in this file. One spam label costs more r
 |---|---|---|
 | **Day 1** | **0** | No product mention at all (`WARMUP_WEEK.md` Day 1) |
 | **Day 2** | **1**, only if asked | `WARMUP_WEEK.md` Day 2 note |
-| **Day 3** | **1** | Only on its trigger |
+| **Day 3** | **1** | Only on its trigger (`WARMUP_WEEK.md` Day 3 note) |
 | **Day 4** | **2** | `WARMUP_WEEK.md` Day 4 note |
 | **Day 5** | **0**, or **1** if someone asks directly | `WARMUP_WEEK.md` Day 5 note |
-| **Day 6, Day 7** | **1 a day** | Never drop "soon" or the launch under other people's posts (Day 7) |
+| **Day 6, Day 7** | **1 a day** | `WARMUP_WEEK.md` Day 6 and Day 7 notes. Never drop "soon" or the launch under other people's posts (Day 7) |
 | **Launch day** | Under our own posts, answer everything (§2.9 and `LAUNCH_DAY.md` §9.1). Under other people's posts, **at most 1 in 5** | A link only to someone who asked for it |
 | **From L+1** | **At most 1 in 5 replies, and at most 5 a day** | Never two [TS] replies to the same account in one week |
 | **Gate not passed after Day 7** | Stay at **1 a day** | Replies stay pre-launch: no "live", no date, no "soon" |
@@ -154,7 +154,7 @@ Same idea, different opener, different detail, different sentence shapes. That's
 - [ ] Is it worded differently from every reply I've sent this week?
 - [ ] No ticker, no CA, no name, no link, no tag, no verdict, no price call?
 - [ ] No "live", "soon", date, token, profit, safety or speed word?
-- [ ] If it names a chain: is it one that passed C-1, named as a supported chain?
+- [ ] If it names a chain: is it one that passed C-0 (before launch) or C-1 (after), named as a supported chain?
 - [ ] If it has a number: is it from the ledger, hedged, and not a demo-data number dressed as market data?
 - [ ] If it's a [TS] after launch: does it end with RISK?
 
@@ -302,7 +302,7 @@ biased answer, we built one: trenchscope. it tags the snipers, bundlers, insider
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-**Trigger:** an open "what should i use?" question, once per thread. "pinned post" points to the pin before launch, and to the trailer (with `[LINK]` in its first reply) after. Paste `[LINK]` only if they reply asking for it. **Claims:** SC-21, SC-21d (per-coin sniper, bundler, insider and dev tags: `server/analytics/tokens/track.ts:8-13,99-101,207-212`), SC-46 "you keep your keys" (**OWNER**, K-1). If K-1 isn't ticked, cut ", and you keep your keys" (re-measure). Never "every wallet gets a tag" (ledger SC-19).
+**Trigger:** an open "what should i use?" question, once per thread. "pinned post" points to the pin before launch, and to the trailer (with `[LINK]` in its first reply) after. Paste `[LINK]` only if they reply asking for it. **Claims:** SC-21, SC-21d (per-coin sniper, bundler, insider and dev tags: `server/analytics/tokens/track.ts:8-13,99-101,207-212`), SC-46 "you keep your keys" (**OWNER**: C-0 before launch, K-1 after). If the check for that stage isn't ticked, cut ", and you keep your keys" (re-measure). Never "every wallet gets a tag" (ledger SC-19).
 
 **R15 · [TS] [gate K-1 for the post, F-1] for someone brand new** · `184/280` · after launch `+RISK 272/280`
 
@@ -352,12 +352,12 @@ General advice on what to look at. Most launches never graduate (KS-01), so a lo
 unpopular take: a dev who sold everything can't dump that bag twice. the scarier one is still sitting on a big chunk and stopped posting. (their friends' wallets are a separate conversation.)
 ```
 
-**R20 · [TS] [gate K-2, F-1] the dev-sell exit** · `161/280` · after launch `+RISK 262/280`
+**R20 · [TS] [gate K-2, F-1] the dev-sell exit** · `167/280` · after launch `+RISK 262/280`
 
 Before launch:
 
 ```text
-{we built one:} a dev-sell exit you attach to the buy. the dev sells 20%+ of their bag in one trade, your sell fires right after. it reacts. it doesn't read minds.
+{we're building one:} a dev-sell exit you attach to the buy. the dev sells 20%+ of their bag in one trade, your sell fires right after. it reacts. it doesn't read minds.
 ```
 
 After launch (slot becomes `trenchscope has one:`):
@@ -368,7 +368,7 @@ trenchscope has one: a dev-sell exit you attach to the buy. the dev sells 20%+ o
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-**Trigger:** someone asks "is there a way to auto-sell when the dev sells?" or "how do you get out when the dev dumps?". **Claims:** SC-14, SC-41 (GREEN): fires when the creator sells at least X% of that wallet's holding in one trade, default 20% (`server/trading/orders.ts:29,183-184,270`; options 10/20/50/80% at `web/components/token/trade/AutoForm.tsx:43-48`). It **reacts after** the dev's sell. Never "before the dev", "beat the dev", "front-run" or any speed claim (MNC-08, MNC-17). **K-2:** exits run server-side in the code; with "you keep your keys" on the profile, the next reply will be "how?". Have R45 ready, or skip R20 until K-2 is answered. Don't use it within 48 h of D5-P2 (Day 5), which makes the same point.
+**Trigger:** someone asks "is there a way to auto-sell when the dev sells?" or "how do you get out when the dev dumps?". Tense follows R14/R15/R35/L23: "we're building" before launch, "trenchscope has one" after. **Claims:** SC-14, SC-41 (GREEN): fires when the creator sells at least X% of that wallet's holding in one trade; attached to a buy, X is the 20% default (`server/trading/orders.ts:29,183-184,270`; the 10/20/50/80% selector is on the Sell side, `web/components/token/trade/AutoForm.tsx:43-48`). It **reacts after** the dev's sell. Never "before the dev", "beat the dev", "front-run" or any speed claim (MNC-08, MNC-17). **K-2:** exits run server-side in the code; with "you keep your keys" on the profile, the next reply will be "how?". Have R45 ready, or skip R20 until K-2 is answered. Don't use it within 48 h of D5-P2 (Day 5), which makes the same point.
 
 ### 2.5 Bundler drama
 
@@ -402,15 +402,15 @@ every "stealth launch" somehow has {30} wallets that heard about it in the same 
 
 (Not "shared funders make it a bundle": our own tag rule calls any creation-block buyer other than the dev a bundler, R25, and a shared dev funder is the insider rule. Don't define it two ways.)
 
-**R25 · [TS] [gate F-1] how trenchscope tags it** · `177/280` · after launch `+RISK 271/280`
+**R25 · [TS] [gate F-1] how trenchscope tags it** · `180/280` · after launch `+RISK 274/280`
 
 ```text
-how trenchscope does it: any wallet that buys in the creation block gets tagged bundler, and the audit shows what share of the volume they made. it's on the coin before you buy.
+how trenchscope does it: any wallet but the dev that buys in the creation block gets tagged bundler, and the audit shows their share of the volume. it's on the coin before you buy.
 ```
 
 After launch, the same text plus a blank line and RISK.
 
-**Trigger:** someone asks how to spot a bundled launch, or which tool shows bundles. **Claims:** SC-21 bundler rule (a non-creator buy in the creation block: `server/analytics/tokens/track.ts:8,209`), SC-09 audit row = share of traded volume (`server/analytics/tokens/index.ts:476,496`; thresholds in `server/analytics/tokens/security.ts:470-597`). Say "tags", never "detects". Don't quote the UI tooltip's "likely linked to the dev" (ledger 2.2). Worded differently from D3-P3 on purpose; don't use it the same day.
+**Trigger:** someone asks how to spot a bundled launch, or which tool shows bundles. **Claims:** SC-21 bundler rule (a non-creator buy in the creation block: `server/analytics/tokens/track.ts:8,207-209`, `a !== t.creator`), SC-09 audit row = share of traded volume (`server/analytics/tokens/index.ts:476,496`; thresholds in `server/analytics/tokens/security.ts:470-597`). Say "tags", never "detects". Don't quote the UI tooltip's "likely linked to the dev" (ledger 2.2). Worded differently from D3-P3 on purpose; don't use it the same day.
 
 ### 2.6 "gm"
 
@@ -474,7 +474,7 @@ green days are when everyone's early and nobody checks who was earlier.
 enjoy it. sobering footnote: in one major launchpad's data (secondary, approximate), ~73% of graduates were down 60%+ from their migration price within 20 minutes. the curve is the easy part.
 ```
 
-KS-02 (AMBER), hedged, with the source note inline, because a second self-reply in someone else's thread breaks the one-reply-per-thread rule (§1.3). If anyone asks for more, reply in fresh words with the meaning of: `source: launchpad lifecycle data (secondary), one launchpad, sample window not published. approximate.` **Verify first** (S-1, ledger §4.1): if D7-P2 had to be swapped for its fallback because the stat couldn't be verified, R34 is off too. At most once a week, and never in the 48 h after a post that used the same stat (D7-P2 on Day 7, L2-A4 on L+2). Never "all memecoins".
+KS-02 (AMBER), hedged, with the source note inline, because a second self-reply in someone else's thread breaks the one-reply-per-thread rule (§1.3). If anyone asks for more, reply in fresh words with the meaning of: `source: launchpad lifecycle data (secondary), one launchpad, sample window not published. approximate.` **Verify first** (S-1, ledger §4.1): if D7-P2 had to be swapped for its fallback because the stat couldn't be verified, R34 is off too. At most once a week, and never in the 48 h after a post that used the same stat (D7-P2 on Day 7; KS-02 answers under COMM-1, `LAUNCH_DAY.md` §6.1, on launch day). Never "all memecoins".
 
 **R35 · [TS] [gate F-1] red day plan** · `167/280` · after launch `+RISK 256/280`
 
@@ -568,7 +568,7 @@ fair question. we'll spell out exactly how orders sign before trading opens. unt
 
 The holding line from `WARMUP_WEEK.md` §1.1, reworded each time. After K-2, use `[K-2 ANSWER]` in the owner's words, measured. Never improvise a mechanism ("session keys", "we never sign anything") (ledger K-2). Limit orders, auto exits, copy trades and sniper tasks run server-side in the code (`server/trading/orders.ts`, `copytrade.ts`, `sniper.ts`).
 
-**R46 · "which chains?"** · [gate C-1 per chain] · `113/280` (four chains `96/280`)
+**R46 · "which chains?"** · [gate C-0 per chain before launch, C-1 after] · `113/280` (four chains `96/280`)
 
 ```text
 {five:} solana, base, bnb chain (bsc), ethereum and robinhood chain. same terminal on each, you just switch chains.
@@ -582,12 +582,12 @@ If Robinhood Chain fails C-1:
 
 Name only chains that passed C-1; for any other combination, rewrite the list and re-measure. **Claims:** SC-42 (one terminal, one chain at a time: `shared/chains.ts:5-7`, `web/components/layout/ChainSwitcher.tsx`), SC-43, SC-45 (**OWNER**). Worded differently from D4-P4 on purpose. Never "robinhood" alone, never a chain logo or "official" (MNC-14). No "soon" for a chain that isn't ready (MNC-13).
 
-**R47 · "where's robinhood chain in the switcher?"** · [gate C-1 Robinhood Chain] · `117/280` (after launch `100/280`)
+**R47 · "where's robinhood chain in the switcher?"** · [gate C-0 Robinhood Chain before launch, C-1 after] · `108/280` (after launch `100/280`)
 
 Before launch:
 
 ```text
-that clip is the demo build, and it has four. robinhood chain is in the bio because it's part of what we're shipping.
+that clip is the demo build, which has four. robinhood chain is in the bio because it's in the launch build.
 ```
 
 After launch, while the clips are still the demo recordings:
@@ -670,17 +670,19 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 
 No date, no "soon", no "this week" in the pre-launch line (MNC-01, MNC-13, MNC-21). After launch it's an invitation to trade, so RISK goes with it.
 
-**R53 · "wen token?" / "airdrop?" / "points?"** · [gate T-1] · `126/280` or `105/280`
+**R53 · "wen token?" / "airdrop?" / "points?"** · [gate T-1] · `84/280` or `105/280`
 
 **Default: don't answer.** POSITIONING says we don't mention a token at all unless the owner confirms a plan (MNC-02), and `PROFILE.md` §9.4, `WARMUP_WEEK.md` §1.1 and `LAUNCH_DAY.md` §9.1 all hold the same line. Don't hide these replies either: they aren't scams.
 
 If the owner approves a deflection (T-1), it says nothing about a token, yes or no, and promises nothing. Two options for the owner to pick from:
 
-Plain:
+Plain (84):
 
 ```text
-we only post about things that are built. news from us comes from this profile, never from a dm and never from a "claim" link.
+news from us comes from this profile, never from a dm and never from a "claim" link.
 ```
+
+(The old first sentence, "we only post about things that are built.", is untrue for this account: the warm-up names Robinhood Chain and self-custody before they're in the code.)
 
 Dry:
 
@@ -783,7 +785,7 @@ Kind, public, brief. Never promise recovery, never diagnose in public, never say
 not ours. whoever launched that coin borrowed the name, and the accounts shilling it aren't us either. report them. don't buy the story.
 ```
 
-Says nothing about a token of ours, so it's allowed by default (like `LAUNCH_DAY.md` WARN-Tb). Never name the coin or post its address. The stronger "there is no trenchscope token" line (WARN-Ta) is only for the owner to approve under T-1. If the coin is getting traction, the owner decides whether to post WARN-Tb as an original.
+Says nothing about a token of ours, so it's allowed by default, like `LAUNCH_DAY.md` WARN-Tb and SAFE-L1's "coins borrowing our name" (the same rule in `LAUNCH_DAY.md` §1.1 T-1 and §12). Never name the coin or post its address. The stronger "there is no trenchscope token" line (WARN-Ta) is only for the owner to approve under T-1. If the coin is getting traction, the owner decides whether to post WARN-Tb as an original.
 
 ---
 
@@ -949,6 +951,8 @@ After launch the slot becomes `we built`. **Claims:** SC-21, SC-21d.
 paper hands sell too early. diamond hands hold too long. take-profit and stop-loss orders were invented for people who are both.
 ```
 
+"paper hands" here is about people, which BRAND_GUIDE §5 allows; the §4.3 and §15 bans cover simulator "paper" (paper trading, paper wallets), not this.
+
 **L25** · `36/280`
 
 ```text
@@ -987,13 +991,13 @@ the risk prompt doesn't stop you. it makes you read the reasons and tick a box s
 
 **Claims:** SC-08 (`web/components/token/trade/useTradeExecutor.tsx:89,109`: "Buy anyway" behind "I understand the risks and want to buy"). It doesn't claim every buy goes through the prompt (quick buy doesn't, SC-08c). Not within 48 h of D7-P1 or T4.
 
-**L30 · [gate F-1]** · `153/280` · after launch `+RISK 247/280`
+**L30 · [gate F-1]** · `121/280` · after launch `+RISK 215/280`
 
 ```text
-every audit row has a threshold, and anything that isn't green comes with a plain-english hint. we're aware this is the least degen sentence ever posted.
+every audit row is green, amber or red against a set threshold. we're aware this is the least degen sentence ever posted.
 ```
 
-**Claims:** SC-09 (rows rated good, warn, bad or info, with a hint when not green: `server/analytics/tokens/security.ts:470-597`).
+**Claims:** SC-09 (each row rated good, warn, bad or info against a fixed threshold: `server/analytics/tokens/security.ts:470-597`). The old "anything that isn't green comes with a plain-english hint" is retired: Bot degens, Smart money, amber taxes, amber dev holding and the "Unknown" contract rows carry no hint (ledger SC-09).
 
 ---
 
@@ -1104,7 +1108,7 @@ a coin graduates off the curve. what usually happens next?
 | `it chops sideways` | 17 |
 | `it goes quiet` | 13 |
 
-Follow-up: the ~73% stat (KS-02) in new words, with STAT in the first reply. Re-verify first (S-1). Wait at least 48 h after any other post that used it (D7-P2, L2-A4, R34).
+Follow-up: the ~73% stat (KS-02) in new words, with STAT in the first reply. Re-verify first (S-1). Wait at least 48 h after any other post that used it (D7-P2, COMM-1 answers, R34).
 
 **P08 · which trench** · question `43/280`
 
@@ -1184,7 +1188,7 @@ Follow-up: if "i'm not in yet" gets votes, that's an audience worth writing newc
 **How they're built.** All ten are type-only or vector cards rendered with `marketing/tools/cards.py` (HTML → PNG). **No AI generation and no stock imagery:** no real people, no real meme-template art, no real coin logos, no chain logos. Brand rules: bg `#0A0C10`, panels `#11141A`, fg `#E6E9F0`, muted `#8C94A3`, one amber `#FFB547` accent, red `#FF5468` only for loss or danger, wallet-tag colours only on wallet labels (ledger §7.12). Inter for words, JetBrains Mono for numbers and chips. Nothing under 20 px on a 1080-wide canvas. Trenchscope mark in the footer corner.
 
 **Rules for these cards.**
-- **Cards built from app numbers or app frames** (meme-3, meme-5, meme-7) use **demo data only, even after launch**: a real coin's rug in a meme is a verdict on a real dev (§1.1 rule 9) and a real ticker (MNC-16). Every number is read off one real capture-mode frame (`marketing/tools/capture-mode.js`, ledger §7.1), the ticker is blurred or absent, the card says "demo data" in the subtext, and the footer carries **DEMO** `UI shown with demo data` plus **RISK-short** `high risk · nfa`. Their captions end with RISK after launch.
+- **Cards built from app numbers or app frames** (meme-3, meme-5, meme-7) use **demo data only, even after launch, until the owner and legal approve real-chain autopsies (BRAND_GUIDE §14.3, L-1)**: a real coin's rug in a meme is a verdict on a real dev (§1.1 rule 9) and a real ticker (MNC-16). Every number is read off one real capture-mode frame (`marketing/tools/capture-mode.js`, ledger §7.1), the ticker is blurred or absent, the card says "demo data" in the subtext, and the footer carries **DEMO** `UI shown with demo data` plus **RISK-short** `high risk · nfa`. Their captions end with RISK after launch.
 - **Cards with wallet-tag chips** (meme-2, meme-6) carry RISK-short in the footer. Pure trench-culture cards (meme-1, 4, 8, 9, 10) need no label.
 - **Frame check** on any card built from a capture: no `paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%` or "Live" badge anywhere in the crop (ledger §7.1, §7.7).
 - Never a real ticker, CA, project, launchpad or person, even as a joke square.
@@ -1442,12 +1446,12 @@ All status **NEW**. Build with `marketing/tools/cards.py`, export PNG to `market
 | R14 | SC-21, SC-21d, SC-46 | `server/analytics/tokens/track.ts:8-13,99-101,207-212` | K-1, F-1 | +RISK · trigger: open "what should i use?" |
 | R15 | SC-21, SC-21d | as R14 | F-1 | +RISK · trigger: a newcomer asking where to start |
 | R20 | SC-14, SC-41 | `server/trading/orders.ts:29,183-184,270`; `web/components/token/trade/AutoForm.tsx:43-48` | K-2, F-1 | +RISK · trigger: "can you auto-sell when the dev sells?" |
-| R25 | SC-21, SC-09 | `track.ts:8,209`; `server/analytics/tokens/index.ts:476,496`; `security.ts:470-597` | F-1 | +RISK · trigger: "how do you spot a bundle?" |
+| R25 | SC-21, SC-09 | `track.ts:8,207-209`; `server/analytics/tokens/index.ts:476,496`; `security.ts:470-597` | F-1 | +RISK · trigger: "how do you spot a bundle?" |
 | R34 | KS-02 | — | S-1 | STAT meaning inline |
 | R35 | SC-17, SC-51 | `server/trading/alerts.ts:1-4`; `web/pages/WatchlistPage.tsx` | F-1 | +RISK · trigger: "what are you doing today?" |
 | R43, R44 | SC-46 | none (no keys in the code, ledger §1) | K-1 (R44 also K-2) | CUSTODY verbatim (R43) |
 | R45 | K-2 holding line | `server/trading/orders.ts`, `copytrade.ts`, `sniper.ts` (server-side) | K-2 | — |
-| R46, R47, R48 | SC-42, SC-43, SC-45 | `shared/chains.ts:5-7`; `web/components/layout/ChainSwitcher.tsx` | C-1 per chain | CHAINS verbatim (R48) |
+| R46, R47, R48 | SC-42, SC-43, SC-45 | `shared/chains.ts:5-7`; `web/components/layout/ChainSwitcher.tsx` | C-0 per chain before launch, C-1 after | CHAINS verbatim (R48) |
 | R49 | SC-11, SC-12 | `web/components/token/trade/QuotePreview.tsx:91-119`; `shared/chains.ts:160` (placeholder, never quoted) | Fees for any number | +RISK |
 | R50, R51 | MNC-07, MNC-23, SC-21 | `track.ts:21,210` | — | DEMO, AI meaning |
 | R52 | MNC-01 | — | launch gate for the "yes" version | +RISK (after launch) |

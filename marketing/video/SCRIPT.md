@@ -61,12 +61,14 @@ A deadpan wildlife documentary, shot like a war epic, about the most dangerous h
 2. **Real UI is real.** Captured in marketing capture mode on demo data, at real speed. No speed ramps, no staged rows, no edited numbers. Jump cuts between real moments are fine.
 3. **DEMO on every frame of app footage**, AI on every frame of AI footage. Both swap on the cut, top-right, never animated away mid-shot (BRAND_GUIDE §10, §12.3).
 4. **No demo ticker legible anywhere.** Blur it in the risk-dialog title, both toasts and any quote line, and keep token headers out of frame. Demo tickers can collide with real coins (MNC-16).
+4a. **No speed figure in frame.** The shot-10 fill toast reads "Bought X … @ price · **NNNms** · 1 exit order" (`web/components/token/trade/useTradeExecutor.tsx:42`): that latency is simulated, and a speed number as the subject of a shot is RED (ledger §2.6, MNC-08). Blur the `· NNNms` segment (or strip it in capture mode), keep the inline result line under the Buy button (`TradeResultLine`, `web/components/token/trade/shared.tsx:65`, same figure) out of every punch-in, and crop the status bar's ping. The shot-12 "Dev-sell exit filled" toast carries no latency (`server/trading/common.ts:49-54`).
 5. **No "Live" badge in frame.** The board header, the desktop status bar and the Activity tab show a green "Live" pill (`web/components/discovery/LiveStatus.tsx:19`, `web/components/layout/StatusBar.tsx:11`, `web/components/token/tabs/ActivityTab.tsx:189`). Crop or blur every one: the footage is demo data, so "Live" would misdescribe it (ledger §7.7).
-6. **Frame check before export** (ledger §7.1): every app frame is scanned for `paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`. Any hit is a re-take or a crop.
+6. **Frame check before export** (ledger §7.1): every app frame is scanned for `paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`, `ms`, and the demo venue names (`TrenchSwap`, `Moonpit`, `Bonkfire`, `Rayforge`, `FourPad`, `BNB Rocket`, `ClawLab`, `BaseDrop`, `EtherForge`). Any hit is a re-take, a crop or a blur.
 7. **Letterbox grammar:** AI shots get painted 2.39:1 bars (the dramatized film). App shots are full-frame (the product). Captions sit inside the picture area, in the 80% title-safe.
 8. **≤3 flashes per second**, no full-screen red, nothing moving over the disclaimers (BRAND_GUIDE §12.6–7).
 9. **No faces, no hands in close-up, no weapons, no insignia, no coin emblems** in AI shots.
 10. **Robinhood Chain appears in copy only** (the end-card chain line and the VO), never in a UI frame. The UI's chain switcher has SOL, BSC, Base and ETH (ledger §7.6).
+11. **No chain chip in its brand colour.** The UI's chain marks (`web/components/common/ChainIcon.tsx`) are filled with Solana purple, BNB yellow, Base blue and Ethereum's `#627EEA`, with `Ξ` for eth. Shots 3, 8, 10 and 12 crop the top bar and token header anyway; any frame that still shows a chain chip needs F-7 (neutral marks) first (ledger §7.11).
 
 ---
 
@@ -322,7 +324,7 @@ Every v3 app take (`video/app-footage/*`, incl. `trailer-habitat.mp4`, `trailer-
 - **Sign in before recording starts** (the sign-in/guest modal never appears in a take). Capture mode renames the guest to `demo`; the top bar is cropped anyway.
 - Server on a fixed seed: `SIM_SEED=<seed>` (`server/app.ts:33`). The demo market is deterministic, so a dry run tells you which token dumps and when.
 - Cursor driven by Playwright on smooth paths, no jitter. No hover on columns you want streaming (hover pauses a column).
-- Keep out of frame (capture mode misses them, ledger §7.1): the phone drawer's sim notice, "Paper account", "paper balance", the signed-out trade-panel prompt, the copy-trade/sniper/Rewards footers, the "Faucet failed" toast. Also keep out: the "Safe"/"Safe contract" presets, the anti-MEV tooltip, the trade-panel footer fee line (hidden by capture mode; check), and the quote's **Route** venue name (a fictional launchpad name that can echo a real one; MNC-10).
+- Keep out of frame (capture mode misses them, ledger §7.1): the phone drawer's sim notice, "Paper account", "paper balance", the signed-out trade-panel prompt, the copy-trade/sniper/Rewards footers, the "Faucet failed" toast. Also keep out: the "Safe"/"Safe contract" presets, the anti-MEV tooltip, the trade-panel footer fee line (hidden by capture mode; check), the quote's **Fees** value (priced from the 0.8% placeholder) and **Route** venue name (`TrenchSwap`, or a fictional launchpad name that can echo a real one; MNC-10), the status bar ("Live", its `NNms` ping), and any chain chip unless F-7 has landed (§3 item 11).
 - Crop or blur every **"Live"** pill (§3.5).
 
 ### 8.2 The takes
@@ -333,9 +335,9 @@ Every v3 app take (`video/app-footage/*`, incl. `trailer-habitat.mp4`, `trailer-
 |---|---|---|---|
 | **`v4-habitat.mp4`** (FB-02) | 3 (3.0 s) | `/sol/trenches`, hands-off, cursor parked outside the board. Start when **Near graduation** holds 2+ cards. Record 2–3 min | Keep the busiest 3.0 s: cards dropping into New, a ring filling, ideally a card landing in Migrated. Crop out the top bar, the page header (its "Live" pill and the "Launches on Solana" sub-header) and the bottom status bar ("Live", demo native prices, trades/s), keeping 16:9 at ≤ 1.15× from the 4K source. 3% push. Never punch in on one ticker |
 | **Dry run** | — | Same seed. Watch `/sol/signals` with the Dev sell chip on. Pick a token that (a) shows **High risk** (rug ratio above 30%) on its audit early, with red Bundlers, Insiders and Dev holding rows, and (b) later gets a **dev sell of 20%+ of the dev's holding in one trade** (a full dump or a large trim; the slow-bleed pattern sells 8–25% chunks and may not trip the default 20% threshold). Note its address and the sim time of the dev's sell | — |
-| **`v4-token.mp4`** (FB-07, FB-07b, FB-08, FB-11, FB-13) | 8, 10, 12 | Same seed, re-run. Open `/sol/token/<address>` **before** the dev's sell: 1 s candles, MCap, Markers on, Activity tab (All) visible. Start recording, then:<br>1. Hold 3 s on the right column: the **Audit** card and the Holders strip.<br>2. Trade panel → **Auto** → Buy. Clear the ladder, set **Dev sell** to **100%**, pick a small amount (a quick-amount button). Click Buy.<br>3. The real "High-risk token: …" dialog opens. Hover 0.4 s on the reasons, tick "I understand the risks and want to buy", glide to **Buy anyway**, hold 0.3 s, click. Keep 1 s of the fill toast.<br>4. Keep recording until the dev's sell lands in Activity and the **"Dev-sell exit filled · …"** toast appears, plus 2 s.<br>Your own buy moves the curve, so the dump can come earlier than in the dry run. Whatever really happens is what we show: if the exit toast says **failed**, or no dev sell trips it, the shot-12 caption can't be used; re-take on another token | See the three rows below |
+| **`v4-token.mp4`** (FB-07, FB-07b, FB-08, FB-11, FB-13) | 8, 10, 12 | Same seed, re-run. Open `/sol/token/<address>` **before** the dev's sell: 1 s candles, MCap, Markers on, Activity tab (All) visible. Start recording, then:<br>1. Hold 3 s on the right column: the **Audit** card and the Holders strip.<br>2. Trade panel → **Auto** → Buy. Clear the ladder, set **Dev sell** to **100%**, pick a small amount (a quick-amount button). Click Buy.<br>3. The real "High-risk token: …" dialog opens. Hover 0.4 s on the reasons, tick "I understand the risks and want to buy", glide to **Buy anyway**, hold 0.3 s, click. Keep 1 s of the fill toast (its `· NNNms` latency gets blurred in the edit, §3 item 4a).<br>4. Keep recording until the dev's sell lands in Activity and the **"Dev-sell exit filled · …"** toast appears, plus 2 s.<br>Your own buy moves the curve, so the dump can come earlier than in the dry run. Whatever really happens is what we show: if the exit toast says **failed**, or no dev sell trips it, the shot-12 caption can't be used; re-take on another token | See the three rows below |
 | ↳ shot 8 (3.0 s) | 15.6–18.6 | From step 1 | 0.0–2.2: punch-in on the Audit card with "High risk", the rug-ratio gauge and the footer "Audit — reference only." in frame; reticle locks Bundlers → Insiders → Dev holding (static rows). 2.2–3.0: **cut** to the Holders strip. Token header out of frame. DEMO top-left |
-| ↳ shot 10 (4.2 s) | 19.8–24.0 | From steps 2–3 | 0.5 s on the Auto form with "Dev sell 100%" visible and the Buy click; 2.3 s on the dialog (reasons, the **"Exit strategy · Dev sell 100%"** summary row legible, tick, click; jump cuts allowed between real moments); 1.4 s on the fill toast. ~2× punch-ins framed right of centre (§5.1). **Blur the ticker** in the dialog title and the toast. Keep the Buy button's "+ 1 exits" out of the punch-in (it's a real UI pluralisation slip; see §19) |
+| ↳ shot 10 (4.2 s) | 19.8–24.0 | From steps 2–3 | 0.5 s on the Auto form with "Dev sell 100%" visible and the Buy click; 2.3 s on the dialog (reasons, the **"Exit strategy · Dev sell 100%"** summary row legible, tick, click; jump cuts allowed between real moments); 1.4 s on the fill toast. ~2× punch-ins framed right of centre (§5.1). **Blur the ticker** in the dialog title and the toast, and **the toast's `· NNNms` latency** (§3 item 4a). Keep the inline result line under the Buy button ("Bought … · NNNms · 1 exit orders armed") out of the punch-ins. Keep the Buy button's "+ 1 exits" out of the punch-in (it's a real UI pluralisation slip; see §19) |
 | ↳ shot 12 (3.0 s) | 25.8–28.8 | From step 4 | 12a, 1.2 s: 1.3× on the chart and the top Activity rows as the **Dev**-tagged SELL row lands and the candles collapse. **DEV SELL.** goes in only if the dev's sell row or marker is in frame. Blur the Activity tab's "Live" pill. 12b, 1.8 s: **jump cut** to a 2× punch-in on the toast "Dev-sell exit filled · [blur]" with its body ("Sold … for … at … MC", ticker blurred). Toast amounts are incidental demo values with DEMO on screen; never the subject (MNC-19) |
 
 **Fallback if no clean exit is captured by Day 4:** a second token on the same seed with a full dev dump (re-run). There is no AI or mock fallback for shot 12: if the real exit can't be captured, re-cut shot 12 as 3.0 s of the dev's sell only, with "DEV SELL." and the caption **"the dev wrote an exit. now so can you."** (ledger SC-41 allowed wording), and drop the plant from shot 10's punch-in.
@@ -518,7 +520,7 @@ trenchscope. see who's really buying.
 
 | Element | 9:16 treatment |
 |---|---|
-| **AI shots** | **4:5 windows** from the existing clips: a 573 × 716 crop (x0 per shot in §7.1) scaled to **1080 × 1350** (lanczos, light unsharp), centred at y 285–1635, with painted `#050608` bars above and below (the letterbox grammar, vertical). That's a 1.9× upscale of 720p footage: check every AI shot on a phone at 100%. If one looks mushy, show it as a 4:3 window instead (955 × 716 → 1080 × 810), which is what `x/LAUNCH_DAY.md` §10 specifies for `launch-2`; the owner picks one rule for all eight shots |
+| **AI shots** | **4:5 windows** from the existing clips: a 573 × 716 crop (x0 per shot in §7.1) scaled to **1080 × 1350** (lanczos, light unsharp), centred at y 285–1635, with painted `#050608` bars above and below (the letterbox grammar, vertical). That's a 1.9× upscale of 720p footage: check every AI shot on a phone at 100%. If one looks mushy, show it as a 4:3 window instead (955 × 716 → 1080 × 810); the owner picks one rule for all eight shots after the phone check (§19 item 4; `x/LAUNCH_DAY.md` §10 now defers to this choice) |
 | **App shots** | **Re-captured in the app's real phone layout**, not cropped from desktop: viewport 390 × 844, `deviceScaleFactor` ≈ 2.77 (1080 × 2338), capture mode loaded, the nav drawer closed. Board: `/sol/trenches` phone tabs (New column) streaming. Token page: the **Info** tab (Audit + Holders strip) for shot 8, the **Trade** tab (Auto → dialog) for shot 10, the **Chart** tab (1 s candles, dev marker) for shot 12a. Same seed and same actions at the same sim times as the desktop `v4-token` take, so the same token dumps. Crop each to 1080 × 1920; blur the board header's "Live" pill |
 | **Toasts** | On phones toasts sit full-width at the top, under the DEMO label's spot. For shots 10c and 12b, punch in (≈1.3×) so the toast lands in the upper-middle band, below the label |
 | **Corner labels** | DEMO / AI, **38 px** (≥ 2% of 1920; BRAND_GUIDE §9.1 asks ≥ 36), top-right, 160 px from the top and 48 px from the right, below X's player chrome. On AI shots the label sits inside the 4:5 window's top edge |
@@ -650,7 +652,7 @@ Built on the field-guide template (`x/WARMUP_WEEK.md` §9.1).
 
 Claims: SC-21 bundler rule (`server/analytics/tokens/track.ts:8,209`), audit thresholds (`server/analytics/tokens/security.ts:470-597`; share of volume, `server/analytics/tokens/index.ts:476,496`). Not "funded by the dev" (that's the insider rule).
 
-**Sync note for `WARMUP_WEEK.md` §9.2:** its row lists the caption as `the bundler. six wallets, one trench coat.` with no separate title. Here the species name carries "the bundler", so the caption drops it. Either works; the alt text in D3-P3 reads correctly for both.
+**This is the template for all four `fg-*` teasers** (`WARMUP_WEEK.md` §9.1): species name + Latin name + real chip on frame 0, and a caption without "the [species].". WARMUP §9.2's rows and the D2-P1, D3-P3, D4-P1 and D5-P1 alt texts now match it ("a species card reads THE BUNDLER (fasciculus unanimus)…; caption: six wallets, one trench coat."). Latin names: sniper `emptor primus`, bundler `fasciculus unanimus`, insider `amicus devi`, dev `creator fugiens` (§5.4).
 
 ### 13.2 `teaser-soon` (was `d7-a`) · ~13.5 s · posts as D7-P4, Day 7, 8:30 p.m. ET
 
@@ -660,7 +662,7 @@ Claims: SC-21 bundler rule (`server/analytics/tokens/track.ts:8,209`), audit thr
 | 5.0–10.0 | `c13`, the full 5 s: the eyepiece hanging over the empty chair, the lamp glowing | 5.3–9.8: **`the wallets aren't.`** (same style, "aren't." amber). AI label | A lamp click on the cut, then near-silence and room hum |
 | 10.0–13.5 | **End slate** on `#0A0C10` | 10.0–11.2: the mark reveal (BRAND_GUIDE §12.3), then the stacked lockup. 10.6: **`see who's really buying.`** (Inter 600, 56 px, `#E6E9F0`). 11.2: **`soon.`** (Inter 900, 96 px, `#FFB547`). Nothing else: no date, weekday, time, chain list or handle | Braam on the ticks (≈ 10.6), ring-out, silence from 13.2 |
 
-Lowercase cards, as `WARMUP_WEEK.md` §9.2 and BRAND_GUIDE §9.1 ("headlines are lowercase") require; the brief's capitalised card names were the old working titles. "soon." is the only time-word (MNC-13, MNC-21). Whether warm-up teasers need `high risk · nfa` is legal check L-1; if yes, add it at 24 px muted under "soon.".
+**Posts only if the launch gate hasn't passed by Day 7** (`WARMUP_WEEK.md` §11.1). Under the owner's decision (b) for D7-P4, the end slate drops `soon.` and holds the tagline. Lowercase cards, as `WARMUP_WEEK.md` §9.2 and BRAND_GUIDE §9.1 ("headlines are lowercase") require; the brief's capitalised card names were the old working titles. "soon." is the only time-word (MNC-13, MNC-21). Whether warm-up teasers need `high risk · nfa` is legal check L-1; if yes, add it at 24 px muted under "soon.".
 
 `WARMUP_WEEK.md` §9.4 OPT-2 (a fresh Kling take of shot 13 for this teaser, ≈ 7.5 credits, owner-approved) is the only upgrade; the cut works without it.
 
@@ -678,8 +680,10 @@ Lowercase cards, as `WARMUP_WEEK.md` §9.2 and BRAND_GUIDE §9.1 ("headlines are
 | **Day 4** | Overlays rebuilt; fine cut; grade. Last day for the shot-12 fallback decision (§8.2) |
 | **Day 5** | 9:16 cut. Owner decides OPT-V1/V2 (§12.4); run only if approved |
 | **Day 6** | QA (§14.3) on both cuts, exports. Build `teaser-soon` |
-| **Day 7** | **Picture lock by 6:00 p.m. ET.** `teaser-soon` posts 8:30 p.m. ET |
+| **Day 7** | **Picture lock by 6:00 p.m. ET** at the latest. `teaser-soon` posts 8:30 p.m. ET (only if the launch gate hasn't passed) |
 | **Launch day** | 9:00 a.m. ET launch gate. If it passes, apply the chain swaps (§4) if needed, re-export, post per §16 |
+
+**If the launch gate passes before Day 7** (the expected path, `WARMUP_WEEK.md` §11.1): picture lock moves to **6:00 p.m. the evening before launch day**. Squeeze the plan above in this order: captures and the VO take, the 16:9 rough and fine cut, QA, export. The 9:16 cut and `teaser-soon` can slip (QT-3 then waits for L+1 or later as its own quote post; `teaser-soon` is skipped). **If the 16:9 master isn't locked by then, launch anyway** with WARMUP §11.1 step 6: TR-B over a fresh 16:9 still of `s01.jpg` with the reticle, the Whale chip and the `AI-generated` label (0 credits), and post the trailer as its own original 48 h or more later.
 
 ### 14.2 Exports
 
@@ -692,7 +696,7 @@ Lowercase cards, as `WARMUP_WEEK.md` §9.2 and BRAND_GUIDE §9.1 ("headlines are
 
 - [ ] 8 AI shots exactly, from the approved clips. Zoom to 200%: no glyphs, faces, emblems, weapons, insignia or close-up hands. At 0.25×: no morphing; still six bundlers.
 - [ ] AI label on every AI frame, DEMO on every app frame, exact case, swapping on the cut, never covering a toast or the subject.
-- [ ] Frame check on every app frame: no `paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`. No "Live" pill. No venue name. No ticker legible anywhere, incl. both toasts and the dialog title. No "Safe" preset, no anti-MEV tooltip.
+- [ ] Frame check on every app frame: no `paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`, `ms` (the shot-10 toast's latency blurred, no inline result line in a punch-in, no status-bar ping). No "Live" pill. No venue name (`TrenchSwap` or a demo launchpad). No Fees value. No chain chip in its brand colour (F-7). No ticker legible anywhere, incl. both toasts and the dialog title. No "Safe" preset, no anti-MEV tooltip.
 - [ ] No Robinhood Chain in any UI frame; it appears only in the chain line and VO3.
 - [ ] No app footage speed-ramped. DEV SELL appears only over the dev's real sell. "your exit fired right after." appears only over a real "Dev-sell exit **filled**" toast on the same token.
 - [ ] End card: AI, RISK and CHAINS on screen ≥ 3 s (5.4 s in the master, 3.6 s in the 9:16), legible on a phone, nothing moving over them. RISK and CHAINS are the exact ledger texts.
@@ -765,13 +769,15 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 
 ### 15.4 Video descriptions (X's description / alt-text field, ≤ 1,000 characters)
 
-**16:9 (979 characters).** This updates `x/LAUNCH_DAY.md` §2's text for the dev-sell exit beat (that file's version ends the app sequence at "a chart collapsing after a dev sell"); paste this one:
+**SCRIPT owns the video text (the cut, its on-screen lines and these descriptions); `x/LAUNCH_DAY.md` owns the post copy.** LAUNCH_DAY §2 and §5 carry these two descriptions verbatim. If they ever differ, this section wins.
+
+**16:9 (979 characters):**
 
 ```text
 AI-generated trailer for Trenchscope, a memecoin trading terminal, made as a deadpan wildlife documentary shot like a war epic. A giant whale glides over night-time trenches while two hooded figures watch, and a brass periscope rises over the sandbags. Hooded figures are introduced as species, each with a wallet tag from the app: a sniper at a brass telescope, six identical bundlers in a row, an insider already seated at a glowing table, a dev gripping the end of a carpet. Screen recordings of the real app, each labelled UI shown with demo data, show the launch board, a token audit, a high-risk warning where the buyer ticks the box and clicks Buy anyway, then a dev sell, a collapsing chart and the buyer's dev-sell exit filling. A carpet is yanked from under a banquet table and blank plates fly. A lamp glows over an empty desk. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
 ```
 
-**9:16 (594 characters)**, updating QT-3's description the same way:
+**9:16 (594 characters)**, for QT-3:
 
 ```text
 AI-generated vertical cut of the Trenchscope trailer, a deadpan wildlife documentary shot like a war epic. A whale over the trenches, a periscope, and hooded species with their wallet tags: the sniper, six identical bundlers, the insider, the dev. Phone-layout screen recordings of the real app, labelled UI shown with demo data, show the board, the audit, the high-risk warning, a dev sell and the buyer's dev-sell exit filling. The carpet gets yanked. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
@@ -780,7 +786,7 @@ AI-generated vertical cut of the Trenchscope trailer, a deadpan wildlife documen
 ### 15.5 Teaser posts (verbatim from `x/WARMUP_WEEK.md`)
 
 - **D3-P3** (`fg-bundler`) · 227/280: `field guide to the trenches: the bundler.` / `travels in packs. bought in the same block the coin was created. six wallets, one trench coat.` / `on the audit, bundlers show as a share of the coin's volume. past 30%, the row goes red.`
-- **D7-P4** (`teaser-soon`) · 133/280: `everyone in the trenches is larping. the wallets aren't.` / `one scope for solana, base, bnb chain, ethereum and robinhood chain.` / `soon.` (Gate C-1 per chain named; drop "robinhood chain" if it isn't ready.)
+- **D7-P4** (`teaser-soon`) · 63/280: `everyone in the trenches is larping. the wallets aren't.` / `soon.` No chain list (so "soon." can't read as "robinhood chain soon", MNC-13), so no C-0 gate. Posts only if the launch gate hasn't passed. Owner decision (b): `a scope is how you tell them apart.` in place of `soon.` (93/280).
 
 ### 15.6 Self-replies
 
@@ -794,8 +800,8 @@ Mirrors `x/LAUNCH_DAY.md` §0 and §4; that file wins if they differ.
 
 | ET | Do | Notes |
 |---|---|---|
-| Day 7, by 6:00 p.m. | Master and 9:16 locked and QA'd (§14) | Otherwise the launch moves |
-| **9:00** | **Launch gate** (LAUNCH_DAY §1.1): C-1 per chain, K-1, F-1. No go → nothing posts | If a chain fails, export the four-chain versions (§4) |
+| The evening before launch day, by 6:00 p.m. (Day 7 at the latest) | Master and 9:16 locked and QA'd (§14) | If the master isn't locked: §14.1's fallback (TR-B over a still) |
+| **9:00** | **Launch gate: `x/LAUNCH_DAY.md` §1.1, all boxes** (C-1 per chain, K-1, K-2, F-1, F-2 where used, F-3, F-6, Fees, L-1, D-1, T-1, Under the Hood). No go → nothing posts | If a chain fails, export the four-chain versions (§4) |
 | 9:10 | Composer on desktop, **native upload** of the 16:9 master. Paste **TR-A** and the §15.4 description. **Turn on "Made with AI"** | Thumbnail = frame 0. Stalled 5+ min → the 720p fallback |
 | 9:20 | Add T1–T10 as the thread, **don't publish** | `[LINK]` in T1 only |
 | **10:00:00** | **Publish** | — |
@@ -805,7 +811,8 @@ Mirrors `x/LAUNCH_DAY.md` §0 and §4; that file wins if they differ.
 | 10:15 | Watch it once in the X phone app: captions, DEMO and AI labels, the end card readable | — |
 | 10:30 → 12:00 | T+30 / 60 / 90 / 120 snapshots (LAUNCH_DAY §11). The cold-start audition ends around 2 h or 200 views (CT_PLAYBOOK §3.3; a heuristic) | Never edit or delete the trailer |
 | **1:30 p.m.** | **QT-1** "the trailer is AI. the terminal isn't." (`launch-10`) | A different token and cut from shot 12 |
-| **6:15 p.m.** | **QT-2** making-of: `8 stills. 8 clips. 8 kept. 2 voice takes.` once this VO take exists (recount from the log). Hold rule applies | AI is the disclosure, never the headline |
+| **4:00 p.m.** | **COMM-1** "reply with your worst rug" + **COMM-1r** (LAUNCH_DAY §6) | Not a trailer post; listed so the gaps between originals are right |
+| **6:15 p.m.** | **QT-2** making-of: `8 stills. 8 clips. 8 kept. 2 voice takes.` once this VO take exists (recount from the log), ending with RISK (LAUNCH_DAY §5). Hold rule applies | AI is the disclosure, never the headline |
 | **8:30 p.m.** | **QT-3** with the **9:16 cut**. "Made with AI" on again, §15.4 description | A new cut with new words, not a bare repost |
 
 ---
@@ -851,9 +858,25 @@ Mirrors `x/LAUNCH_DAY.md` §0 and §4; that file wins if they differ.
 1. **Shot 3 line:** "one habitat. five chains." (recommended, honest over demo data) or the brief's "filmed on location. the location is five chains." (recorded as ALT-L; use only once the board is re-recorded on live data).
 2. **Shot 13 line:** "or. look before you ape." (recommended) or the brief's "or. see it coming." (reads as rug prediction, MNC-06).
 3. **Shot 12 depends on a real capture:** the dev's sell has to trip the exit on the recorded token. If it can't be captured by Day 4, use the fallback in §8.2 ("the dev wrote an exit. now so can you.").
-4. **9:16 AI framing:** 4:5 windows (this file; bigger on the phone, 1.9× upscale) or 4:3 (LAUNCH_DAY §10; sharper, smaller). Pick one for all eight shots after the phone check.
-5. **Optional credits:** OPT-V1 whale hero (≈ 9.5), OPT-V2 four native 9:16 shots (≈ 38, more than the ~28 left), a VO retake (≈ 1.6, beyond the pre-approved ~3), `teaser-soon` OPT-2 (≈ 7.5, in WARMUP_WEEK).
+4. **9:16 AI framing:** 4:5 windows (bigger on the phone, 1.9× upscale) or 4:3 (sharper, smaller). Pick one for all eight shots after the phone check; `x/LAUNCH_DAY.md` §10 defers to this choice.
+5. **Optional credits:** every optional item in the kit is in §19.1 with a running total. Approve against the total, not item by item.
 6. **Handle on the end card:** only once confirmed and held (D-1).
 7. **Small UI fix before capture (optional):** the Auto buy button reads "+ 1 exits" (`web/components/token/trade/AutoForm.tsx:126`). Fixing the plural lets shot 10 show the button; otherwise it stays out of the punch-in.
 8. **K-2:** the dev-sell exit is a server-side order. How it signs on a self-custody build decides whether the custody line and this beat can sit in the same post.
 9. **L-1:** whether the warm-up teasers need `high risk · nfa`.
+
+### 19.1 Optional AI credits, kit-wide (owner approval only)
+
+About **28 credits** are left; about **3 are pre-approved**, and the plan spends **~1.6** of them on this trailer's one new VO take (§10.1). That leaves **about 26** for everything below. Estimates come from this account's transaction history (Nano Banana Pro still ≈ 2; Kling 3.0 Turbo 5 s ≈ 7.5) or, for BRAND's stills, an unconfirmed 1–3. Check every quote in Higgsfield before running, and add ~2 per retried still.
+
+| ID | What | Where | Estimate | Running total |
+|---|---|---|---|---|
+| OPT-1 | Species stills for the smart money, kol (or whale) and fresh/bot dictionary cards | `x/WARMUP_WEEK.md` §9.4 | ~6 (3 × ~2) | ~6 |
+| OPT-2 | A fresh Kling take of shot 13 for `teaser-soon` | `x/WARMUP_WEEK.md` §9.4 | ~7.5 | ~13.5 |
+| OPT-V1 | Native 9:16 whale hero for `launch-2` frame 0 (1 still + 1 clip) | §12.4; `x/LAUNCH_DAY.md` §10 | ~9.5 | ~23 |
+| VO retake | A second VO take if the first fails the soundalike or timing check | §10.1 | ~1.6 | ~24.6 |
+| K8 | The Lock: an end-card backdrop still | `brand/BRAND_GUIDE.md` §11.4, §11.6 | ~1–3 | ~25.6–27.6 |
+| K9 outpaint | A native 3:1 outpaint of the candle-valley art for `header-main` | `brand/BRAND_GUIDE.md` §11.6, §14.4 | ~1–3 | ~26.6–30.6 |
+| OPT-V2 | Native 9:16 minimum set (shots 1, 5, 11, 13; includes OPT-V1) | §12.4 | ~38 (≈ 28.5 more than OPT-V1) | over budget on its own |
+
+**Reading it:** everything except OPT-V2 comes to about **27–31 credits**, which is more than the ~26 left. OPT-V2 alone is more than the whole balance. None of these is needed to post the warm-up or launch. If the owner wants a pick: OPT-V1 (the 9:16 thumbnail) is the biggest single win, then OPT-1. `x/WARMUP_WEEK.md` §9.4, `x/LAUNCH_DAY.md` §10 and `brand/BRAND_GUIDE.md` §11.6 point here.

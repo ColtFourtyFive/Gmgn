@@ -93,7 +93,7 @@ Work top to bottom. Allow about 90 minutes plus the follow sessions spread throu
 Do this before buying Premium. Changing the photo, display name or username after the checkmark appears can remove it while X reviews again.
 
 - [ ] **Profile photo**: upload `avatar.png` (§7).
-- [ ] **Header**: upload `header-alt.png` (§7).
+- [ ] **Header**: upload `header-alt.png` (§7), re-rendered with the new subline first. If it isn't re-rendered yet, leave X's default header up.
 - [ ] **Name**: `Trenchscope` (§4). **Bio**: BIO-1 (§5). **Location**: `the trenches` (§6). **Website**: leave **blank** (§6.2).
 - [ ] **Professional account** (Edit profile → Switch to Professional, if offered): account type **Business**, a **software / technology** category. Read §8.2 first: it explains why, and what X's crypto rules mean for us.
 - [ ] Don't turn on Tips, Subscriptions or creator-monetization features. A trading account that charges followers reads as a paid signals group, and paid signals are financial advice in all but name (MNC-18).
