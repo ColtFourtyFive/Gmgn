@@ -159,14 +159,21 @@ export interface ErrorHint {
   text: string;
   /** Offer a one-click slippage bump. */
   raiseSlippage?: boolean;
+  /** Offer Deposit (live: more SOL fixes it). */
+  deposit?: boolean;
 }
 
-/** Plain-language fix for a failed swap. */
-export function swapErrorHint(error: string | undefined): ErrorHint | null {
+/** Plain-language fix for a failed swap (`live`: real wallet wording, Deposit instead of the paper top-up). */
+export function swapErrorHint(error: string | undefined, live = false): ErrorHint | null {
   const e = (error ?? '').toLowerCase();
   if (!e) return null;
   if (e.includes('slippage')) return { text: 'The price moved past your slippage tolerance. Raise slippage or use Auto, then retry.', raiseSlippage: true };
-  if (e.includes('insufficient')) return { text: 'Not enough balance for this amount plus fees. Lower the amount or top up your paper wallet.' };
+  if (e.includes('insufficient') || (live && e.includes('not enough balance'))) {
+    return live
+      ? { text: 'Not enough SOL for this amount plus network fees. Lower the amount or deposit SOL.', deposit: true }
+      : { text: 'Not enough balance for this amount plus fees. Lower the amount or top up your paper wallet.' };
+  }
+  if (live && e.includes('trading is temporarily unavailable')) return { text: 'Nothing was sent. Market data keeps updating; retry once trading is back.' };
   if (e.includes('no token balance') || e.includes('no position')) return { text: 'You don’t hold this token yet.' };
   if (e.includes('migrating')) return { text: 'The token is moving to its AMM pool. Retry in a few seconds.' };
   if (e.includes('liquidity')) return { text: 'There is not enough liquidity on this route right now.' };

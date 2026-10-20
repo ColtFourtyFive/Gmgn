@@ -1,9 +1,10 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CHAIN_IDS, CHAINS, type AlertKind, type AlertRule, type ChainId } from '@trenchscope/shared';
+import { CHAINS, type AlertKind, type AlertRule, type ChainId } from '@trenchscope/shared';
 import { BellPlus, Save } from 'lucide-react';
 import { ChainIcon, Price, Usd } from '@/components/common';
 import { Button, Drawer, Field, focusFirstError, Input, NumberInput, SegmentedControl, Select, Toggle } from '@/components/ui';
+import { useEnabledChains } from '@/hooks/useMode';
 import { api, ApiError } from '@/lib/api';
 import { toast } from '@/store/toasts';
 import { addressError, addressPlaceholder, isAddressFor, normalizeAddress } from '../address';
@@ -70,6 +71,7 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
   const qc = useQueryClient();
   const [form, setForm] = useState<AlertFormState>(() => initialState(rule, defaultChain, prefill));
   const [errors, setErrors] = useState<Errors>({});
+  const chains = useEnabledChains();
   const [submitted, setSubmitted] = useState(false);
   const [pending, setPending] = useState(false);
   const meta = ALERT_KIND[form.kind];
@@ -222,7 +224,7 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
                 aria-label="Chain"
                 disabled={!!rule}
                 className="w-[128px]"
-                options={CHAIN_IDS.map((c) => ({ value: c, label: CHAINS[c].name, icon: <ChainIcon chain={c} size={14} /> }))}
+                options={chains.map((c) => ({ value: c, label: CHAINS[c].name, icon: <ChainIcon chain={c} size={14} /> }))}
               />
             </Field>
           </div>

@@ -7,18 +7,20 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { CHAIN_IDS, LAUNCHPADS, LIVE_LAUNCHPADS, PLATFORM_FEE_RATE, type AppMode, type ChainId, type MetaResponse } from '@trenchscope/shared';
-import { Accounts, registerAccountRoutes } from './accounts';
+import { CHAIN_IDS, LAUNCHPADS, LIVE_LAUNCHPADS, PLATFORM_FEE_RATE, type AppMode, type ChainId, type LiveStatus, type MetaResponse } from '@trenchscope/shared';
+import { Accounts, channelChainGuard, enabledChains, installChainGuard, registerAccountRoutes } from './accounts';
 import { Analytics, registerMarketRoutes } from './analytics';
 import { HttpError, sendError, type AppConfig, type AppContext, type MarketSource } from './context';
 import { loadLiveConfig } from './live/config';
 import { LiveMarket } from './live/market';
 import { createLiveServices } from './live/services';
+import { LiveWallets, registerWalletRoutes } from './live/wallets';
 import { loadSnapshot, saveSnapshot, saveSnapshotAsync, SNAPSHOT_VERSION, type Snapshot } from './persistence';
 import { congestionOf, priorityFeeTiers } from './sim/congestion';
 import { Engine } from './sim/engine';
 import { MarketSim } from './sim/market';
 import { World } from './sim/world';
+import { ACCOUNTS_STATE_KEY, DurableSync, STORE_FILE, TRADING_STATE_KEY, openStore } from './store';
 import { Trading, registerTradingRoutes } from './trading';
 import { Hub } from './ws/hub';
 
@@ -60,7 +62,11 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   };
 }
 
-export async function buildApp(config: AppConfig, opts: { start?: boolean; persist?: boolean; logger?: boolean } = {}): Promise<BuiltApp> {
+export async function buildApp(
+  config: AppConfig,
+  /** storePath: live-mode durable store file (default DATA_DIR/trenchscope.db; ':memory:' in tests). */
+  opts: { start?: boolean; persist?: boolean; logger?: boolean; storePath?: string } = {},
+): Promise<BuiltApp> {
   const persist = opts.persist ?? config.snapshotEveryMs > 0;
   let snapshot = persist ? loadSnapshot(config.dataDir) : null;
   // A demo snapshot holds simulated tokens and paper balances: never load it into live mode (or back).
@@ -73,7 +79,10 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   const world = snapshot ? World.restore(snapshot.world) : new World(config.seed);
   const engine = new Engine(world);
   const hub = new Hub({ maxConnectionsPerIp: config.wsConnectionsPerIp });
-  const ctx = { config, world, engine, hub, live: createLiveServices(config), store: null } as AppContext;
+  // Live mode: accounts, trading, audit and money records live in the durable store (never the
+  // snapshot toggle: real funds need it whatever SNAPSHOT_EVERY_MS says). Demo: snapshots only.
+  const store = config.mode === 'live' ? openStore(opts.storePath ?? join(config.dataDir, STORE_FILE)) : null;
+  const ctx = { config, world, engine, hub, live: createLiveServices(config), store } as AppContext;
   const accounts = new Accounts(ctx);
   const analytics = new Analytics(ctx);
   const trading = new Trading(ctx);
@@ -82,22 +91,37 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   ctx.trading = trading;
   const market: MarketSource = config.mode === 'live' ? new LiveMarket(ctx) : new MarketSim(ctx);
   ctx.market = market;
+  // Live mode: embedded-wallet balance sync, deposits and withdrawals.
+  const liveWallets = config.mode === 'live' ? new LiveWallets(ctx) : null;
 
   // Install order = ticker order: market dynamics first, then analytics, trading, accounts.
   market.install();
   analytics.install();
   trading.install();
   accounts.install();
+  liveWallets?.install();
   hub.setAuthResolver((token) => ctx.accounts.resolveToken(token));
+  // Live mode serves its enabled chains only, on sockets too (HTTP: installChainGuard below).
+  if (config.mode === 'live') hub.setChannelGuard(channelChainGuard(enabledChains(config)));
 
+  // Live mode restores accounts and trading from the store (written through on every change), never the snapshot.
   if (snapshot) {
     market.restore(snapshot.market);
-    ctx.accounts.restore(snapshot.accounts);
+    ctx.accounts.restore(store ? store.getState(ACCOUNTS_STATE_KEY) : snapshot.accounts);
     ctx.analytics.restore(snapshot.analytics);
-    ctx.trading.restore(snapshot.trading);
+    ctx.trading.restore(store ? store.getState(TRADING_STATE_KEY) : snapshot.trading);
     console.log(`[app] restored snapshot from ${new Date(snapshot.savedAt).toISOString()} (${world.tokens.size} tokens)`);
   } else {
     market.bootstrap();
+    if (store) {
+      ctx.accounts.restore(store.getState(ACCOUNTS_STATE_KEY));
+      ctx.trading.restore(store.getState(TRADING_STATE_KEY));
+    }
+  }
+  const durable = store ? new DurableSync(store, { accounts: () => accounts.serialize(), trading: () => trading.serialize() }) : null;
+  if (durable) {
+    accounts.setPersistence({ soon: () => durable.accountsChanged(), now: () => durable.flushAccounts() });
+    trading.onDurableChange = () => durable.tradingChanged();
   }
 
   // Headers up to 128KB so list URLs can carry exclusion filters (the `filters` param itself stops at 64KB).
@@ -123,6 +147,8 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   });
   installIpLimit(app, ['/api/auth/guest', '/api/auth/register'], config.accountCreationsPerIpPer10Min, 'too many new accounts from this address');
   installIpLimit(app, ['/api/auth/login'], config.loginAttemptsPerIpPer10Min, 'too many sign-in attempts from this address');
+  // Live mode serves its enabled chains only: anything naming another chain is a 400 'chain_not_enabled'.
+  if (config.mode === 'live') installChainGuard(app, enabledChains(config));
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return sendError(reply, err);
@@ -146,6 +172,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   await registerMarketRoutes(app, ctx);
   await registerAccountRoutes(app, ctx);
   await registerTradingRoutes(app, ctx);
+  await registerWalletRoutes(app, ctx, liveWallets);
 
   // `market` channel: chain-level info every 5s.
   hub.register('market', {
@@ -172,8 +199,9 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     savedAt: Date.now(),
     world: world.serialize(),
     market: market.serialize(),
-    accounts: ctx.accounts.serialize(),
-    trading: ctx.trading.serialize(),
+    // Live: in the durable store only (no second copy of password hashes and sealed 2FA secrets).
+    accounts: store ? null : ctx.accounts.serialize(),
+    trading: store ? null : ctx.trading.serialize(),
     analytics: ctx.analytics.serialize(),
   });
   const save = () => {
@@ -214,6 +242,8 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     analytics.wallets.refreshLeaderboards();
     engine.start();
     market.start();
+    liveWallets?.start();
+    durable?.start();
     stopHeartbeat = hub.startHeartbeat();
     if (persist && config.snapshotEveryMs > 0) {
       snapTimer = setInterval(() => void saveInBackground(), config.snapshotEveryMs);
@@ -232,10 +262,14 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
       if (snapTimer) clearInterval(snapTimer);
       stopHeartbeat?.();
       await market.stop();
+      await liveWallets?.stop();
       engine.stop();
       if (saving) await saving;
       save();
       await app.close();
+      // Last write of accounts / trading once no request can change them, then release the file.
+      durable?.stop();
+      store?.close();
     },
   };
 }
@@ -329,6 +363,12 @@ function installIpLimit(app: FastifyInstance, routes: string[], perWindow: numbe
   });
 }
 
+/** Live status for /api/meta: the market's health plus what the configuration disables (liveProblems). */
+function liveStatusOf(ctx: AppContext): LiveStatus | undefined {
+  const status = ctx.market.liveStatus();
+  return status ? { ...status, problems: [...ctx.config.liveProblems] } : undefined;
+}
+
 export function buildMeta(ctx: AppContext): MetaResponse {
   const { world, engine, config } = ctx;
   const live = config.mode === 'live';
@@ -362,7 +402,7 @@ export function buildMeta(ctx: AppContext): MetaResponse {
     }),
     launchpads: (live ? LIVE_LAUNCHPADS : LAUNCHPADS).map((l) => ({ id: l.id, chain: l.chain, name: l.name, color: l.color })),
     sim: { seed: world.seed, startedAt: world.startedAt, speed: 1, tradesPerSecond: engine.tps },
-    ...(live ? { live: ctx.market.liveStatus() ?? undefined } : {}),
+    ...(live ? { live: liveStatusOf(ctx) } : {}),
     demoUrl: config.demoUrl,
   };
 }

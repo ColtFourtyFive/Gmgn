@@ -1,24 +1,27 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { isChainId, type ChainId, type UserSettings } from '@trenchscope/shared';
-import { EyeOff, Monitor, Save, Settings, SlidersHorizontal, UserRound } from 'lucide-react';
+import { EyeOff, Monitor, Save, Settings, ShieldCheck, SlidersHorizontal, UserRound } from 'lucide-react';
 import { AccountGate, useSignedIn } from '@/components/account';
 import { AccountSection } from '@/components/account/settings/AccountSection';
 import { BlacklistSection } from '@/components/account/settings/BlacklistSection';
 import { DisplaySettingsForm } from '@/components/account/settings/DisplaySettingsForm';
+import { SecuritySection } from '@/components/account/settings/SecuritySection';
 import { dirtyChains, sameSettings, savable, validateSettings } from '@/components/account/settings/model';
 import { TradingSettings } from '@/components/account/settings/TradingSettings';
 import { UnsavedChangesGuard } from '@/components/account/settings/UnsavedChangesGuard';
 import { Page, PageHeader } from '@/components/layout';
 import { Button, ErrorState, Kbd, Panel, Tabs } from '@/components/ui';
-import { useActiveChain, useHotkeys } from '@/hooks';
+import { useActiveChain, useEnabledChains, useHotkeys, useIsLive } from '@/hooks';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 
-type Section = 'trading' | 'display' | 'blacklist' | 'account';
+type Section = 'trading' | 'display' | 'blacklist' | 'account' | 'security';
 const SECTIONS: Section[] = ['trading', 'display', 'blacklist', 'account'];
+/** Live adds account security (2FA, withdrawal whitelist). */
+const LIVE_SECTIONS: Section[] = [...SECTIONS, 'security'];
 
 export default function SettingsPage() {
   const signedIn = useSignedIn();
@@ -62,16 +65,26 @@ function SettingsLoader() {
 }
 
 function Header({ actions }: { actions?: ReactNode }) {
-  return <PageHeader title="Settings" subtitle="Trading presets, display preferences, blacklist and your account" icon={<Settings size={16} />} actions={actions} />;
+  const live = useIsLive();
+  return (
+    <PageHeader
+      title="Settings"
+      subtitle={live ? 'Trading presets, display preferences, blacklist, your account and security' : 'Trading presets, display preferences, blacklist and your account'}
+      icon={<Settings size={16} />}
+      actions={actions}
+    />
+  );
 }
 
 function SettingsEditor({ saved }: { saved: UserSettings }) {
   const activeChain = useActiveChain();
+  const live = useIsLive();
   const [params, setParams] = useSearchParams();
   const sectionParam = params.get('section') as Section | null;
-  const section: Section = sectionParam && SECTIONS.includes(sectionParam) ? sectionParam : 'trading';
+  const section: Section = sectionParam && (live ? LIVE_SECTIONS : SECTIONS).includes(sectionParam) ? sectionParam : 'trading';
   const chainParam = params.get('chain');
-  const chain: ChainId = isChainId(chainParam) ? chainParam : activeChain;
+  const enabledChains = useEnabledChains();
+  const chain: ChainId = isChainId(chainParam) && enabledChains.includes(chainParam) ? chainParam : activeChain;
 
   const [draft, setDraft] = useState<UserSettings>(() => structuredClone(saved));
   const [pending, setPending] = useState(false);
@@ -156,6 +169,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
           { value: 'display', label: <span className="inline-flex items-center gap-1.5">Display{displayDirty && dot}</span>, icon: <Monitor size={13} /> },
           { value: 'blacklist', label: 'Blacklist', icon: <EyeOff size={13} /> },
           { value: 'account', label: 'Account', icon: <UserRound size={13} /> },
+          ...(live ? [{ value: 'security' as const, label: 'Security', icon: <ShieldCheck size={13} /> }] : []),
         ]}
       />
       <div role="tabpanel">
@@ -172,6 +186,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
         {section === 'display' && <DisplaySettingsForm value={draft.display} onChange={(display) => setDraft((d) => ({ ...d, display }))} errors={errors} />}
         {section === 'blacklist' && <BlacklistSection />}
         {section === 'account' && <AccountSection />}
+        {section === 'security' && <SecuritySection />}
       </div>
 
       {dirty && (

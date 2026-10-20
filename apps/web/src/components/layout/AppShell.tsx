@@ -1,9 +1,12 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { FundsDialogs } from '@/components/funds/FundsDialogs';
+import { LiveTradeAckDialog } from '@/components/trade/LiveTradeAck';
 import { Toaster } from '@/components/ui';
 import { chainFromPath } from '@/hooks/useActiveChain';
 import { useClockSync } from '@/hooks/useMeta';
+import { useModeSync } from '@/hooks/useMode';
 import { useThemeSync } from '@/hooks/useTheme';
 import { TRADING_QUERY_KEYS, useUserChannel } from '@/hooks/useUserChannel';
 import { useDock } from '@/store/dock';
@@ -13,6 +16,7 @@ import { AuthModal } from './AuthModal';
 import { CommandPalette } from './CommandPalette';
 import { InstantDock } from './InstantDock';
 import { MobileNavDrawer, MobileTabBar, SearchSheet } from './MobileNav';
+import { TradingUnavailableBanner } from './ModeIndicators';
 import { tokenRoute } from './nav';
 import { PageErrorBoundary } from './PageErrorBoundary';
 import { RouteAnnouncer } from './RouteAnnouncer';
@@ -61,13 +65,16 @@ function useAuthQueryReset(): void {
  * Application frame: top bar, scrollable main area, desktop status bar,
  * phone tab bar + drawers, auth modal, command palette (Ctrl/Cmd+K), the
  * Instant trade dock, the onboarding tour and toasts. Also mounts the private
- * user channel, theme/clock sync. `<main>` is the scroll container and fills
+ * user channel, theme/clock sync and the mode sync (demo / live). Live adds
+ * the Deposit / Withdraw dialogs, the first-trade acknowledgement and the
+ * trading-unavailable banner. `<main>` is the scroll container and fills
  * the remaining height, so pages can use `h-full` for terminal layouts. A
  * page that throws while rendering is contained by PageErrorBoundary.
  */
 export default function AppShell({ children }: { children: ReactNode }) {
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
+  useModeSync();
   useUserChannel();
   useThemeSync();
   useClockSync();
@@ -83,6 +90,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <TopBar />
+      <TradingUnavailableBanner />
       <main ref={mainRef} id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none">
         <PageErrorBoundary resetKey={pathname}>{children}</PageErrorBoundary>
       </main>
@@ -92,6 +100,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <SearchSheet />
       <AuthModal />
       <SignOutDialog />
+      <FundsDialogs />
+      <LiveTradeAckDialog />
       <CommandPalette />
       <InstantDock />
       <Tour />

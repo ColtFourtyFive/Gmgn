@@ -90,7 +90,7 @@ export const TokenCard = memo(function TokenCard({ token: t, column, thresholds,
             aria-label={`${t.symbol} summary`}
             trigger={
               <span className="block rounded-full">
-                <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={compact ? 40 : 48} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
+                <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={compact ? 40 : 48} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
               </span>
             }
           >

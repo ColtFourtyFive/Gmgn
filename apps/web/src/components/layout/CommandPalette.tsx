@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { CHAIN_IDS, CHAINS, formatUsd, shortAddress, type SearchResult } from '@trenchscope/shared';
-import { ArrowRight, Compass, CornerDownLeft, History, LogIn, LogOut, Moon, Plus, Search, Settings, Sun, UserPlus, X, Zap, type LucideIcon } from 'lucide-react';
+import { CHAINS, formatUsd, shortAddress, type SearchResult } from '@trenchscope/shared';
+import { ArrowRight, ArrowUpRight, Compass, CornerDownLeft, History, LogIn, LogOut, Moon, Plus, Search, Settings, ShieldCheck, Sun, UserPlus, X, Zap, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon, Pct, Price, TokenAvatar, WalletAvatar, WalletTags } from '@/components/common';
 import { IconButton, Kbd, Modal, Spinner } from '@/components/ui';
@@ -10,6 +10,7 @@ import { chainFromPath, useActiveChain } from '@/hooks/useActiveChain';
 import { useDebounce } from '@/hooks/useDebounce';
 import { MOD_KEY, useHotkeys } from '@/hooks/useHotkeys';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useEnabledChains, useIsLive } from '@/hooks/useMode';
 import { useTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
@@ -17,9 +18,10 @@ import { requireAuth, useSession } from '@/store/session';
 import { useDock } from '@/store/dock';
 import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
+import { openFunds } from '@/store/funds';
 import { useDeposit } from './AccountControls';
 import { useSwitchChain } from './ChainSwitcher';
-import { ACCOUNT_ITEMS, NAV_ITEMS } from './nav';
+import { ACCOUNT_ITEMS, NAV_ITEMS, navItemsFor } from './nav';
 import { isFullAddress, resolveAddress, sameAddress } from './Omnibox';
 import { requestSignOut } from './SignOutDialog';
 import {
@@ -74,6 +76,8 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
   const { theme, toggle } = useTheme();
   const isGuest = useSession((s) => !!s.account?.isGuest);
   const signedIn = useSession((s) => !!s.token);
+  const live = useIsLive();
+  const chains = useEnabledChains();
   const { deposit } = useDeposit(chain);
   // These change identity every render; commands call the latest through a ref so the list stays memoized.
   const fns = useRef({ navigate, switchChain, deposit });
@@ -89,7 +93,7 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
     };
 
     // Ranking keeps input order on ties: chain switches and actions before same-scoring pages.
-    for (const c of CHAIN_IDS) {
+    for (const c of chains) {
       if (c === chain) continue;
       add(
         { id: `chain:${c}`, group: 'Chains', title: `Switch to ${CHAINS[c].name}`, keywords: [c, CHAIN_SHORT[c], 'chain', 'network'], run: () => fns.current.switchChain(c) },
@@ -97,17 +101,40 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
       );
     }
 
-    add(
-      {
-        id: 'action:deposit',
-        group: 'Actions',
-        title: 'Deposit',
-        subtitle: `Top up your ${CHAINS[chain].name} paper wallet`,
-        keywords: ['faucet', 'top up', 'fund', 'balance'],
-        run: () => requireAuth(() => void fns.current.deposit()),
-      },
-      icon(Plus),
-    );
+    if (live) {
+      // Live: real funding. Deposit shows the wallet address; withdrawals and 2FA live in Security settings.
+      add(
+        {
+          id: 'action:deposit',
+          group: 'Actions',
+          title: 'Deposit',
+          subtitle: 'Your Solana deposit address',
+          keywords: ['fund', 'top up', 'receive', 'address', 'balance', 'sol'],
+          run: () => requireAuth(() => openFunds('deposit')),
+        },
+        icon(Plus),
+      );
+      add(
+        { id: 'action:withdraw', group: 'Actions', title: 'Withdraw', subtitle: 'Send SOL or tokens to a whitelisted address', keywords: ['send', 'cash out', 'transfer'], run: () => requireAuth(() => openFunds('withdraw')) },
+        icon(ArrowUpRight),
+      );
+      add(
+        { id: 'action:security', group: 'Actions', title: 'Security settings', subtitle: 'Two-factor authentication and withdrawal whitelist', keywords: ['2fa', 'totp', 'authenticator', 'whitelist'], run: go(routes.settings('security')) },
+        icon(ShieldCheck),
+      );
+    } else {
+      add(
+        {
+          id: 'action:deposit',
+          group: 'Actions',
+          title: 'Deposit',
+          subtitle: `Top up your ${CHAINS[chain].name} paper wallet`,
+          keywords: ['faucet', 'top up', 'fund', 'balance'],
+          run: () => requireAuth(() => void fns.current.deposit()),
+        },
+        icon(Plus),
+      );
+    }
     add(
       { id: 'action:settings', group: 'Actions', title: 'Open settings', keywords: ['preferences', 'presets', 'slippage', 'hotkeys'], run: go(routes.settings()) },
       icon(Settings),
@@ -131,7 +158,8 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
     );
     const prompt = (tab: 'quick' | 'login' | 'register') => () => useSession.getState().promptAuth(true, tab);
     if (!signedIn) {
-      add({ id: 'action:signin', group: 'Actions', title: 'Sign in', subtitle: 'Start paper trading in one click', keywords: ['quick start', 'guest', 'account'], run: prompt('quick') }, icon(LogIn));
+      if (live) add({ id: 'action:signin', group: 'Actions', title: 'Sign in', subtitle: 'Log in or create an account', keywords: ['account'], run: prompt('login') }, icon(LogIn));
+      else add({ id: 'action:signin', group: 'Actions', title: 'Sign in', subtitle: 'Start paper trading in one click', keywords: ['quick start', 'guest', 'account'], run: prompt('quick') }, icon(LogIn));
       add({ id: 'action:login', group: 'Actions', title: 'Log in', subtitle: 'Username and password', keywords: ['sign in', 'account'], run: prompt('login') }, icon(LogIn));
       add({ id: 'action:register', group: 'Actions', title: 'Create account', keywords: ['register', 'sign up'], run: prompt('register') }, icon(UserPlus));
     } else {
@@ -151,8 +179,9 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
     }
 
     // Pages: the active chain first, then other chains (listed only when the query names them).
-    for (const c of [chain, ...CHAIN_IDS.filter((x) => x !== chain)]) {
-      for (const item of NAV_ITEMS) {
+    const items = live ? navItemsFor('live') : NAV_ITEMS;
+    for (const c of [chain, ...chains.filter((x) => x !== chain)]) {
+      for (const item of items) {
         const href = item.href(c);
         const scoped = chainFromPath(href) !== null;
         if (!scoped && c !== chain) continue;
@@ -173,14 +202,14 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
     }
     for (const item of ACCOUNT_ITEMS) {
       // Portfolio is a primary section; settings is an action.
-      if (item.key === 'settings' || NAV_ITEMS.some((n) => n.key === item.key)) continue;
+      if (item.key === 'settings' || items.some((n) => n.key === item.key)) continue;
       add(
         { id: `page:${item.key}`, group: 'Pages', title: item.label, subtitle: PAGE_META[item.key]?.description, keywords: PAGE_META[item.key]?.keywords, run: go(item.href) },
         icon(item.icon),
       );
     }
     return { commands, icons };
-  }, [chain, theme, toggle, signedIn, isGuest]);
+  }, [chain, theme, toggle, signedIn, isGuest, live, chains]);
 }
 
 function Highlighted({ text, indices }: { text: string; indices: number[] }) {
@@ -235,7 +264,7 @@ function EntryRow({ entry, active }: { entry: Entry; active: boolean }) {
       const t = entry.token;
       return (
         <>
-          <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={28} />
+          <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={28} />
           <span className="flex min-w-0 flex-1 flex-col leading-tight">
             <span className="flex items-center gap-1.5">
               <span className="truncate font-semibold text-fg">{t.symbol}</span>

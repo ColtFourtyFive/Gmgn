@@ -12,6 +12,8 @@ import type { TokenState } from '../../sim/world';
 import { FilterParseError, parseTokenFiltersParam, parseTrenchesFiltersParam, validateTokenFilters, validateTrenchesFilters } from '../filters';
 import { TRADER_SORTS, TRADE_FILTERS, tokenAnalyticsFor, type TokenAnalytics } from './index';
 
+/** A base58 Solana address (live-mode search looks unknown ones up on-chain). */
+const SOL_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const WALLET_TAG_FILTERS = ['all', 'smart', 'kol', 'sniper', 'bundler', 'insider', 'dev', 'whale', 'fresh', 'bot', 'sandwich', 'top_holder', 'following', 'you'] as const;
 const TRENDING_SORTS = ['hot', 'volume', 'swaps', 'marketCap', 'liquidity', 'holders', 'priceChange', 'age', 'smartDegenCount', 'kolCount', 'netBuy'] as const;
 
@@ -101,9 +103,11 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
     return inst;
   };
 
-  const tokenOf = (params: TokenParams): TokenState => {
+  const tokenOf = async (params: TokenParams): Promise<TokenState> => {
     const chain = parseChain(params.chain);
-    const t = ctx.world.tokens.get(params.address) ?? (chain !== 'sol' ? ctx.world.tokens.get(params.address.toLowerCase()) : undefined);
+    let t = ctx.world.tokens.get(params.address) ?? (chain !== 'sol' ? ctx.world.tokens.get(params.address.toLowerCase()) : undefined);
+    // Live mode loads a mint the feed has not delivered (an older token, another venue) before the 404.
+    if (!t && ctx.config.mode === 'live') t = (await ctx.market.ensureToken?.(chain, params.address)) ?? undefined;
     if (!t || t.chain !== chain) throw new HttpError(404, 'token not found', 'not_found');
     return t;
   };
@@ -153,11 +157,11 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address', async (req) => {
-    return ta().detail(tokenOf(req.params));
+    return ta().detail(await tokenOf(req.params));
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/candles', async (req) => {
-    const t = tokenOf(req.params);
+    const t = await tokenOf(req.params);
     const q = parseQuery(schemas.candles, req);
     const resolution = (q.resolution ?? '1m') as Resolution;
     const limit = q.limit ?? 500;
@@ -166,7 +170,7 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/trades', async (req) => {
-    const t = tokenOf(req.params);
+    const t = await tokenOf(req.params);
     const q = parseQuery(schemas.trades, req);
     // EVM addresses are generated lower-case; accept checksummed input like the token lookup does.
     if (q.wallet && t.chain !== 'sol' && !ctx.world.wallets.has(q.wallet)) q.wallet = q.wallet.toLowerCase();
@@ -174,29 +178,34 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/holders', async (req) => {
-    const t = tokenOf(req.params);
+    const t = await tokenOf(req.params);
     const q = parseQuery(schemas.holders, req);
     return ta().holders(t, q, viewerOf(ctx, req));
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/top-traders', async (req) => {
-    const t = tokenOf(req.params);
+    const t = await tokenOf(req.params);
     const q = parseQuery(schemas.topTraders, req);
     return ta().topTraders(t, q, viewerOf(ctx, req));
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/early-buyers', async (req) => {
-    return ta().earlyBuyers(tokenOf(req.params), viewerOf(ctx, req));
+    return ta().earlyBuyers(await tokenOf(req.params), viewerOf(ctx, req));
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/dev', async (req) => {
-    return ta().devInfo(tokenOf(req.params));
+    return ta().devInfo(await tokenOf(req.params));
   });
 
   app.get('/api/search', async (req) => {
     const q = parseQuery(schemas.search, req);
     let chain: ChainId | undefined;
     if (q.chain !== undefined && q.chain !== '' && q.chain !== 'all') chain = parseChain(q.chain);
+    // Live mode: an address the World has not seen is looked up on-chain (a mint, else a wallet) first.
+    const term = (q.q ?? '').trim();
+    if (ctx.config.mode === 'live' && (!chain || chain === 'sol') && SOL_ADDRESS.test(term) && !ctx.world.tokens.has(term) && !ctx.world.wallets.has(term)) {
+      if (!(await ctx.market.ensureToken?.('sol', term))) ctx.market.ensureWallet?.('sol', term);
+    }
     return ta().search(q.q ?? '', chain, viewerOf(ctx, req));
   });
 }

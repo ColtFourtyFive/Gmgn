@@ -9,6 +9,7 @@ import { CopyTaskForm } from '@/components/account/copytrade/CopyTaskForm';
 import { ChainIcon, Native, StatTile } from '@/components/common';
 import { Page, PageHeader } from '@/components/layout';
 import { Button, EmptyState, ErrorState, Panel, Skeleton } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
 import { errorMessage } from '@/lib/format';
@@ -20,6 +21,7 @@ type DrawerState = { task: CopyTradeTask | null; target: string } | null;
 export default function CopyTradePage() {
   const chain = useChain();
   const signedIn = useSignedIn();
+  const live = useIsLive();
   const [params, setParams] = useSearchParams();
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const tasks = useQuery({ queryKey: accountKeys.copyTasks, queryFn: api.copyTasks, enabled: signedIn, refetchInterval: 10_000 });
@@ -57,7 +59,7 @@ export default function CopyTradePage() {
       <AccountGate
         icon={<Repeat2 size={22} />}
         title="Copy the best traders"
-        description="Follow a wallet and every buy it makes is copied into your paper wallet with your own size, filters and exit rules."
+        description={`Follow a wallet and every buy it makes is copied into your ${live ? '' : 'paper '}wallet with your own size, filters and exit rules.`}
         features={['Fixed size or a % of the target’s buy', 'Market-cap, liquidity and first-buy filters', 'Mirror sells or attach take-profit / stop-loss']}
       >
         <CopyTradeBody
@@ -98,6 +100,7 @@ function CopyTradeBody({
   const qc = useQueryClient();
   const { toggle, pending } = useToggleCopyTask();
   const [deleting, setDeleting] = useState<CopyTradeTask | null>(null);
+  const live = useIsLive();
   const [deletePending, setDeletePending] = useState(false);
 
   const list = useMemo(() => (data ?? []).filter((t) => t.chain === chain).sort((a, b) => b.createdAt - a.createdAt), [data, chain]);
@@ -209,7 +212,7 @@ function CopyTradeBody({
       {list.length > 0 && (
         <Note tone="warn" title="Know the risks">
           Copied buys land after the target’s, usually at a worse price, and some wallets dump on their followers. Use per-token caps, market-cap filters and exit rules.
-          All trades are paper trades on a simulated market.
+          {live ? 'Copied trades execute on Solana mainnet with real funds.' : 'All trades are paper trades on a simulated market.'}
         </Note>
       )}
 

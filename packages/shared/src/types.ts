@@ -818,6 +818,7 @@ export interface Account {
   createdAt: number;
   referralCode: string;
   referredBy: string | null;
+  /** Demo: a paper wallet per chain. Live: the enabled chains only (the embedded Solana wallet). */
   wallets: Record<ChainId, UserWallet>;
   /** Live mode: TOTP second factor enabled (required for withdrawals). */
   twoFactorEnabled?: boolean;
@@ -1304,6 +1305,8 @@ export interface LiveStatus {
   tradingEnabled: boolean;
   /** Tokens currently tracked from the feed. */
   trackedTokens: number;
+  /** Why live features are disabled (missing or invalid configuration), empty when fully configured. */
+  problems?: string[];
 }
 
 export interface MetaResponse {
@@ -1383,8 +1386,18 @@ export interface Paged<T> {
 //   POST /api/security/whitelist/remove     { chain, address, code } -> { ok: true }
 //   POST /api/auth/login                    { username, password, code? } (401 code 'totp_required'
 //                                           when 2FA is on and the code is missing or wrong)
+//   POST /api/auth/password                 { currentPassword, newPassword, code? } -> AuthResponse
+//                                           (every session is signed out; the response is a new one)
+//
+// Live-mode rules: register needs a password of 10+ characters; sessions expire after
+// LIVE_SESSION_TTL_DAYS (default 14) without use; 2FA disable signs out every session (the
+// caller's too); login and 2FA disable also take a recovery code in `code`, withdrawals and
+// whitelist changes a TOTP code only; a new whitelist address is usable after whitelistDelayMs.
 //
 // Live-mode error codes: 'guest_disabled' (403, no guest accounts with real funds),
+// 'chain_not_enabled' (400: a chain other than enabledChains in params / query / body),
+// 'two_factor_unavailable' (503: SECRETS_KEY not configured), 'two_factor_enabled' (409: setup
+// while 2FA is on), 'rate_limited' (429 + retry-after: 5 invalid 2FA codes in 10 min lock 15 min),
 // 'not_available_in_live' (403: faucet, token launch), 'wallets_unavailable' (503: no signer),
 // 'trading_unavailable' (503: RPC / router / signer missing), 'totp_required' (401),
 // 'two_factor_required' (403: enable 2FA first), 'address_not_whitelisted' (403),

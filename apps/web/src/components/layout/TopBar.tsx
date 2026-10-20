@@ -10,6 +10,7 @@ import { AccountMenu, BalancePill, ThemeToggle } from './AccountControls';
 import { ChainSwitcher } from './ChainSwitcher';
 import { Logo } from './Logo';
 import { MainNav } from './MainNav';
+import { ModeBadge } from './ModeIndicators';
 import { NotificationsBell } from './NotificationsBell';
 import { Omnibox } from './Omnibox';
 
@@ -32,6 +33,7 @@ export function TopBar() {
   return (
     <header className="relative z-header flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-2 sm:px-3 md:gap-3">
       <Logo compact={!xl} />
+      <ModeBadge />
       {desktop ? <MainNav chain={chain} /> : <span className="flex-1" />}
       {wide ? (
         <Omnibox className="w-[clamp(200px,18vw,300px)] shrink-0" />

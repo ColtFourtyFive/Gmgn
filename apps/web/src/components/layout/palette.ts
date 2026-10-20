@@ -48,7 +48,7 @@ export function rankCommands(query: string, commands: readonly PaletteCommand[])
   return fuzzyRank(query, pool, (c) => [c.title, c.subtitle ?? '', ...(c.keywords ?? [])]).filter((r) => r.score >= min);
 }
 
-export type PaletteToken = Pick<TokenRef, 'chain' | 'address' | 'symbol' | 'name' | 'logoSeed' | 'logoGlyph'>;
+export type PaletteToken = Pick<TokenRef, 'chain' | 'address' | 'symbol' | 'name' | 'logoSeed' | 'logoGlyph' | 'imageUrl'>;
 export type PaletteWallet = SearchResult['wallets'][number];
 
 /** A recently opened palette item, persisted in localStorage (tokens without prices, which go stale). */

@@ -5,10 +5,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ChainId, CreateOrderRequest, Order, Position, Resolution, TokenDetail, Trade } from '@trenchscope/shared';
+import { ensureLiveTradeAck } from '@/components/trade/LiveTradeAck';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { toastTradeFailure } from '@/hooks/useSwap';
 import { api, ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
+import { isLiveMode } from '@/lib/mode';
 import { useChannel, useConnectionState } from '@/lib/ws';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
@@ -174,6 +177,8 @@ export function useCreateOrder(): { create: (req: CreateOrderRequest, success: {
   const [pending, setPending] = useState(false);
   const create = useCallback(
     async (req: CreateOrderRequest, success: { title: string; body?: string }) => {
+      // Live orders fill with real funds later: the one-time acknowledgement comes first (demo skips the await).
+      if (isLiveMode() && !(await ensureLiveTradeAck())) return null;
       setPending(true);
       try {
         const order = await api.createOrder(req);
@@ -181,7 +186,7 @@ export function useCreateOrder(): { create: (req: CreateOrderRequest, success: {
         invalidateTradingQueries(qc);
         return order;
       } catch (err) {
-        toast.error('Order not placed', errorMessage(err));
+        toastTradeFailure('Order not placed', errorMessage(err), err instanceof ApiError ? err.code : undefined);
         return null;
       } finally {
         setPending(false);

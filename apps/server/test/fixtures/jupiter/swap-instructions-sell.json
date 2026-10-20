@@ -1,0 +1,48 @@
+{
+  "tokenLedgerInstruction": null,
+  "computeBudgetInstructions": [
+    { "programId": "ComputeBudget111111111111111111111111111111", "accounts": [], "data": "AiC/AgA=" },
+    { "programId": "ComputeBudget111111111111111111111111111111", "accounts": [], "data": "A+gDAAAAAAAA" }
+  ],
+  "setupInstructions": [
+    {
+      "programId": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "accounts": [
+        { "pubkey": "<OWNER>", "isSigner": true, "isWritable": true },
+        { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
+        { "pubkey": "<OWNER>", "isSigner": false, "isWritable": false },
+        { "pubkey": "So11111111111111111111111111111111111111112", "isSigner": false, "isWritable": false },
+        { "pubkey": "11111111111111111111111111111111", "isSigner": false, "isWritable": false },
+        { "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "isSigner": false, "isWritable": false }
+      ],
+      "data": "AQ=="
+    }
+  ],
+  "swapInstruction": {
+    "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "accounts": [
+      { "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "isSigner": false, "isWritable": false },
+      { "pubkey": "<OWNER>", "isSigner": true, "isWritable": true },
+      { "pubkey": "<OWNER_ATA>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<MINT>", "isSigner": false, "isWritable": false },
+      { "pubkey": "<AMM>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<POOL_BASE>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<POOL_QUOTE>", "isSigner": false, "isWritable": true }
+    ],
+    "data": "5RfLl3rjrSoBAAAAJmQAAUBCDwAAAAAAgJaYAAAAAABQAAA="
+  },
+  "cleanupInstruction": {
+    "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "accounts": [
+      { "pubkey": "<WSOL_ATA>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<OWNER>", "isSigner": false, "isWritable": true },
+      { "pubkey": "<OWNER>", "isSigner": true, "isWritable": false }
+    ],
+    "data": "CQ=="
+  },
+  "otherInstructions": [],
+  "addressLookupTableAddresses": [],
+  "prioritizationFeeLamports": 0,
+  "simulationError": null
+}

@@ -7,10 +7,13 @@ import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatCompact, formatPrice, type SwapReceipt, type SwapRequest, type TokenDetail } from '@trenchscope/shared';
 import { checkTradeGates, GateReasons } from '@/components/trade/gates';
+import { ensureLiveTradeAck } from '@/components/trade/LiveTradeAck';
 import { Button, Checkbox, Modal } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { formatNativeFor } from '@/lib/format';
+import { isLiveMode } from '@/lib/mode';
 import { requireAuth } from '@/store/session';
 import { toast } from '@/store/toasts';
 
@@ -29,6 +32,7 @@ interface Pending {
 export function useTradeExecutor(token: TokenDetail) {
   const { swap, pending, error } = useSwap();
   const { confirmTrades } = useDisplaySettings();
+  const live = useIsLive();
   const qc = useQueryClient();
   const [checking, setChecking] = useState(false);
   const [confirm, setConfirm] = useState<Pending | null>(null);
@@ -56,18 +60,22 @@ export function useTradeExecutor(token: TokenDetail) {
     return receipt;
   };
 
-  /** Validate auth, then gate on risk / soft gates (quote of this exact order) / confirm setting, then execute. */
+  /** Validate auth (and, live, the one-time real-funds acknowledgement), then gate on risk / soft gates (quote of this exact order) / confirm setting, then execute. */
   const submit = (req: SwapRequest, summary: ReactNode) =>
     requireAuth(() => {
       if (checking) return;
-      setChecking(true);
-      void checkTradeGates(qc, req, token).then(({ risk, soft }) => {
-        setChecking(false);
-        if (risk.length > 0 || soft.length > 0 || confirmTrades) {
-          setAck(false);
-          setConfirm({ req, summary, risk, soft });
-        } else void run(req);
-      });
+      const gate = () => {
+        setChecking(true);
+        void checkTradeGates(qc, req, token).then(({ risk, soft }) => {
+          setChecking(false);
+          if (risk.length > 0 || soft.length > 0 || confirmTrades) {
+            setAck(false);
+            setConfirm({ req, summary, risk, soft });
+          } else void run(req);
+        });
+      };
+      if (isLiveMode()) void ensureLiveTradeAck().then((ok) => ok && gate());
+      else gate();
     });
 
   const close = () => setConfirm(null);
@@ -81,7 +89,15 @@ export function useTradeExecutor(token: TokenDetail) {
       onClose={close}
       size="sm"
       title={risky ? `High-risk token: ${token.symbol}` : soft ? `Check this ${isBuy ? 'buy' : 'sell'}` : `Confirm ${isBuy ? 'buy' : 'sell'}`}
-      description={risky ? 'Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.' : `Paper trade on ${CHAINS[token.chain].name}.`}
+      description={
+        live
+          ? risky
+            ? 'Automated security checks flagged this token. This trade uses real funds on Solana mainnet.'
+            : `Executes on ${CHAINS[token.chain].name} mainnet with real funds.`
+          : risky
+            ? 'Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.'
+            : `Paper trade on ${CHAINS[token.chain].name}.`
+      }
       footer={
         <>
           <Button variant="ghost" onClick={close}>

@@ -1,0 +1,42 @@
+{
+  "slot": 300000456,
+  "blockTime": 1760000060,
+  "version": 0,
+  "meta": {
+    "err": null,
+    "status": { "Ok": null },
+    "fee": 805000,
+    "preBalances": [1989155720, 10008000000, 0, 2039280, 1461600, 1000000, 1461600, 1, 1, 934087680, 731913600, 1141440],
+    "postBalances": [2927130720, 10015220000, 0, 2039280, 1461600, 3000000, 1461600, 1, 1, 934087680, 731913600, 1141440],
+    "preTokenBalances": [
+      { "accountIndex": 3, "mint": "<MINT>", "owner": "<OWNER>", "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "uiTokenAmount": { "amount": "35000000000000", "decimals": 6, "uiAmount": 35000000, "uiAmountString": "35000000" } }
+    ],
+    "postTokenBalances": [
+      { "accountIndex": 3, "mint": "<MINT>", "owner": "<OWNER>", "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "uiTokenAmount": { "amount": "0", "decimals": 6, "uiAmount": null, "uiAmountString": "0" } }
+    ],
+    "innerInstructions": [],
+    "logMessages": [
+      "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 invoke [1]",
+      "Program log: Instruction: Route",
+      "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 success"
+    ],
+    "rewards": [],
+    "loadedAddresses": { "writable": [], "readonly": [] },
+    "computeUnitsConsumed": 120400
+  },
+  "transaction": {
+    "signatures": ["<SIG>"],
+    "message": {
+      "header": { "numRequiredSignatures": 1, "numReadonlySignedAccounts": 0, "numReadonlyUnsignedAccounts": 6 },
+      "accountKeys": [
+        "<OWNER>", "<FEE_WALLET>", "<WSOL_ATA>", "<OWNER_ATA>", "<AMM>", "<TIP>", "<MINT>",
+        "ComputeBudget111111111111111111111111111111", "11111111111111111111111111111111",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+      ],
+      "recentBlockhash": "<BLOCKHASH>",
+      "instructions": [],
+      "addressTableLookups": []
+    }
+  }
+}

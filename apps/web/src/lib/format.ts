@@ -4,6 +4,7 @@
 
 import { CHAINS, formatNative, type ChainId } from '@trenchscope/shared';
 import { ApiError } from '@/lib/api';
+import { liveErrorText } from '@/lib/liveErrors';
 
 export type Tone = 'up' | 'down' | 'neutral';
 
@@ -39,6 +40,9 @@ export function isChunkLoadError(err: unknown): boolean {
 export function errorMessage(err: unknown, fallback = 'Something went wrong'): string {
   if (isChunkLoadError(err)) return 'This part of the app didn’t load — the connection dropped or a new version is out. Reload the page.';
   if (err instanceof ApiError) {
+    // Live codes first: tx_failed (502) and trading/wallets_unavailable (503) come from a reachable API.
+    const live = liveErrorText(err.code, err.message);
+    if (live) return live;
     if (err.status === 0 || err.status >= 502) return 'Server unreachable — is the API running?';
     return err.message || fallback;
   }

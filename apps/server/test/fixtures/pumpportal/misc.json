@@ -1,0 +1,55 @@
+{
+  "createCat": {
+    "signature": "3vBVRhYf5esvVxMMQog9xoergDTwGPbsLgRjqkZWviMGb7spJpoj6qSTZwSNpX55UjWWUkmksytfvky8toJCHwUg",
+    "mint": "EbqX7mgSZZhDAk3WFrwYWwB719EgwLXXkE8FK694Gszb",
+    "traderPublicKey": "F1mtgAcJymFTCN6QgAwhd4y6z2GuN9HnLriZXShWyQ1A",
+    "txType": "create",
+    "initialBuy": 0,
+    "solAmount": 0,
+    "bondingCurveKey": "HFbsn2rYgiys2UmWWqhJkBHuhRKtbqFGgLAzLAmcdcL4",
+    "vTokensInBondingCurve": 1073000000,
+    "vSolInBondingCurve": 30,
+    "marketCapSol": 27.958993476,
+    "name": "Sir Meowington",
+    "symbol": "MEOW",
+    "uri": "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+    "pool": "pump"
+  },
+  "createBonk": {
+    "signature": "612zGNECnvU89UViNuaG6oeWueX2RJgqHyUnNWACuQ93MmJLbA76kd2z8NmSK9YHEzEFEftqJgpbPuRwZiP2AM7A",
+    "traderPublicKey": "139uJLNYdGMPaaFXXnMkmk9YGGP3qaZjWU8BfL5BZTg4",
+    "txType": "create",
+    "mint": "FBk9vzgM2trfJxeVUAxupw5hc1Ata3bSSAivRJS4veMH",
+    "solInPool": 0.89055,
+    "tokensInPool": 967574707.778913,
+    "initialBuy": 32425292.22108698,
+    "solAmount": 0.89055,
+    "newTokenBalance": 32425292.221087,
+    "marketCapSol": 29.72713613571716,
+    "name": "Blume",
+    "symbol": "BLUME",
+    "uri": "https://ipfs.io/ipfs/QmVGxiWSGprdNoUBghjurgb3Hxm1UAU6ZJTHnhzidT6Rc7",
+    "pool": "bonk"
+  },
+  "subscribedKeys": {
+    "message": "Successfully subscribed to keys."
+  },
+  "errorKeys": {
+    "errors": "Invalid message. Message must contain parameter 'keys' which should be an array of strings."
+  },
+  "malformed": [
+    "not json at all",
+    "[1,2,3]",
+    "{\"txType\":\"buy\",\"signature\":\"x\",\"mint\":\"y\"}",
+    "{\"txType\":\"buy\",\"signature\":\"3znknrxFmgRYuL9AXeg1JbTb8jCsFRiMZzXvyWJPWLL3nMuMbnxvpdUo7Y3jqAP9PrwPAPpPB4uTTmR6ju58CfNr\",\"mint\":\"9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg\",\"traderPublicKey\":\"83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk\",\"tokenAmount\":-5,\"solAmount\":1}",
+    "{\"txType\":\"teleport\",\"mint\":\"9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg\"}",
+    "{\"hello\":\"world\"}"
+  ],
+  "wallets": {
+    "DEV": "3dTjsU6ZDcvWc4oPitgshvqrbevjDTtY1BDS6oTiHnrW",
+    "A": "83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk",
+    "B": "6jaogixbndx3JduqN8Y5d2XsRGDK7yJiCP57ysYTHrKE",
+    "MINT": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "MINT2": "EbqX7mgSZZhDAk3WFrwYWwB719EgwLXXkE8FK694Gszb"
+  }
+}

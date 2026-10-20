@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { shortAddress, type ChainId, type FeedItem, type TokenRef, type Trade } from '@trenchscope/shared';
 import { Activity } from 'lucide-react';
 import clsx from 'clsx';
-import { Age, Compact, Native, Price, TokenLink, Usd } from '@/components/common';
+import { Age, Compact, ExplorerLink, Native, Price, TokenLink, Usd } from '@/components/common';
 import { Badge, CopyButton, DataTable, EmptyState, ErrorState, SegmentedControl, type Column } from '@/components/ui';
 import { useOpenLink } from '@/hooks/useOpenLink';
 import { routes } from '@/lib/chain';
@@ -167,6 +167,7 @@ const columns: Column<FeedItem>[] = [
       <span className="inline-flex items-center gap-0.5">
         <span className="num font-mono text-2xs text-faint">{shortAddress(t.txHash, 4, 4)}</span>
         <CopyButton text={t.txHash} label="Copy transaction hash" size={11} />
+        <ExplorerLink chain={t.chain} kind="tx" value={t.txHash} />
       </span>
     ),
   },

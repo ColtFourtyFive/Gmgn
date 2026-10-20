@@ -1,15 +1,17 @@
 import { useMemo } from 'react';
 import { shortAddress, type FeedItem } from '@trenchscope/shared';
 import { Activity } from 'lucide-react';
-import { Age, ChainIcon, Compact, Native, Price, TokenLink, Usd } from '@/components/common';
+import { Age, ChainIcon, Compact, ExplorerLink, Native, Price, TokenLink, Usd } from '@/components/common';
 import { CopyButton, DataTable, EmptyState, type Column } from '@/components/ui';
 import { PositionEventBadge } from '@/components/wallet';
+import { useIsLive } from '@/hooks/useMode';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { SideBadge } from '../orders';
 
 /** The user's own trades across chains (manual, orders, copy trades, snipes). */
 export function ActivityTable({ rows, loading, showChain }: { rows: FeedItem[]; loading: boolean; showChain: boolean }) {
   const { compactRows } = useDisplaySettings();
+  const live = useIsLive();
   const columns = useMemo<Column<FeedItem>[]>(
     () => [
       {
@@ -72,6 +74,7 @@ export function ActivityTable({ rows, loading, showChain }: { rows: FeedItem[]; 
           <span className="inline-flex items-center gap-1 font-mono text-xs text-muted" title={f.trade.txHash}>
             {shortAddress(f.trade.txHash, 4, 4)}
             <CopyButton text={f.trade.txHash} label="Copy transaction hash" />
+            <ExplorerLink chain={f.trade.chain} kind="tx" value={f.trade.txHash} size={12} />
           </span>
         ),
       },
@@ -89,7 +92,7 @@ export function ActivityTable({ rows, loading, showChain }: { rows: FeedItem[]; 
       compact={compactRows}
       minWidth={720}
       aria-label="Trade activity"
-      empty={<EmptyState icon={<Activity size={18} />} title="No trades yet" description="Every paper trade you make — manual, orders, copy trades and snipes — is logged here." />}
+      empty={<EmptyState icon={<Activity size={18} />} title="No trades yet" description={`Every ${live ? '' : 'paper '}trade you make — manual, orders, copy trades and snipes — is logged here.`} />}
     />
   );
 }

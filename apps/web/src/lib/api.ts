@@ -12,6 +12,7 @@ import type {
   ChainId,
   CopyTradeTask,
   CreateOrderRequest,
+  DepositInfo,
   DevInfo,
   DevToken,
   EarlyBuyersResponse,
@@ -31,6 +32,7 @@ import type {
   Resolution,
   RewardsSummary,
   SearchResult,
+  SecurityStatus,
   Signal,
   SniperTask,
   StatWindow,
@@ -40,6 +42,8 @@ import type {
   TokenFilters,
   TokenPositionRow,
   TokenSummary,
+  TotpEnableResponse,
+  TotpSetup,
   Trade,
   TrenchesColumn,
   TrenchesSnapshot,
@@ -50,9 +54,12 @@ import type {
   WalletCalls,
   WalletPeriod,
   WalletProfile,
+  WalletTransfer,
   WatchlistGroup,
   WatchlistItem,
   WatchlistResponse,
+  WhitelistEntry,
+  WithdrawRequest,
 } from '@trenchscope/shared';
 
 export class ApiError extends Error {
@@ -89,15 +96,19 @@ function qs(query?: Query): string {
   return s ? `?${s}` : '';
 }
 
+/** 401 codes that reject one request's credentials, not the session: a wrong password, a missing or wrong 2FA code. */
+const NOT_SESSION_401 = new Set(['invalid_credentials', 'totp_required']);
+
 /**
  * A 401 means the session is gone (expired or revoked: `unauthorized`) only
  * when the request carried the session that is still current. /auth/* calls
  * answer 401 for their own reasons (a wrong password is `invalid_credentials`),
- * and an answer to a token that was already replaced says nothing about the
- * new one; neither may sign the user out.
+ * live withdrawals and security changes answer 401 `totp_required` for a
+ * wrong two-factor code, and an answer to a token that was already replaced
+ * says nothing about the new one; none of these may sign the user out.
  */
 export function isSessionExpiry(status: number, path: string, sentToken: string | null, currentToken: string | null, code?: string): boolean {
-  return status === 401 && sentToken !== null && sentToken === currentToken && !path.startsWith('/auth/') && code !== 'invalid_credentials';
+  return status === 401 && sentToken !== null && sentToken === currentToken && !path.startsWith('/auth/') && !(code !== undefined && NOT_SESSION_401.has(code));
 }
 
 export async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
@@ -176,8 +187,11 @@ export const api = {
   // accounts
   guest: (referralCode?: string) => post<AuthResponse>('/auth/guest', { referralCode }),
   register: (username: string, password: string, referralCode?: string) => post<AuthResponse>('/auth/register', { username, password, referralCode }),
-  login: (username: string, password: string) => post<AuthResponse>('/auth/login', { username, password }),
+  /** `code`: the 6-digit TOTP code, sent on the second step after a 401 'totp_required' (live accounts with 2FA). */
+  login: (username: string, password: string, code?: string) => post<AuthResponse>('/auth/login', { username, password, code }),
   logout: () => post<{ ok: true }>('/auth/logout'),
+  /** Live: every session is signed out and a fresh one returned. `code`: the TOTP code when 2FA is on. */
+  changePassword: (body: { currentPassword: string; newPassword: string; code?: string }) => post<AuthResponse>('/auth/password', body),
   me: () => get<Account>('/me'),
   settings: () => get<UserSettings>('/settings'),
   updateSettings: (patchBody: DeepPartial<UserSettings>) => put<UserSettings>('/settings', patchBody),
@@ -225,6 +239,18 @@ export const api = {
   // token launch
   launchConfig: () => get<LaunchConfig>('/launch/config'),
   launch: (body: LaunchRequest) => post<LaunchResponse>('/launch', body),
+
+  // live mode: funding, withdrawals and account security (see the contract in packages/shared/src/types.ts)
+  depositInfo: (chain: ChainId) => get<DepositInfo>('/wallet/deposit', { chain }),
+  transfers: (limit?: number) => get<WalletTransfer[]>('/wallet/transfers', { limit }),
+  withdraw: (body: WithdrawRequest) => post<WalletTransfer>('/wallet/withdraw', body),
+  refreshWallet: (chain: ChainId) => post<UserWallet>('/wallet/refresh', { chain }),
+  security: () => get<SecurityStatus>('/security'),
+  setupTotp: () => post<TotpSetup>('/security/2fa/setup'),
+  enableTotp: (code: string) => post<TotpEnableResponse>('/security/2fa/enable', { code }),
+  disableTotp: (code: string) => post<{ enabled: false }>('/security/2fa/disable', { code }),
+  addWhitelist: (body: { chain: ChainId; address: string; label: string; code: string }) => post<WhitelistEntry>('/security/whitelist', body),
+  removeWhitelist: (body: { chain: ChainId; address: string; code: string }) => post<{ ok: true }>('/security/whitelist/remove', body),
 };
 
 /** Watchlist item fields set on add or PATCH (an empty list / blank note removes them). */

@@ -10,9 +10,10 @@ import { OrdersTable } from '@/components/account/portfolio/OrdersTable';
 import { PositionsTable } from '@/components/account/portfolio/PositionsTable';
 import { WalletsStrip } from '@/components/account/portfolio/WalletsStrip';
 import { FlashValue, Pct, StatTile, Usd } from '@/components/common';
+import { LiveWalletPanel } from '@/components/funds/LiveWalletPanel';
 import { Page, PageHeader } from '@/components/layout';
 import { ErrorState, Panel, SegmentedControl, Skeleton, Spinner, Tabs } from '@/components/ui';
-import { serverNow, useIsMobile } from '@/hooks';
+import { serverNow, useIsLive, useIsMobile } from '@/hooks';
 import { api } from '@/lib/api';
 
 type PortfolioTab = 'positions' | 'open' | 'history' | 'activity';
@@ -28,6 +29,7 @@ export default function PortfolioPage() {
   const scope = parseScope(params.get('chain'));
   const tabParam = params.get('tab') as PortfolioTab | null;
   const tab: PortfolioTab = tabParam && TABS.includes(tabParam) ? tabParam : 'positions';
+  const live = useIsLive();
 
   const setParam = (key: string, value: string | null) =>
     setParams(
@@ -44,7 +46,7 @@ export default function PortfolioPage() {
     <Page className="max-w-[1680px]">
       <PageHeader
         title="Portfolio"
-        subtitle="Paper wallets, positions, orders and trade history"
+        subtitle={live ? 'Wallet, deposits and withdrawals, positions, orders and trade history' : 'Paper wallets, positions, orders and trade history'}
         icon={<Wallet size={16} />}
         actions={signedIn ? <ChainFilter value={scope} onChange={(v) => setParam('chain', v === 'all' ? null : v)} className="hidden sm:inline-flex" /> : undefined}
       />
@@ -54,8 +56,12 @@ export default function PortfolioPage() {
       )}
       <AccountGate
         icon={<Wallet size={22} />}
-        title="Track your paper portfolio"
-        description="Sign in to see your balances, open positions, PnL and every trade across Solana, BNB Chain, Base and Ethereum."
+        title={live ? 'Track your portfolio' : 'Track your paper portfolio'}
+        description={
+          live
+            ? 'Sign in to see your Solana wallet, deposits and withdrawals, open positions, PnL and every trade.'
+            : 'Sign in to see your balances, open positions, PnL and every trade across Solana, BNB Chain, Base and Ethereum.'
+        }
         features={['Live PnL and equity curve', 'One-click 25 / 50 / 100% sells', 'Open orders, order history and trade log']}
       >
         <PortfolioBody scope={scope} tab={tab} onTab={(t) => setParam('tab', t === 'positions' ? null : t)} />
@@ -65,6 +71,7 @@ export default function PortfolioPage() {
 }
 
 function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: PortfolioTab; onTab: (t: PortfolioTab) => void }) {
+  const live = useIsLive();
   const chain = scope === 'all' ? undefined : scope;
   const showChain = scope === 'all';
 
@@ -113,7 +120,7 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
         </div>
       )}
 
-      <WalletsStrip scope={scope} />
+      {live ? <LiveWalletPanel /> : <WalletsStrip scope={scope} />}
 
       <Panel padded={false} className="min-h-[320px]">
         <Tabs value={tab} onChange={onTab} items={tabs} aria-label="Portfolio sections" className="px-2" />

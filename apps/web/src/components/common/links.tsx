@@ -44,6 +44,7 @@ export const AddressLink = memo(function AddressLink({ chain, address, label, av
 
 /** Fields TokenLink needs; TokenSummary, TokenRef and DevToken all satisfy it. */
 export type TokenLinkData = Pick<TokenRef, 'chain' | 'address' | 'symbol' | 'logoSeed' | 'logoGlyph'> & {
+  imageUrl?: string | null;
   name?: string;
   launchpad?: string;
   progress?: number;
@@ -69,7 +70,7 @@ export const TokenLink = memo(function TokenLink({ token, size = 24, showName, s
   const lpColor = showLaunchpad && token.launchpad ? getLaunchpad(token.launchpad)?.color : undefined;
   return (
     <Link to={routes.token(token.chain, token.address)} onClick={stop} className={clsx('group/token inline-flex min-w-0 items-center gap-2', className)}>
-      <TokenAvatar seed={token.logoSeed} glyph={token.logoGlyph} size={size} progress={showProgress ? token.progress : undefined} launchpadColor={lpColor} />
+      <TokenAvatar seed={token.logoSeed} glyph={token.logoGlyph} imageUrl={token.imageUrl} size={size} progress={showProgress ? token.progress : undefined} launchpadColor={lpColor} />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="flex min-w-0 items-center gap-1">
           <span className="truncate font-semibold text-fg transition-colors group-hover/token:text-accent">{token.symbol}</span>

@@ -1,0 +1,80 @@
+[
+  {
+    "message": "Successfully subscribed to token creation events."
+  },
+  {
+    "signature": "NoqXkQFxJh88WSm9cDwweryQvPG32wSeJg7T9jCu7pi88ukGpqAdMdu45FF91a3GdZSa9ZLrCZnXzEV9Z8wd8EE",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "traderPublicKey": "3dTjsU6ZDcvWc4oPitgshvqrbevjDTtY1BDS6oTiHnrW",
+    "txType": "create",
+    "initialBuy": 34612903.225806,
+    "solAmount": 1,
+    "bondingCurveKey": "8FUj5QGdut1n1yUJCMpduJTRVLoUzrDP3UcBvVJ1uTUx",
+    "vTokensInBondingCurve": 1038387096.774194,
+    "vSolInBondingCurve": 31,
+    "marketCapSol": 29.853991923,
+    "name": "Ribbit Frog",
+    "symbol": "RIBBIT",
+    "uri": "https://ipfs.io/ipfs/QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+    "pool": "pump"
+  },
+  {
+    "signature": "3tXKtqnizwQ6dejyUWCQNcVyWwbqds9hg8EA9vieAjbt9WgYDiGxKXCxgj3u17PyvLfYrV3GdCY6LyfsRCbutqUn",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "traderPublicKey": "83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk",
+    "txType": "buy",
+    "tokenAmount": 16482334.869432,
+    "solAmount": 0.5,
+    "newTokenBalance": 16482334.869432,
+    "bondingCurveKey": "8FUj5QGdut1n1yUJCMpduJTRVLoUzrDP3UcBvVJ1uTUx",
+    "vTokensInBondingCurve": 1021904761.904762,
+    "vSolInBondingCurve": 31.5,
+    "marketCapSol": 30.824790308,
+    "pool": "pump"
+  },
+  {
+    "signature": "5vFeUvjJtjqaXB5FUeNeyMRGUZivtuwqiQxEZw2rwqQTyRm3xMZDCFuCjLAYPwbrwhun4FT3k3NCNKrPMWRCx5i7",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "traderPublicKey": "3dTjsU6ZDcvWc4oPitgshvqrbevjDTtY1BDS6oTiHnrW",
+    "txType": "sell",
+    "tokenAmount": 10000000,
+    "solAmount": 0.305260729,
+    "newTokenBalance": 24612903.225806,
+    "bondingCurveKey": "8FUj5QGdut1n1yUJCMpduJTRVLoUzrDP3UcBvVJ1uTUx",
+    "vTokensInBondingCurve": 1031904761.904762,
+    "vSolInBondingCurve": 31.194739271,
+    "marketCapSol": 30.230250332,
+    "pool": "pump"
+  },
+  {
+    "signature": "56LpdWHsCaoPB7HtvyGPJKrmRc54MZXsCaps2zid3cWJZ9e3pY9zjPM5jNA7domcVJA7e5M6CP8UsA7z28jxnHyA",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "traderPublicKey": "6jaogixbndx3JduqN8Y5d2XsRGDK7yJiCP57ysYTHrKE",
+    "txType": "buy",
+    "tokenAmount": 752004761.904762,
+    "solAmount": 83.810619786,
+    "newTokenBalance": 752004761.904762,
+    "bondingCurveKey": "8FUj5QGdut1n1yUJCMpduJTRVLoUzrDP3UcBvVJ1uTUx",
+    "vTokensInBondingCurve": 279900000,
+    "vSolInBondingCurve": 115.005359057,
+    "marketCapSol": 410.88016812,
+    "pool": "pump"
+  },
+  {
+    "signature": "4s4Z2MGo8Vbsp8v8XsdWHqLuaZEFSxmpcEJrbQ6UGNfFa7E6dBeWJ1u6khXmzz4uSzC9LiPw4fxLCRSf9KGRoUyk",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "txType": "migrate",
+    "pool": "pump-amm"
+  },
+  {
+    "signature": "5A74HNYBrKeY5bAGKRxHckkXnAk69J1cytVTCcGATuGJ7XWk2eHjJsS8SoLiavZKx2AAzuBv8Qun9hTqswdGQ3CA",
+    "mint": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
+    "traderPublicKey": "83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk",
+    "txType": "buy",
+    "tokenAmount": 2400000,
+    "solAmount": 1,
+    "newTokenBalance": 18882334.869432,
+    "marketCapSol": 416.666666667,
+    "pool": "pump-amm"
+  }
+]

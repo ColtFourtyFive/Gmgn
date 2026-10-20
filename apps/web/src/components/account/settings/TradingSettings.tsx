@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { CHAIN_IDS, CHAINS, type ChainId, type ChainTradeSettings, type PresetId, type TradePreset, PRESET_LABELS } from '@trenchscope/shared';
+import { CHAINS, type ChainId, type ChainTradeSettings, type PresetId, type TradePreset, PRESET_LABELS } from '@trenchscope/shared';
 import { ShieldCheck, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon, Native } from '@/components/common';
 import { Badge, Field, NumberInput, Panel, SegmentedControl, Toggle } from '@/components/ui';
-import { useMeta } from '@/hooks';
+import { useEnabledChains, useMeta } from '@/hooks';
 import { NumberList } from './NumberList';
 import { PRESET_IDS, path, type SettingsErrors } from './model';
 
@@ -36,6 +36,7 @@ export interface TradingSettingsProps {
 export function TradingSettings({ chain, onChain, value, onChange, errors, dirty }: TradingSettingsProps) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const sym = CHAINS[chain].nativeSymbol;
+  const chains = useEnabledChains();
   const suggested = useMeta().data?.chains.find((c) => c.chain === chain)?.priorityFee;
   const presets = side === 'buy' ? value.buyPresets : value.sellPresets;
   const active = side === 'buy' ? value.activeBuyPreset : value.activeSellPreset;
@@ -48,22 +49,24 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
 
   return (
     <div className="flex flex-col gap-3">
-      <SegmentedControl
-        value={chain}
-        onChange={onChain}
-        className="self-start"
-        aria-label="Chain"
-        items={CHAIN_IDS.map((c) => ({
-          value: c,
-          label: (
-            <span className="inline-flex items-center gap-1">
-              {CHAIN_SHORT[c]}
-              {dirty.has(c) && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
-            </span>
-          ),
-          icon: <ChainIcon chain={c} size={12} />,
-        }))}
-      />
+      {chains.length > 1 && (
+        <SegmentedControl
+          value={chain}
+          onChange={onChain}
+          className="self-start"
+          aria-label="Chain"
+          items={chains.map((c) => ({
+            value: c,
+            label: (
+              <span className="inline-flex items-center gap-1">
+                {CHAIN_SHORT[c]}
+                {dirty.has(c) && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
+              </span>
+            ),
+            icon: <ChainIcon chain={c} size={12} />,
+          }))}
+        />
+      )}
 
       <Panel
         title="Trade presets"

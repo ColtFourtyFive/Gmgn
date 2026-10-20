@@ -8,7 +8,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { shortAddress, type TokenDetail, type Trade } from '@trenchscope/shared';
 import { Filter, Pause, Play, X } from 'lucide-react';
 import clsx from 'clsx';
-import { AddressLink, Age, Compact, Native, Price, Usd, WALLET_TAG_META } from '@/components/common';
+import { AddressLink, Age, Compact, ExplorerLink, Native, Price, Usd, WALLET_TAG_META } from '@/components/common';
 import { useViewerTags } from '@/components/discovery';
 import { useViewerRemarks } from '@/components/discovery/useViewerTags';
 import { CopyButton, DataTable, EmptyState, ErrorState, IconButton, SegmentedControl, Select, Tooltip, type Column } from '@/components/ui';
@@ -294,6 +294,7 @@ function buildColumns(token: TokenDetail, unit: ChartUnit, setMaker: (m: string 
         <span className="inline-flex items-center gap-0.5 font-mono text-2xs text-faint">
           {shortAddress(r.txHash, 4, 4)}
           <CopyButton text={r.txHash} label="Copy transaction hash" size={11} />
+          <ExplorerLink chain={r.chain} kind="tx" value={r.txHash} />
         </span>
       ),
     },

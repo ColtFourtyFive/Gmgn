@@ -1,6 +1,6 @@
 // Navigation model shared by the top bar, the mobile tab bar and the drawer.
 
-import { isChainId, type ChainId } from '@trenchscope/shared';
+import { isChainId, type AppMode, type ChainId } from '@trenchscope/shared';
 import { Bell, Crosshair, Flame, Gift, Layers, Megaphone, Radar, Radio, Repeat2, Rocket, Settings, Sparkles, Star, TrendingUp, Trophy, Wallet, type LucideIcon } from 'lucide-react';
 import { routes } from '@/lib/chain';
 
@@ -28,6 +28,14 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'launch', label: 'Launch', icon: Rocket, href: routes.launch, section: 'launch' },
   { key: 'callouts', label: 'Call-outs', icon: Megaphone, href: routes.callouts, section: 'callouts' },
 ];
+
+/** Sections the live deployment does not offer (token launches are demo-only). */
+const DEMO_ONLY_SECTIONS = new Set(['launch']);
+
+/** Primary sections offered in `mode` (live hides the token launcher). */
+export function navItemsFor(mode: AppMode): NavItem[] {
+  return mode === 'live' ? NAV_ITEMS.filter((n) => !DEMO_ONLY_SECTIONS.has(n.key)) : NAV_ITEMS;
+}
 
 /** Bottom tab bar on phones (the rest lives in the "More" drawer). */
 export const MOBILE_TABS = ['trenches', 'trending', 'monitor', 'portfolio'].map((k) => NAV_ITEMS.find((n) => n.key === k)!);

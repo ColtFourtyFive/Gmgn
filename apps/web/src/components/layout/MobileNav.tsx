@@ -1,18 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Compass, LogIn, LogOut, Menu as MenuIcon, Plus, UserPlus, Zap } from 'lucide-react';
+import { ArrowUpRight, Compass, LogIn, LogOut, Menu as MenuIcon, Plus, UserPlus, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { Native, SimBanner, WalletAvatar } from '@/components/common';
 import { Button, Drawer, Toggle } from '@/components/ui';
 import { useActiveChain } from '@/hooks/useActiveChain';
+import { useIsLive, useMode } from '@/hooks/useMode';
 import { useTheme } from '@/hooks/useTheme';
 import { useDock } from '@/store/dock';
+import { openFunds } from '@/store/funds';
 import { useSession } from '@/store/session';
 import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 import { useDeposit } from './AccountControls';
 import { ChainPicker } from './ChainSwitcher';
+import { LiveStatusIndicator, TryDemoLink } from './ModeIndicators';
 import { Omnibox } from './Omnibox';
-import { ACCOUNT_ITEMS, activeSection, MOBILE_TABS, NAV_ITEMS } from './nav';
+import { ACCOUNT_ITEMS, activeSection, MOBILE_TABS, navItemsFor } from './nav';
 import { requestSignOut } from './SignOutDialog';
 
 /** Phone bottom tab bar: four primary sections + "More" (opens the nav drawer). */
@@ -53,13 +56,15 @@ export function MobileNavDrawer() {
   const wallet = account?.wallets[chain];
   const { deposit, pending } = useDeposit(chain);
   const { theme, setTheme } = useTheme();
+  const live = useIsLive();
+  const items = navItemsFor(useMode());
 
   return (
     <Drawer open={open} onClose={close} side="bottom" title="Menu" bodyClassName="flex flex-col gap-4 p-3">
       <ChainPicker />
 
       <nav aria-label="All sections" className="grid grid-cols-3 gap-1.5">
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.key}
             to={item.href(chain)}
@@ -107,9 +112,32 @@ export function MobileNavDrawer() {
               <p className="truncate font-semibold">{account.username}</p>
               {wallet && <Native value={wallet.nativeBalance} chain={chain} className="text-sm text-muted" />}
             </div>
-            <Button size="sm" variant="outline" icon={<Plus size={13} />} loading={pending} onClick={() => void deposit()}>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<Plus size={13} />}
+              loading={pending}
+              onClick={() => {
+                // Live opens the deposit dialog: close the menu sheet first so only one overlay traps focus.
+                if (live) close();
+                void deposit();
+              }}
+            >
               Deposit
             </Button>
+            {live && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<ArrowUpRight size={13} />}
+                onClick={() => {
+                  close();
+                  openFunds('withdraw');
+                }}
+              >
+                Withdraw
+              </Button>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-1">
             {account.isGuest && (
@@ -159,7 +187,14 @@ export function MobileNavDrawer() {
       )}
 
       <Toggle label="Light theme" checked={theme === 'light'} onChange={(on) => setTheme(on ? 'light' : 'dark')} />
-      <SimBanner className="justify-center" />
+      {live ? (
+        <div className="flex items-center justify-center gap-3">
+          <LiveStatusIndicator />
+          <TryDemoLink />
+        </div>
+      ) : (
+        <SimBanner className="justify-center" />
+      )}
     </Drawer>
   );
 }

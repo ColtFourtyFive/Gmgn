@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import { SecurityChecksList } from '@/components/common';
 import { coverageLabel, SAFETY_BAND, SafetyReasons, SafetyRing } from '@/components/discovery';
 import { Badge, Panel, Tooltip } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 
 const LEVEL: Record<RiskLevel, { label: string; tone: 'up' | 'warn' | 'down'; icon: typeof ShieldCheck }> = {
   low: { label: 'Low rug risk', tone: 'up', icon: ShieldCheck },
@@ -86,6 +87,7 @@ export const SecurityPanel = memo(function SecurityPanel({ token, className }: {
   const meta = LEVEL[s.riskLevel];
   const band = s.safety && SAFETY_BAND[s.safety.band];
   const [expanded, setExpanded] = useState(false);
+  const live = useIsLive();
   // Problems first so a collapsed list never hides a red flag.
   const order = { bad: 0, warn: 1, info: 2, good: 3 } as const;
   const sorted = [...s.checks].sort((a, b) => order[a.level] - order[b.level]);
@@ -115,7 +117,7 @@ export const SecurityPanel = memo(function SecurityPanel({ token, className }: {
       </div>
       <SecurityChecksList checks={shown} className="px-3" />
       <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-1">
-        <p className="text-2xs text-faint">Simulated audit — reference only.</p>
+        <p className="text-2xs text-faint">{live ? 'Automated on-chain checks — reference only, not a guarantee.' : 'Simulated audit — reference only.'}</p>
         {sorted.length > COLLAPSED && (
           <button type="button" className="inline-flex items-center gap-0.5 text-xs text-muted hover:text-fg" aria-expanded={expanded} onClick={() => setExpanded((e) => !e)}>
             {expanded ? 'Less' : `All ${sorted.length}`}

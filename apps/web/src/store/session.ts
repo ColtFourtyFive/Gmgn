@@ -98,8 +98,11 @@ interface SessionState {
   applyAuth(res: AuthResponse): Promise<void>;
   /** New guest account; its theme is seeded from the one this browser shows. */
   guest(referralCode?: string): Promise<void>;
-  /** Signs into an existing account and adopts its saved theme. */
-  login(username: string, password: string): Promise<void>;
+  /**
+   * Signs into an existing account and adopts its saved theme. Live accounts
+   * with 2FA answer 401 'totp_required' until `code` (the current TOTP code) is sent.
+   */
+  login(username: string, password: string, code?: string): Promise<void>;
   /** New (or upgraded guest) account; its theme is seeded from the one this browser shows. */
   register(username: string, password: string, referralCode?: string): Promise<void>;
   logout(): Promise<void>;
@@ -180,8 +183,8 @@ export const useSession = create<SessionState>((set, get) => {
       await startSession(await api.guest(referralCode), useUi.getState().theme);
     },
 
-    async login(username, password) {
-      await startSession(await api.login(username, password));
+    async login(username, password, code) {
+      await startSession(await (code === undefined ? api.login(username, password) : api.login(username, password, code)));
     },
 
     async register(username, password, referralCode) {

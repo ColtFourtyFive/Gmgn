@@ -4,6 +4,7 @@
 export { Age, type AgeProps } from './Age';
 export { CHAIN_SHORT, ChainBadge, ChainIcon, LaunchpadBadge, type ChainBadgeProps, type ChainIconProps, type LaunchpadBadgeProps } from './ChainIcon';
 export { contrastText, hashString, tint, tokenColor } from './color';
+export { ExplorerLink, explorerName, explorerUrl, TxHash, type ExplorerKind, type ExplorerLinkProps } from './ExplorerLink';
 export { FlashValue, type FlashValueProps } from './FlashValue';
 export {
   CurveProgress,

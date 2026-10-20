@@ -22,7 +22,7 @@ function TokenCell({ rule }: { rule: AlertRule }) {
   const t = q.data;
   return (
     <Link to={routes.token(rule.chain, rule.token)} className="inline-flex min-w-0 items-center gap-1.5" title={rule.token}>
-      {t && <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={18} />}
+      {t && <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} imageUrl={t.imageUrl} size={18} />}
       <span className="link truncate font-semibold">{t?.symbol ?? `${rule.token.slice(0, 6)}…`}</span>
     </Link>
   );

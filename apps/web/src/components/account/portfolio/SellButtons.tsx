@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { TokenPositionRow } from '@trenchscope/shared';
 import clsx from 'clsx';
 import { Spinner } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { requireAuth } from '@/store/session';
@@ -21,6 +22,7 @@ export function SellButtons({ row, size = 'xs', className }: { row: TokenPositio
   const [active, setActive] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<number | null>(null);
   const symbol = row.tokenInfo.symbol;
+  const live = useIsLive();
 
   const run = (pct: number) =>
     requireAuth(() => {
@@ -59,7 +61,7 @@ export function SellButtons({ row, size = 'xs', className }: { row: TokenPositio
         onClose={() => setConfirm(null)}
         onConfirm={() => confirm !== null && run(confirm)}
         title={`Sell ${confirm ?? ''}% of ${symbol}?`}
-        description={`Market sell with sell preset ${trade.activeSellPreset}. Paper trade — no real funds.`}
+        description={`Market sell with sell preset ${trade.activeSellPreset}. ${live ? 'Executes on Solana mainnet with real funds.' : 'Paper trade — no real funds.'}`}
         confirmLabel="Sell"
         tone="sell"
         pending={pending}

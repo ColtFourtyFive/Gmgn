@@ -66,6 +66,18 @@ function ToastItem({ toast: t }: { toast: Toast }) {
             {t.link.label ?? 'Open'}
           </Link>
         )}
+        {t.action && (
+          <button
+            type="button"
+            onClick={() => {
+              dismiss(t.id);
+              t.action?.run();
+            }}
+            className="mt-1 inline-block text-xs font-medium text-accent hover:underline"
+          >
+            {t.action.label}
+          </button>
+        )}
       </div>
       <button type="button" aria-label="Dismiss" onClick={() => dismiss(t.id)} className="h-6 w-6 shrink-0 rounded text-faint hover:bg-panel-3 hover:text-fg">
         <X size={14} className="mx-auto" />

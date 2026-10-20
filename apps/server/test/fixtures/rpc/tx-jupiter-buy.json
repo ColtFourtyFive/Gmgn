@@ -1,0 +1,48 @@
+{
+  "slot": 300000123,
+  "blockTime": 1760000000,
+  "version": 0,
+  "meta": {
+    "err": null,
+    "status": { "Ok": null },
+    "fee": 805000,
+    "preBalances": [3000000000, 10000000000, 0, 0, 1461600, 1461600, 1, 1, 934087680, 731913600, 1141440, 2039280, 50000000000],
+    "postBalances": [1989155720, 10008000000, 0, 2039280, 1461600, 1461600, 1, 1, 934087680, 731913600, 1141440, 2039280, 51000000000],
+    "preTokenBalances": [
+      { "accountIndex": 11, "mint": "<MINT>", "owner": "<AMM>", "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "uiTokenAmount": { "amount": "500000000000000", "decimals": 6, "uiAmount": 500000000, "uiAmountString": "500000000" } }
+    ],
+    "postTokenBalances": [
+      { "accountIndex": 3, "mint": "<MINT>", "owner": "<OWNER>", "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "uiTokenAmount": { "amount": "35000000000000", "decimals": 6, "uiAmount": 35000000, "uiAmountString": "35000000" } },
+      { "accountIndex": 11, "mint": "<MINT>", "owner": "<AMM>", "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "uiTokenAmount": { "amount": "465000000000000", "decimals": 6, "uiAmount": 465000000, "uiAmountString": "465000000" } }
+    ],
+    "innerInstructions": [],
+    "logMessages": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [1]",
+      "Program 11111111111111111111111111111111 success",
+      "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 invoke [1]",
+      "Program log: Instruction: Route",
+      "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 consumed 142311 of 183000 compute units",
+      "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 success"
+    ],
+    "rewards": [],
+    "loadedAddresses": { "writable": ["<POOL_BASE>", "<POOL_QUOTE>"], "readonly": [] },
+    "computeUnitsConsumed": 151002
+  },
+  "transaction": {
+    "signatures": ["<SIG>"],
+    "message": {
+      "header": { "numRequiredSignatures": 1, "numReadonlySignedAccounts": 0, "numReadonlyUnsignedAccounts": 6 },
+      "accountKeys": [
+        "<OWNER>", "<FEE_WALLET>", "<WSOL_ATA>", "<OWNER_ATA>", "<AMM>", "<MINT>",
+        "ComputeBudget111111111111111111111111111111", "11111111111111111111111111111111",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+      ],
+      "recentBlockhash": "<BLOCKHASH>",
+      "instructions": [],
+      "addressTableLookups": [{ "accountKey": "<ALT>", "writableIndexes": [0, 1], "readonlyIndexes": [] }]
+    }
+  }
+}

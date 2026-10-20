@@ -122,7 +122,9 @@ export class Alerts {
       if (!t || t.chain !== input.chain) throw notFound('token');
       current = input.kind === 'mcap' ? world.marketCapUsd(t) : world.priceUsd(t);
     }
-    if (input.kind === 'wallet_trade' && world.getWallet(wallet!)?.chain !== input.chain) throw notFound('wallet');
+    // Live mode: a valid address not seen yet becomes an observed wallet (its trades are then streamed).
+    const watched = input.kind === 'wallet_trade' ? (world.getWallet(wallet!) ?? (this.ctx.config.mode === 'live' ? this.ctx.market.ensureWallet?.(input.chain, wallet!) : undefined)) : undefined;
+    if (input.kind === 'wallet_trade' && watched?.chain !== input.chain) throw notFound('wallet');
     const levels = input.kind === 'price' || input.kind === 'mcap';
     Object.assign(record.rule, {
       ...input,

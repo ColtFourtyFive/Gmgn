@@ -1,10 +1,13 @@
 import { FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
+import { useIsLive } from '@/hooks/useMode';
 
 export const SIM_NOTICE = 'Simulated market · paper trading';
 
-/** Small notice that all market data is simulated and trades are paper trades. */
+/** Small notice that all market data is simulated and trades are paper trades (demo only: renders nothing in live mode). */
 export function SimBanner({ className, variant = 'inline' }: { className?: string; variant?: 'inline' | 'card' }) {
+  const live = useIsLive();
+  if (live) return null;
   if (variant === 'card') {
     return (
       <div className={clsx('flex items-start gap-2 rounded border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-muted', className)}>

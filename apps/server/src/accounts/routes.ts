@@ -1,10 +1,12 @@
-// HTTP routes of the accounts module (docs/API.md, "Accounts").
+// HTTP routes of the accounts module (docs/API.md, "Accounts"; live-mode security:
+// packages/shared/src/types.ts, "Live mode: funding, withdrawals and account security").
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { PublicKey } from '@solana/web3.js';
 import { BLACKLIST_LIMITS, CHAINS, WATCHLIST_LIMITS, isChainId, type BlacklistKind, type ChainId } from '@trenchscope/shared';
 import { HttpError, bearerToken, optionalAccount, requireAccount, type AppContext } from '../context';
-import { Accounts, MAX_NOTIFICATIONS } from './service';
+import { Accounts, LIVE_MIN_PASSWORD_LENGTH, MAX_NOTIFICATIONS } from './service';
 import { settingsPatchSchema } from './settings';
 
 const chain = z.custom<ChainId>(isChainId, 'unknown chain');
@@ -14,6 +16,23 @@ const username = z
   .trim()
   .regex(/^[A-Za-z0-9_]{3,20}$/, 'username must be 3-20 characters: letters, digits or underscores');
 const password = z.string().min(6, 'password must be at least 6 characters').max(128, 'password must be at most 128 characters');
+/** Live mode: real funds behind the account. */
+const livePassword = z
+  .string()
+  .min(LIVE_MIN_PASSWORD_LENGTH, `password must be at least ${LIVE_MIN_PASSWORD_LENGTH} characters`)
+  .max(128, 'password must be at most 128 characters');
+/** A TOTP or recovery code (format checked by the security module). */
+const code = z.string().trim().min(1, 'code is required').max(64, 'code is too long');
+const solanaAddress = z
+  .string()
+  .trim()
+  .refine((a) => {
+    try {
+      return new PublicKey(a).toBase58() === a;
+    } catch {
+      return false;
+    }
+  }, 'not a valid Solana address');
 /** Empty strings count as "no code". */
 const referralCode = z
   .string()
@@ -26,10 +45,22 @@ const group = z.string().trim().min(1, 'group cannot be empty').max(24, 'group m
 
 const guestBody = z.object({ referralCode }).default({});
 const registerBody = z.object({ username, password, referralCode });
+const liveRegisterBody = z.object({ username, password: livePassword, referralCode });
 const loginBody = z.object({
   username: z.string().trim().min(1, 'username is required').max(64),
   password: z.string().min(1, 'password is required').max(128),
 });
+/** Live mode, 2FA on: plus a TOTP or recovery code (blank = none). */
+const liveLoginBody = loginBody.extend({
+  code: z
+    .string()
+    .trim()
+    .max(64, 'code is too long')
+    .optional()
+    .transform((c) => c || undefined),
+});
+const passwordChangeBody = (live: boolean) =>
+  z.object({ currentPassword: z.string().min(1, 'currentPassword is required').max(128), newPassword: live ? livePassword : password, code: code.optional() });
 const chainBody = z.object({ chain });
 const walletRef = z.object({ chain, address });
 const followPatch = z.object({ remark: remark.optional(), group: group.optional(), notify: z.boolean().optional() });
@@ -80,6 +111,10 @@ const keyword = z.object({
 });
 const blacklistAddress = z.object({ value: address });
 
+const codeBody = z.object({ code });
+const whitelistBody = z.object({ chain, address: solanaAddress, label: visibleText(32, 'label').default(''), code });
+const whitelistRemoveBody = z.object({ chain, address: solanaAddress, code });
+
 /** Validate input; failures become 400s naming the offending field. */
 function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): z.output<S> {
   const result = schema.safeParse(value);
@@ -110,16 +145,39 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
   const accounts = ctx.accounts;
   if (!(accounts instanceof Accounts)) throw new Error('account routes require the Accounts service');
   const auth = (req: FastifyRequest) => requireAccount(ctx, req);
+  const live = ctx.config.mode === 'live';
+  /** Signed in, live mode only (account security is about real funds). */
+  const liveAuth = (req: FastifyRequest) => {
+    const id = auth(req);
+    if (!live) throw new HttpError(403, 'account security settings are only available in live mode', 'not_available_in_demo');
+    return id;
+  };
 
   // ---- auth ----
 
-  app.post('/api/auth/guest', async (req) => accounts.createGuest(parse(guestBody, req.body).referralCode));
+  app.post('/api/auth/guest', async (req) => {
+    if (live) throw new HttpError(403, 'guest accounts are not available with real funds: create an account', 'guest_disabled');
+    return accounts.createGuest(parse(guestBody, req.body).referralCode);
+  });
 
-  app.post('/api/auth/register', async (req) => accounts.register(parse(registerBody, req.body), optionalAccount(ctx, req)));
+  app.post('/api/auth/register', async (req) => {
+    if (live) return accounts.register(parse(liveRegisterBody, req.body), null, req.ip);
+    return accounts.register(parse(registerBody, req.body), optionalAccount(ctx, req));
+  });
 
   app.post('/api/auth/login', async (req) => {
+    if (live) {
+      const body = parse(liveLoginBody, req.body);
+      return accounts.login(body.username, body.password, req.ip, body.code);
+    }
     const body = parse(loginBody, req.body);
     return accounts.login(body.username, body.password, req.ip);
+  });
+
+  /** Change the password; every session is signed out and a fresh one returned (AuthResponse). */
+  app.post('/api/auth/password', async (req) => {
+    const id = auth(req);
+    return accounts.changePassword(id, parse(passwordChangeBody(live), req.body), req.ip);
   });
 
   app.post('/api/auth/logout', async (req) => {
@@ -146,6 +204,7 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
 
   app.post('/api/wallet/faucet', async (req, reply) => {
     const id = auth(req);
+    if (live) throw new HttpError(403, 'the faucet is not available with real funds: deposit SOL to your wallet', 'not_available_in_live');
     const result = accounts.claimFaucet(id, parse(chainBody, req.body).chain);
     if (result.ok) return result.wallet;
     const seconds = result.retryAfterSeconds;
@@ -252,4 +311,31 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
   });
 
   app.get('/api/rewards', async (req) => accounts.rewards(auth(req)));
+
+  // ---- security (live mode) ----
+
+  app.get('/api/security', async (req) => accounts.securityStatus(liveAuth(req)));
+
+  app.post('/api/security/2fa/setup', async (req) => accounts.beginTotpSetup(liveAuth(req)));
+
+  app.post('/api/security/2fa/enable', async (req) => {
+    const id = liveAuth(req);
+    return accounts.enableTotp(id, parse(codeBody, req.body).code, req.ip);
+  });
+
+  app.post('/api/security/2fa/disable', async (req) => {
+    const id = liveAuth(req);
+    return accounts.disableTotp(id, parse(codeBody, req.body).code, req.ip);
+  });
+
+  app.post('/api/security/whitelist', async (req) => {
+    const id = liveAuth(req);
+    return accounts.addWhitelist(id, parse(whitelistBody, req.body), req.ip);
+  });
+
+  app.post('/api/security/whitelist/remove', async (req) => {
+    const id = liveAuth(req);
+    accounts.removeWhitelist(id, parse(whitelistRemoveBody, req.body), req.ip);
+    return { ok: true };
+  });
 }

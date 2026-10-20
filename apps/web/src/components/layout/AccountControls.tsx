@@ -1,24 +1,31 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ChainId } from '@trenchscope/shared';
-import { ChevronDown, Compass, LogOut, Moon, Plus, RefreshCw, Sun, UserPlus } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, Compass, LogOut, Moon, Plus, RefreshCw, ShieldCheck, Sun, UserPlus } from 'lucide-react';
 import clsx from 'clsx';
 import { ChainIcon, Native, WalletAvatar } from '@/components/common';
 import { Button, IconButton, Menu, Popover, Skeleton, Spinner } from '@/components/ui';
+import { useIsLive } from '@/hooks/useMode';
 import { useTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { errorMessage, formatNativeFor } from '@/lib/format';
+import { openFunds } from '@/store/funds';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 import { startTour } from '@/store/tour';
 import { ACCOUNT_ITEMS } from './nav';
 import { requestSignOut } from './SignOutDialog';
 
-/** Top up the paper wallet via the faucet, with toasts. */
+/** Top up the paper wallet via the faucet, with toasts (demo). Live has no faucet: Deposit opens the deposit address dialog. */
 export function useDeposit(chain: ChainId): { deposit: () => Promise<void>; pending: boolean } {
   const [pending, setPending] = useState(false);
+  const live = useIsLive();
   const deposit = async () => {
+    if (live) {
+      openFunds('deposit');
+      return;
+    }
     setPending(true);
     try {
       const w = await api.faucet(chain);
@@ -33,15 +40,16 @@ export function useDeposit(chain: ChainId): { deposit: () => Promise<void>; pend
   return { deposit, pending };
 }
 
-/** Native balance of the signed-in user's paper wallet on `chain`, plus Deposit. */
+/** Native balance of the signed-in user's wallet on `chain` (demo: paper wallet), plus Deposit. */
 export function BalancePill({ chain, compact, className }: { chain: ChainId; compact?: boolean; className?: string }) {
   const wallet = useSession((s) => s.account?.wallets[chain]);
   const { deposit, pending } = useDeposit(chain);
+  const live = useIsLive();
   if (!wallet) return null;
   return (
     // The pill clips its corners, so its controls draw the focus ring inside their box.
     <div className={clsx('flex h-8 shrink-0 items-center overflow-hidden rounded border border-line bg-panel-2', className)}>
-      <Link to={routes.portfolio()} title="Paper wallet balance" className={clsx('flex h-full items-center gap-1.5 px-2 hover:bg-panel-3 focus-visible:outline-offset-[-2px]', compact ? 'rounded-[5px]' : 'rounded-l-[5px]')}>
+      <Link to={routes.portfolio()} title={live ? 'Wallet balance' : 'Paper wallet balance'} className={clsx('flex h-full items-center gap-1.5 px-2 hover:bg-panel-3 focus-visible:outline-offset-[-2px]', compact ? 'rounded-[5px]' : 'rounded-l-[5px]')}>
         <ChainIcon chain={chain} size={14} />
         <Native value={wallet.nativeBalance} digits={compact ? 2 : 3} chain={compact ? undefined : chain} className="text-sm font-semibold" />
       </Link>
@@ -50,7 +58,7 @@ export function BalancePill({ chain, compact, className }: { chain: ChainId; com
           type="button"
           onClick={() => void deposit()}
           disabled={pending}
-          title="Top the paper wallet back up to the starter balance (once a minute)"
+          title={live ? 'Deposit SOL: your wallet address and QR code' : 'Top the paper wallet back up to the starter balance (once a minute)'}
           className="flex h-full items-center gap-1 rounded-r-[5px] border-l border-line px-2 text-xs font-semibold text-accent transition-colors hover:bg-panel-3 focus-visible:outline-offset-[-2px] disabled:opacity-60"
         >
           {pending ? <Spinner size={12} label="" /> : <Plus size={12} strokeWidth={2.5} />}
@@ -71,6 +79,7 @@ export function ThemeToggle({ className }: { className?: string }) {
 /** "Sign in" button, or the account avatar with its menu. */
 export function AccountMenu() {
   const account = useSession((s) => s.account);
+  const live = useIsLive();
   const ready = useSession((s) => s.ready);
   const token = useSession((s) => s.token);
   const restoreFailed = useSession((s) => s.restoreError != null);
@@ -118,7 +127,7 @@ export function AccountMenu() {
             <div className="min-w-0">
               <p className="truncate font-semibold text-fg">{account.username}</p>
               <p className="truncate text-xs text-muted">
-                {account.isGuest ? 'Guest' : 'Paper'} account · code {account.referralCode}
+                {account.isGuest ? 'Guest' : live ? 'Live' : 'Paper'} account · code {account.referralCode}
               </p>
             </div>
           </div>
@@ -129,6 +138,13 @@ export function AccountMenu() {
                 ? [{ key: 'register', label: 'Register account', icon: <UserPlus size={14} />, onSelect: () => useSession.getState().promptAuth(true) }]
                 : []),
               ...ACCOUNT_ITEMS.map((it) => ({ key: it.key, label: it.label, icon: <it.icon size={14} />, onSelect: () => navigate(it.href) })),
+              ...(live
+                ? [
+                    { key: 'deposit', label: 'Deposit', icon: <ArrowDownLeft size={14} />, onSelect: () => openFunds('deposit') },
+                    { key: 'withdraw', label: 'Withdraw', icon: <ArrowUpRight size={14} />, onSelect: () => openFunds('withdraw') },
+                    { key: 'security', label: 'Security', icon: <ShieldCheck size={14} />, onSelect: () => navigate(routes.settings('security')) },
+                  ]
+                : []),
               { key: 'tour', label: 'Take the tour', icon: <Compass size={14} />, onSelect: startTour },
               { key: 'signout', label: 'Sign out', icon: <LogOut size={14} />, danger: true, onSelect: requestSignOut },
             ]}

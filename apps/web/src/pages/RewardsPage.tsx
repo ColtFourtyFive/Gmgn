@@ -6,7 +6,7 @@ import { AccountGate, accountKeys, useSignedIn } from '@/components/account';
 import { Age, Compact, Pct, SimBanner, StatTile, Usd } from '@/components/common';
 import { Page, PageHeader } from '@/components/layout';
 import { Badge, CopyButton, DataTable, EmptyState, ErrorState, Panel, Skeleton, type Column } from '@/components/ui';
-import { useMeta } from '@/hooks';
+import { useIsLive, useMeta } from '@/hooks';
 import { api } from '@/lib/api';
 
 /** Cashback share for traders who joined with a referral code (server: REFERRED_CASHBACK_RATE). */
@@ -61,7 +61,10 @@ function RewardsBody({ r }: { r: RewardsSummary }) {
   const link = `${location.origin}${r.referralLink}`;
   const tierVolume = r.ownVolumeUsd + r.inviteeVolumeUsd;
   const progress = r.nextTier ? Math.min(1, tierVolume / r.nextTier.volumeUsd) : 1;
-  const message = `Paper-trade memecoins on a live simulated market with me on Trenchscope — join with my link: ${link}`;
+  const live = useIsLive();
+  const message = live
+    ? `Trade Solana memecoins with me on Trenchscope — join with my link: ${link}`
+    : `Paper-trade memecoins on a live simulated market with me on Trenchscope — join with my link: ${link}`;
 
   const columns = useMemo<Column<Invitee>[]>(
     () => [
@@ -189,7 +192,9 @@ function RewardsBody({ r }: { r: RewardsSummary }) {
         <Panel title="How it works" icon={<Gift size={14} />}>
           <ol className="flex flex-col gap-3 text-sm">
             <Step n={1} title={`${formatPercent(feeRate, { sign: false, digits: 1 })} platform fee`}>
-              Every paper trade pays a simulated platform fee on its size, on top of network and priority fees.
+              {live
+                ? 'Every trade pays the platform fee on its size, on top of network and priority fees.'
+                : 'Every paper trade pays a simulated platform fee on its size, on top of network and priority fees.'}
             </Step>
             <Step n={2} title="Referrers earn rebates">
               You receive {formatPercent(r.rebateRate, { sign: false, digits: 0 })} of the platform fees your invitees pay at the {r.tier} tier. The rate rises as your

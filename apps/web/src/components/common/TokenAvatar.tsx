@@ -1,6 +1,16 @@
-import { memo, useId } from 'react';
+import { memo, useId, useState } from 'react';
 import clsx from 'clsx';
 import { hashString } from './color';
+
+/** Token images load only over https (live metadata from IPFS gateways / CDNs); anything else uses the generated avatar. */
+export function tokenImageSrc(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface TokenAvatarProps {
   /** TokenSummary.logoSeed — drives the gradient. */
@@ -15,13 +25,21 @@ export interface TokenAvatarProps {
   progress?: number | null;
   className?: string;
   title?: string;
+  /** Real token image (live mode, TokenSummary.imageUrl); drawn over the generated avatar, which stays as the fallback. */
+  imageUrl?: string | null;
 }
 
 /**
  * Generated token logo: seeded two-tone gradient with the meme glyph,
- * optional curve-progress ring and launchpad dot. Pure SVG, memoized.
+ * optional curve-progress ring and launchpad dot. Pure SVG, memoized. With
+ * an https `imageUrl` (live tokens) the real image fills the inner circle
+ * and the generated avatar comes back if it fails to load.
  */
-export const TokenAvatar = memo(function TokenAvatar({ seed, glyph, size = 32, launchpadColor, progress, className, title }: TokenAvatarProps) {
+export const TokenAvatar = memo(function TokenAvatar({ seed, glyph, size = 32, launchpadColor, progress, className, title, imageUrl }: TokenAvatarProps) {
+  const src = tokenImageSrc(imageUrl);
+  // The URL that failed to load (a new URL gets its own attempt).
+  const [failed, setFailed] = useState<string | null>(null);
+  const showImage = src !== null && failed !== src;
   const uid = useId().replace(/:/g, '');
   const h = hashString(seed);
   const hue1 = h % 360;
@@ -53,7 +71,7 @@ export const TokenAvatar = memo(function TokenAvatar({ seed, glyph, size = 32, l
         </defs>
         <circle cx={r} cy={r} r={inner} fill={`url(#tg${uid})`} />
         <circle cx={bx} cy={by} r={inner * 0.75} fill="#fff" fillOpacity={0.12} clipPath={`url(#tc${uid})`} />
-        {glyph && (
+        {glyph && !showImage && (
           <text x={r} y={r} textAnchor="middle" dominantBaseline="central" fontSize={inner * 1.05} style={{ userSelect: 'none' }}>
             {glyph}
           </text>
@@ -77,6 +95,22 @@ export const TokenAvatar = memo(function TokenAvatar({ seed, glyph, size = 32, l
           </>
         )}
       </svg>
+      {showImage && (
+        // Fixed box inside the ring; no referrer leaks to the image host; the gradient shows until it loads (or if it fails).
+        <img
+          src={src}
+          alt=""
+          width={Math.round(inner * 2)}
+          height={Math.round(inner * 2)}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onError={() => setFailed(src)}
+          className="absolute rounded-full object-cover"
+          style={{ left: r - inner, top: r - inner, width: inner * 2, height: inner * 2 }}
+        />
+      )}
       {launchpadColor && (
         <span className="absolute -bottom-px -right-px rounded-full border-2 border-panel" style={{ width: dot, height: dot, background: launchpadColor }} />
       )}
