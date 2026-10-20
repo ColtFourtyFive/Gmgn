@@ -30,6 +30,9 @@ const PROBE_TIERS: [number, number][] = [
   [3000, 60],
   [10_000, 200],
   [2500, 25],
+  [100, 1],
+  // fee-less hookless pools (seen on Base: TRADER 0xde9a1334..., Initialize at block 52,870,836)
+  [0, 1],
 ];
 
 /** A native-paired pool initialized recently: its key and live state since its first block. */
