@@ -461,7 +461,11 @@ describe('launch verification and migrated pools (feed -> chain)', () => {
     rpc.accounts.set(poolKey.toBase58(), poolAccount(mint, base, quote));
     rpc.accounts.set(base.toBase58(), tokenAccount(poolKey.toBase58(), '206900000000000'));
     rpc.accounts.set(quote.toBase58(), tokenAccount(poolKey.toBase58(), '67405853768', 9));
-    await vi.waitFor(() => expect(t.pool!.native).toBeCloseTo(67.405853768, 9));
+    // read in the background, applied on the next engine tick (drain), never mid-snapshot
+    await vi.waitFor(() => {
+      mi().drain();
+      expect(t.pool!.native).toBeCloseTo(67.405853768, 9);
+    });
     expect(t.pool!.tokens).toBeCloseTo(206_900_000, 3);
     expect(m.diagnostics().poolReads.applied).toBe(1);
   });

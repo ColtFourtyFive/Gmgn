@@ -180,7 +180,8 @@ export class LaunchVerifier {
     const now = this.now();
     const mints: string[] = [];
     for (const [mint, p] of this.pending) {
-      if (p.dueAt <= now) mints.push(mint);
+      // Launches not read yet join the batch whenever it runs; only retries wait for their time.
+      if (p.dueAt <= now || p.attempts === 0) mints.push(mint);
       if (mints.length >= this.maxBatch) break;
     }
     const reader = this.opts.reader();

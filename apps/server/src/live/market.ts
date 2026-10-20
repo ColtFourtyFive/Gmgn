@@ -21,7 +21,7 @@
 //               World and a sweep of observed wallets nothing references.
 
 import type { ChainId, LiveStatus } from '@trenchscope/shared';
-import { PublicKey, type Connection } from '@solana/web3.js';
+import type { Connection } from '@solana/web3.js';
 import type { AppContext, MarketSource } from '../context';
 import type { TokenState, WalletState, World } from '../sim/world';
 import { RequestBudget } from './enrich/budget';
@@ -30,7 +30,7 @@ import { loadKolFile, type KolEntry } from './enrich/kol';
 import { TokenLookup } from './enrich/lookup';
 import { MetadataQueue, type TokenMetadata } from './enrich/metadata';
 import { classifyNarrative } from './enrich/narratives';
-import { parsePublicKey, pumpPoolAddress, readPumpPool } from './enrich/onchain';
+import { parsePublicKey, pumpPoolAddress, readPumpPool, type PoolReserves } from './enrich/onchain';
 import { PriceTicker, type JupiterPrice } from './enrich/prices';
 import { OnchainSecurity } from './enrich/security';
 import { BASE58_ADDRESS } from './enrich/sanitize';
@@ -119,6 +119,8 @@ export class LiveMarket implements MarketSource {
   private curveReader: { connection: Connection; read: CurveReader } | null = null;
   private readonly poolReads = { applied: 0, missing: 0 };
   private readonly poolTimers = new Set<NodeJS.Timeout>();
+  /** Pools read back from the chain, applied on the next tick (like feed events, never mid-snapshot). */
+  private poolsRead = new Map<string, PoolReserves>();
   /** Receives every raw feed frame (capture tools, scripts/pumpportal-check.ts). */
   private frameTap: ((text: string) => void) | null = null;
   private readonly tracker: TrackedTokens;
@@ -353,6 +355,7 @@ export class LiveMarket implements MarketSource {
 
   /** Apply queued feed events (engine tick). */
   private drain(): void {
+    if (this.poolsRead.size > 0) this.applyPoolsRead();
     if (this.queue.length === 0) return;
     const batch = this.queue.length > DRAIN_PER_TICK ? this.queue.splice(0, DRAIN_PER_TICK) : this.queue;
     if (batch === this.queue) this.queue = [];
@@ -413,24 +416,33 @@ export class LiveMarket implements MarketSource {
     const connection = this.ctx.live?.connection;
     const key = parsePublicKey(mint);
     if (!connection || !key || this.closed) return;
-    let pool: Awaited<ReturnType<typeof readPumpPool>> = null;
+    let pool: PoolReserves | null = null;
     try {
       pool = await readPumpPool(connection, key, (fn) => this.budget.run(fn, 'low'));
     } catch {
       pool = null;
     }
-    const t = this.world.tokens.get(mint);
-    if (!t?.pool || t.status !== 'migrated') return;
+    if (this.closed) return;
     if (!pool) {
       this.poolReads.missing++;
       this.schedulePoolRead(mint, attempt + 1);
       return;
     }
-    t.pool.native = pool.native;
-    t.pool.tokens = pool.tokens;
-    if (!t.pool.address) t.pool.address = pool.address;
-    t.version++;
-    this.poolReads.applied++;
+    this.poolsRead.set(mint, pool);
+  }
+
+  private applyPoolsRead(): void {
+    const read = this.poolsRead;
+    this.poolsRead = new Map();
+    for (const [mint, pool] of read) {
+      const t = this.world.tokens.get(mint);
+      if (!t?.pool || t.status !== 'migrated') continue;
+      t.pool.native = pool.native;
+      t.pool.tokens = pool.tokens;
+      if (!t.pool.address) t.pool.address = pool.address;
+      t.version++;
+      this.poolReads.applied++;
+    }
   }
 
   /** Hold a token's events while it loads; replay them in order once it has. */
