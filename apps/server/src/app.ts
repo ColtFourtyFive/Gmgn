@@ -14,6 +14,7 @@ import { HttpError, sendError, type AppConfig, type AppContext, type MarketSourc
 import { loadLiveConfig } from './live/config';
 import { LiveMarket } from './live/market';
 import { createLiveServices } from './live/services';
+import { installOps } from './ops';
 import { loadSnapshot, saveSnapshot, saveSnapshotAsync, SNAPSHOT_VERSION, type Snapshot } from './persistence';
 import { congestionOf, priorityFeeTiers } from './sim/congestion';
 import { Engine } from './sim/engine';
@@ -121,6 +122,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   app.addHook('onRequest', async (_req, reply) => {
     reply.headers(headers);
   });
+  installOps(app, ctx);
   installIpLimit(app, ['/api/auth/guest', '/api/auth/register'], config.accountCreationsPerIpPer10Min, 'too many new accounts from this address');
   installIpLimit(app, ['/api/auth/login'], config.loginAttemptsPerIpPer10Min, 'too many sign-in attempts from this address');
 
