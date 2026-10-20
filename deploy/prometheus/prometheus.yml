@@ -1,0 +1,33 @@
+# Prometheus for the compose deployment (docker compose --profile monitoring up -d).
+# It scrapes both servers on the compose network with their METRICS_TOKEN, read
+# from live.token / demo.token next to this file (one line each, never committed;
+# readable by the container's user: install -m 600 -o 65534 -g 65534). Wire an
+# Alertmanager into `alerting:` to get paged.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: trenchscope
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/live.token
+    static_configs:
+      - targets: ["live:8787"]
+        labels:
+          deployment: live
+
+  - job_name: trenchscope-demo
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/demo.token
+    static_configs:
+      - targets: ["demo:8787"]
+        labels:
+          deployment: demo

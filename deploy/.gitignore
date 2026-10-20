@@ -1,0 +1,5 @@
+# Real environment and token files hold secrets: only the *.example templates are committed.
+.env
+*.env
+backups/
+prometheus/*.token

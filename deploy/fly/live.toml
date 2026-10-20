@@ -1,0 +1,61 @@
+# Fly.io: the LIVE deployment (one Machine with a persistent volume).
+# From the repository root (the build context; the Dockerfile there is used):
+#   fly apps create trenchscope-live
+#   fly volumes create trenchscope_live_data --app trenchscope-live --region iad --size 10
+#   fly secrets set --app trenchscope-live SECRETS_KEY=… TURNKEY_ORGANIZATION_ID=… TURNKEY_API_PUBLIC_KEY=… \
+#       TURNKEY_API_PRIVATE_KEY=… SOLANA_RPC_URL=… FEE_WALLET_ADDRESS=… METRICS_TOKEN=…   (see deploy/live.env.example)
+#   fly deploy . --config deploy/fly/live.toml
+#   fly scale count 1 --app trenchscope-live     # single process: never more than one Machine
+# Backups: fly ssh console --app trenchscope-live -C "sh -c 'cd /app/apps/server && node --import tsx scripts/backup-db.ts'", plus Fly's
+# daily volume snapshots (fly volumes snapshots list). See docs/DEPLOY.md.
+
+app = "trenchscope-live"
+primary_region = "iad"
+# SIGTERM, then up to 60 s to stop the market, write the snapshot and exit.
+kill_signal = "SIGTERM"
+kill_timeout = "60s"
+
+[env]
+  MODE = "live"
+  # The Fly proxy is the one hop in front; it appends the client address to X-Forwarded-For.
+  TRUST_PROXY = "1"
+  DATA_DIR = "/data"
+  DEMO_URL = "https://trenchscope-demo.fly.dev"
+
+[mounts]
+  source = "trenchscope_live_data"
+  destination = "/data"
+
+[deploy]
+  # One Machine on one volume: it is replaced in place (seconds of downtime per deploy) and the
+  # deploy waits for the health check, so a release that does not come up fails loudly.
+  strategy = "rolling"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Orders, copy trading, snipers and deposit watching run server-side: never stop the Machine.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 1500
+    hard_limit = 2000
+
+  # Liveness. /readyz (feed, RPC) is for alerting, not routing: with one Machine a failing
+  # upstream feed must not take the whole site off the proxy.
+  [[http_service.checks]]
+    grace_period = "120s"
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/healthz"
+
+# /metrics is reachable through the public proxy: keep METRICS_TOKEN set and scrape it with a bearer
+# token from your own Prometheus (Fly's managed scraper cannot send one).
+
+[[vm]]
+  size = "performance-1x"
+  memory = "4gb"

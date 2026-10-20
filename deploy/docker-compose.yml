@@ -1,0 +1,110 @@
+# Trenchscope behind Caddy: the live terminal (MODE=live, real chains and
+# funds) and the demo (MODE=demo, simulator + paper trading) from one image,
+# each with its own data volume, on one host. Caddy terminates TLS (automatic
+# certificates), proxies WebSockets and blocks /metrics from the internet.
+#
+#   cd deploy
+#   cp .env.example .env            # domains + ACME email (compose interpolation)
+#   cp live.env.example live.env    # live server secrets: chmod 600, never commit
+#   cp demo.env.example demo.env
+#   docker compose up -d --build
+#
+# Backups: docker compose exec live node --import tsx scripts/backup-db.ts
+# See docs/DEPLOY.md.
+
+name: trenchscope
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: trenchscope:${TRENCHSCOPE_VERSION:-latest}
+  restart: unless-stopped
+  # tini as PID 1 forwards SIGTERM; the server then stops the market, writes its snapshot and exits.
+  init: true
+  # Saving a large snapshot takes seconds: give shutdown time before SIGKILL (the server gives up at 45 s).
+  stop_grace_period: 60s
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  expose: ["8787"]
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  live:
+    <<: *app
+    env_file:
+      - path: live.env
+        required: true
+    environment:
+      MODE: live
+      # Caddy is the one proxy in front: trust exactly one X-Forwarded-For hop.
+      TRUST_PROXY: "1"
+      # Shown in the live UI as the place to try things with paper money.
+      DEMO_URL: https://${DEMO_DOMAIN:?set DEMO_DOMAIN in deploy/.env}
+    volumes:
+      - live-data:/data
+
+  demo:
+    <<: *app
+    # The demo never gets live secrets: its own env file, simulator settings only.
+    env_file:
+      - path: demo.env
+        required: false
+    environment:
+      MODE: demo
+      TRUST_PROXY: "1"
+    volumes:
+      - demo-data:/data
+
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    depends_on: [live, demo]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      LIVE_DOMAIN: ${LIVE_DOMAIN:?set LIVE_DOMAIN in deploy/.env}
+      DEMO_DOMAIN: ${DEMO_DOMAIN:?set DEMO_DOMAIN in deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  # Optional: docker compose --profile monitoring up -d. Scrapes both servers with their METRICS_TOKEN
+  # (prometheus/live.token, prometheus/demo.token) and evaluates prometheus/alerts.yml.
+  # The UI listens on the host's loopback only: ssh -L 9090:127.0.0.1:9090 <host>.
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    profiles: [monitoring]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+volumes:
+  live-data:
+  demo-data:
+  caddy-data:
+  caddy-config:
+  prometheus-data:

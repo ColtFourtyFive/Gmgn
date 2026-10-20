@@ -1,0 +1,43 @@
+# Caddy in front of both deployments: automatic HTTPS (Let's Encrypt / ZeroSSL),
+# HTTP/3, WebSocket pass-through and one X-Forwarded-For hop (the servers run
+# with TRUST_PROXY=1). /metrics is not served to the internet: Prometheus
+# scrapes live:8787 / demo:8787 on the compose network (with METRICS_TOKEN).
+{
+	email {$ACME_EMAIL}
+}
+
+(trenchscope) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	# Internal only.
+	@internal path /metrics /metrics/*
+	respond @internal 404
+	log {
+		output stdout
+		format json
+	}
+}
+
+(upstream_options) {
+	# One request id for Caddy's and the server's log lines (the server keeps it: TRUST_PROXY=1).
+	header_up X-Request-Id {http.request.uuid}
+	# Config reloads keep open WebSockets for a while instead of dropping every client at once.
+	stream_close_delay 5m
+}
+
+{$LIVE_DOMAIN} {
+	import trenchscope
+	reverse_proxy live:8787 {
+		import upstream_options
+	}
+}
+
+{$DEMO_DOMAIN} {
+	import trenchscope
+	reverse_proxy demo:8787 {
+		import upstream_options
+	}
+}

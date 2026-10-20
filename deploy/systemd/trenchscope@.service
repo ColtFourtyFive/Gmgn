@@ -1,0 +1,73 @@
+# Trenchscope without containers: one instance per deployment.
+#   trenchscope@live.service  -> /etc/trenchscope/live.env,  data in /var/lib/trenchscope/live
+#   trenchscope@demo.service  -> /etc/trenchscope/demo.env,  data in /var/lib/trenchscope/demo
+# The instance name is the MODE; each env file sets its own PORT (e.g. live 8787,
+# demo 8788). Caddy (or another proxy) on the same host fronts both (TRUST_PROXY=1).
+# Values in the env file override the Environment= lines below.
+#
+# Install (see docs/DEPLOY.md, "systemd"):
+#   useradd --system --home /var/lib/trenchscope --shell /usr/sbin/nologin trenchscope
+#   code in /opt/trenchscope: pnpm install --frozen-lockfile && pnpm --filter @trenchscope/web build
+#                             && pnpm install --frozen-lockfile --prod
+#   install -m 600 -o root live.env /etc/trenchscope/live.env
+#   cp trenchscope@.service trenchscope-backup@.* /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now trenchscope@live trenchscope@demo trenchscope-backup@live.timer
+
+[Unit]
+Description=Trenchscope (%i)
+Documentation=file:///opt/trenchscope/docs/DEPLOY.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trenchscope
+Group=trenchscope
+WorkingDirectory=/opt/trenchscope/apps/server
+Environment=NODE_ENV=production
+Environment=MODE=%i
+Environment=HOST=127.0.0.1
+Environment=DATA_DIR=/var/lib/trenchscope/%i
+Environment=WEB_DIST=/opt/trenchscope/apps/web/dist
+Environment=TRUST_PROXY=1
+# Read by systemd as root, so the file can stay root-owned with mode 600.
+EnvironmentFile=/etc/trenchscope/%i.env
+# Run from apps/server so `--import tsx` resolves the server's tsx dependency.
+ExecStart=/usr/bin/node --import tsx src/index.ts
+# SIGTERM: stop the market, write the snapshot, close. The server gives up after 45 s.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+StateDirectory=trenchscope/%i
+StateDirectoryMode=0700
+
+# Hardening (V8's JIT needs writable+executable memory, so no MemoryDenyWriteExecute).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# A filtered syscall fails with EPERM instead of killing the process.
+SystemCallErrorNumber=EPERM
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

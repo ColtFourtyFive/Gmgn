@@ -1,0 +1,115 @@
+# Alerts on the metrics /metrics exports (docs/DEPLOY.md, "Monitoring").
+# Thresholds are starting points: tune them against a week of real traffic.
+# trenchscope_rpc_errors_total, trenchscope_tx_sent_total and
+# trenchscope_tx_failed_total are the names the live modules register through
+# the ops counter() seam; their rules stay silent until those counters exist.
+
+groups:
+  - name: trenchscope-process
+    rules:
+      - alert: TrenchscopeDown
+        expr: up{job=~"trenchscope.*"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.deployment }} is not answering /metrics"
+
+      - alert: EventLoopLagHigh
+        expr: nodejs_eventloop_lag_p99_seconds > 0.5
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.deployment }} event loop p99 delay {{ $value | humanizeDuration }}: requests, sockets and order triggers are late"
+
+      - alert: EngineStopped
+        expr: trenchscope_engine_running == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.deployment }} engine is not ticking (no order triggers, no channel pushes)"
+
+      - alert: MarketClockBehind
+        expr: trenchscope_engine_clock_lag_seconds > 5
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.deployment }} market clock {{ $value | humanizeDuration }} behind wall time"
+
+      - alert: MemoryHigh
+        expr: process_resident_memory_bytes > 3.5e9
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.deployment }} RSS {{ $value | humanize1024 }}B: check growth before the OOM killer does"
+
+      - alert: HttpServerErrors
+        expr: |
+          sum by (deployment) (rate(trenchscope_http_requests_total{status=~"5.."}[5m]))
+            / sum by (deployment) (rate(trenchscope_http_requests_total[5m])) > 0.02
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.deployment }} {{ $value | humanizePercentage }} of requests fail with 5xx"
+
+      - alert: ApiSlow
+        expr: |
+          histogram_quantile(0.99, sum by (deployment, le) (rate(trenchscope_http_request_duration_seconds_bucket{route=~"/api/.*"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.deployment }} API p99 latency {{ $value | humanizeDuration }}"
+
+      - alert: WebSocketClientsDropped
+        expr: |
+          trenchscope_ws_connections < 0.5 * avg_over_time(trenchscope_ws_connections[1h])
+            and avg_over_time(trenchscope_ws_connections[1h]) > 20
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.deployment }} lost half its WebSocket clients (proxy, TLS or socket-cap problem?)"
+
+  - name: trenchscope-live
+    rules:
+      - alert: LiveFeedDisconnected
+        expr: trenchscope_live_feed_connected == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "live feed for {{ $labels.chain }} disconnected: lists and positions go stale"
+
+      - alert: LiveFeedStale
+        expr: trenchscope_live_feed_last_event_age_seconds > 120
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "no live events on {{ $labels.chain }} for {{ $value | humanizeDuration }}"
+
+      - alert: LiveRpcUnhealthy
+        expr: trenchscope_live_rpc_healthy == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "RPC for {{ $labels.chain }} failing its health probe: balances, deposits and trading affected"
+
+      - alert: LiveTradingDisabled
+        expr: trenchscope_live_trading_enabled == 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "trading is disabled on {{ $labels.chain }} (signer, RPC or router missing)"
+
+      - alert: LiveRpcErrors
+        expr: sum by (deployment, chain) (rate(trenchscope_rpc_errors_total[5m])) > 1
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.chain }} RPC errors at {{ $value | humanize }}/s"
+
+      - alert: LiveFailedTransactions
+        expr: |
+          sum by (deployment, chain) (rate(trenchscope_tx_failed_total[15m]))
+            / sum by (deployment, chain) (rate(trenchscope_tx_sent_total[15m])) > 0.2
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of {{ $labels.chain }} transactions fail"

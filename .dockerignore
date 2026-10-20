@@ -1,0 +1,25 @@
+# Build context for the Dockerfile: sources and manifests only.
+**/node_modules
+**/.data
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+**/blob-report
+**/*.log
+**/*.tsbuildinfo
+**/.DS_Store
+.git
+.github
+.claude
+.vscode
+.idea
+# Secrets never enter an image (pass them at run time).
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+deploy
+docs
+Dockerfile
+.dockerignore

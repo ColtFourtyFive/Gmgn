@@ -1,0 +1,23 @@
+# Online backup of one deployment's data directory (SQLite store + snapshot),
+# safe while trenchscope@%i runs. Triggered by trenchscope-backup@%i.timer.
+# Ship /var/lib/trenchscope/%i/backups off the host as well (see docs/DEPLOY.md).
+
+[Unit]
+Description=Trenchscope backup (%i)
+After=trenchscope@%i.service
+
+[Service]
+Type=oneshot
+User=trenchscope
+Group=trenchscope
+WorkingDirectory=/opt/trenchscope/apps/server
+Environment=DATA_DIR=/var/lib/trenchscope/%i
+Environment=BACKUP_KEEP=14
+Environment=NODE_NO_WARNINGS=1
+ExecStart=/usr/bin/node --import tsx scripts/backup-db.ts
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/trenchscope/%i
+UMask=0077
