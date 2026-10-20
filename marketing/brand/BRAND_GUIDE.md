@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0, Tue 2026-10-20 (X account warm-up starts today; trailer + launch thread Tue 2026-10-27) |
+| **Version** | 1.1, Tue 2026-10-20 (honesty and virality review against the claims ledger and the code; X account warm-up starts today; trailer + launch thread Tue 2026-10-27) |
 | **Applies to** | The X account, every post, image, clip and thread, the AI "larp" trailer, profile art, and any future landing page |
 | **Built from** | `apps/web/src/index.css` (tokens), `apps/web/tailwind.config.js` (type, motion), `apps/web/public/favicon.svg` and `components/layout/Logo.tsx` (logo), `README.md`, `docs/PRD.md` §1, §3, §6.21, §11.5, §12–14 |
 | **Companion docs** | `marketing/research/CLAIMS_LEDGER.md` (what we may say: SC-xx safe claims, KS-xx stats, MNC-xx never-say, DIS-xx disclaimers) and `marketing/research/CT_PLAYBOOK.md` (how X ranks posts and how to warm the account up). If this guide and the claims ledger disagree on a claim, **the ledger wins**. |
@@ -13,11 +13,11 @@
 
 ## 0. The brand on one page
 
-- **What it is.** A web-only, keyboard-first memecoin trading terminal for four simulated chains (Solana, BNB Chain, Base, Ethereum). v1 runs on a deterministic market simulator. **Paper trading only**: no real funds, no wallet, no real chains.
-- **The honest edge.** On CT, "larping" means pretending. Paper trading *is* larping, and we say so first. Trenchscope is where you larp the trenches: fake money, with rugs, snipers, bundlers and insiders that behave like the real thing.
-- **The promise.** *See who's really buying.* Every token card shows who holds it (top 10, dev, insiders, snipers, bundlers), every wallet carries a label, and every number comes with its definition.
+- **What it is.** A web-only memecoin trading terminal with hotkeys, for four simulated chains (Solana, BNB Chain, Base, Ethereum). v1 runs on a deterministic market simulator. **Paper trading only**: no real funds, no wallet, no real chains.
+- **The honest edge.** On CT, "larping" means pretending. Paper trading *is* larping, and we say so first. Trenchscope is where you larp the trenches: fake money, with rugs, snipers, bundlers and insiders that feel like the real thing (they are simulated, and "tuned to" real base rates, never "the same as").
+- **The promise.** *See who's really buying.* Every token card shows who holds it (top 10, dev, insiders, snipers, bundlers), wallets carry labels (smart money, KOL, sniper, bundler, insider, dev, whale, fresh, bot), and every audit check shows its threshold and a hint (SC-09, SC-19). In v1, "who" means labelled **sim** wallets.
 - **Primary tagline.** `larp the trenches.` **Promise line.** `see who's really buying.`
-- **Voice.** A sharp trader with jokes. Lowercase, short, specific, self-deprecating. No hype, no hashtags, almost no emojis.
+- **Voice.** A sharp trader with jokes. Lowercase, short, specific, self-deprecating. No hype, no hashtags, no exclamation marks, almost no emojis.
 - **Look.** A navy-black terminal with one flare of amber. Market colours only carry meaning. Numbers are set in mono.
 - **Never.** A token, airdrop or presale. Profit promises. Invented traction. Competitor names or labels. Real people. A PnL image without **SIMULATED** in the pixels.
 
@@ -28,9 +28,11 @@
 ### 1.1 Positioning statement
 
 > **For** memecoin traders and the trench-curious who are tired of getting rugged blind,
-> **Trenchscope is** the web trading terminal that shows you **who is really buying**: snipers, bundlers, insiders, the dev and smart money, with every number explained and every fee shown before you click.
-> **Unlike** terminals where the only way to learn is with real money, Trenchscope v1 runs a full simulated market with **paper trading**. You can larp the whole lifecycle (launch, curve, migration, rug) with fake money and real-feeling mechanics.
+> **Trenchscope is** a web trading terminal that shows you **who is really buying**: snipers, bundlers, insiders, the dev and smart money, with every audit check explained and the fees in the quote before you click.
+> **Unlike** learning the trenches with real money, Trenchscope v1 runs a whole simulated market with **paper trading**. You can larp the whole lifecycle (launch, curve, migration, rug) with fake money and real-feeling mechanics.
 > **Because** the trenches are hard enough already. You should get to see the board before you jump in.
+
+*Internal positioning only. The "unlike" is the alternative of risking real money, never another product. Don't paste this block into posts (MNC-10).*
 
 ### 1.2 One-liners by length
 
@@ -39,21 +41,21 @@
 | 3 words | larp the trenches. |
 | 1 line (PRD) | see who's really buying, before you do. |
 | 1 sentence | a memecoin trading terminal on a simulated market: watch the snipers, bundlers and insiders, and trade it all with fake money. |
-| Elevator (≈40 words) | Trenchscope is a keyboard-first trading terminal for launchpad memecoins. v1 runs a live simulated market across four chains, with rugs, snipers, bundlers, insiders and smart money included, so you can paper-trade the trenches and read every risk number before any real money is involved. |
+| Elevator (≈40 words) | Trenchscope is a memecoin trading terminal on a live simulated market across four chains, rugs, snipers, bundlers and insiders included. Every token shows its risk checks. You paper-trade it all with fake money and hotkeys. Nothing real is at stake. |
 
 ### 1.3 Proof points (each maps to a claims-ledger ID)
 
 | Proof | Say it like | Ledger |
 |---|---|---|
 | Who holds it, on every card | "top 10, dev, insiders, snipers, bundlers. all on the card. all explained." | SC-09, SC-19, SC-21 |
-| A whole fake trench, live | "a whole fake trench running 24/7. rugs included." | SC-04, SC-05 |
+| A whole fake trench, live | "a whole fake trench. rugs included." | SC-04, SC-05 (don't say "24/7": nothing is hosted yet, so there is no uptime to promise) |
 | Nothing to connect | "fake money. real-feeling trenches." / "nothing to connect. nothing to lose." | SC-01, SC-37 |
 | A respawn button | "got rugged? hit the faucet. try again." | SC-02, SC-03 |
-| Cost before click | "see your price impact before you click, not after you cry." | SC-11, SC-12 (always "simulated") |
-| It asks if you're sure | "it literally asks 'you sure?' before you ape the rug." | SC-08 |
-| Smart money is a hit rate | "smart money isn't a vibe here. it's a hit rate." | SC-20 (no accuracy numbers) |
-| Keyboard trading | "j/k through the trench. b to buy." | SC-30 ("hotkeys", not "full keyboard map") |
-| Unknown means unknown | "unknown shows as `—`, not `0%`." | PRD §1.3 principle 2 |
+| Cost before click | "see your price impact before you click, not after you cry." | SC-11, SC-12 (fees are simulated: always say so) |
+| It asks if you're sure | "it lists the red flags, then makes you click 'buy anyway'. you will click 'buy anyway'." | SC-08 (the dialog is titled "High-risk token" and fires on honeypots and high-risk tokens) |
+| Smart money is a hit rate | "smart money isn't a vibe here. it's a hit rate." | SC-20 (no accuracy numbers. If asked: "earned from entries that later 2x'd, against a base rate. in the sim.") |
+| Hotkeys | "j/k through the trench. b to buy." | SC-30 ("hotkeys", never "keyboard-only" or "full keyboard map") |
+| Unknown means unknown | "unknown shows as `--`, not `0%`. a zero you can't verify is a lie with good formatting." | Built: risk chips and holder rates render `--` for unknown values (`components/common/indicators.tsx:32`, `components/token/HolderStrip.tsx:76`). Not yet a ledger SC: add it before posting. Use `--` (what the app shows), not `—` |
 
 ### 1.4 What we are not
 
@@ -70,19 +72,19 @@
 
 ## 2. Brand story
 
-**The trench.** Memecoin trading happens in the trenches: thousands of new coins a day on bonding-curve launchpads. On major launchpads, ~97 out of 100 launches never make it off the curve lately. Of the few that graduate, ~73% are down 60%+ within 20 minutes in one sample (KS-01, KS-02: secondary data, hedged, re-verify before posting). Insiders, bundlers and snipers grab supply in the first blocks. Newcomers arrive last and leave as exit liquidity.
+**The trench.** Memecoin trading happens in the trenches: thousands of new coins a day on bonding-curve launchpads. On major launchpads, fewer than ~3 in 100 launches make it off the curve lately. Of the few that graduate, ~73% are down 60%+ within 20 minutes in one sample (KS-01, KS-02, KS-09: secondary data, hedged, re-verify before posting, never "97% are rugs"). Often, bundlers, snipers and insiders take supply in the first blocks, and late buyers become the exit liquidity.
 
-**What's broken.** Today's tools are fast and full of data, but three things fail the trader:
+**What's broken.** These are the trader's pains we design against. They are not claims about any named tool, so never aim them at one (MNC-10):
 
-1. **Opaque risk numbers.** Raw percentages with no published definitions. Fields that disagree with each other. "0%" shown where the honest answer is "we don't know".
-2. **Hidden costs.** A platform fee, plus priority and tip fees people forget about. On a small ticket these add up before the chart has moved (show the arithmetic; never attribute it to a named product, KS-11).
-3. **No safe place to learn.** The only way to find out what a bundled launch looks like is to buy one with real money.
+1. **Risk numbers you have to take on faith.** A percentage is only useful if you know what it counts and where the red line is. And "0%" is not the same as "we don't know".
+2. **Costs that are easy to forget.** A platform fee, plus priority and tip fees. On a small ticket these add up before the chart has moved (show the arithmetic; never attribute it to a named product, KS-11).
+3. **Practice costs real money.** Most people find out what a bundled launch looks like by buying one.
 
-**Why a scope.** Trench periscopes let soldiers see over the parapet without putting their heads up. That is the product: see the whole board (who's buying, who's linked to the dev, who's about to dump) without exposing your bag. The logo is a scope reticle with a chart line climbing out of a dip. In other words, a way out of the trench.
+**Why a scope.** Trench periscopes let soldiers see over the parapet without putting their heads up. That is the product: see the whole board (who's buying, who's linked to the dev, who's already selling) without putting a real bag on the line. The logo is a scope reticle with a chart line climbing out of a dip. In other words, a way out of the trench.
 
-**Why a larp.** Every paper-trading tool is a larp. Most hide it. We lead with it. Trenchscope is a full-fidelity fake market: bonding curves, migrations, rugs, slow rugs, snipers, bundlers and sandwich bots, all simulated and all labelled SIM. You get rugged for free, hit the faucet and go again. Being honest about the joke is what makes everything else believable.
+**Why a larp.** Paper trading is larping. We say it first. Trenchscope is a fake market with the whole cast: bonding curves, migrations, rugs, slow rugs, snipers, bundlers and sandwich bots, all simulated. You get rugged for free, hit the faucet and go again. Being honest about the joke is what makes everything else believable.
 
-**What we promise.** Every number explained. Every fee shown up front. Unknown shown as `—`. Every simulated surface called simulated. **What we don't promise.** Profits, outcomes, real-chain trading, a token, or "never get rugged again".
+**What we promise.** Every audit check shows its threshold and a hint. Fees and price impact show in the quote before you click (simulated). Unknown values show as `--`, not `0%`. Everything we post says sim. **What we don't promise.** Profits, outcomes, accuracy, real-chain trading, a token, or "never get rugged again". (The app itself has no header SIM badge, so the SIM bug on our footage does that job: §13.)
 
 ---
 
@@ -95,7 +97,7 @@ CT archetypes mapped to the PRD personas (PRD §3). Launch priority: **A1 and A5
 | A1 | **The trench rat** | P-1 "Trench sniper" (Kai) | Lives on launch boards. 50–200 trades a day. Posts "aped" screenshots | Speed, hotkeys, the risk chips on the card, decisions in under 5 s | "j/k through the trench. b to buy." / "scope it before you ape it." | Keyboard clips, spot-the-rug puzzles, POV memes | Makes no speed claims (MNC-08). They will test every claim |
 | A2 | **The wallet watcher** | P-2 "Smart-money follower" (Maya) | Follows 30–200 wallets, lives in alerts, copy-trades | Wallets worth following, alerts when they buy, copying without becoming exit liquidity | "smart money isn't a vibe. it's a hit rate." | Wallet report cards, Monitor clips, "what exit liquidity feels like" (paper) | Never imply copy-trading profits (SC-15, MNC-04) |
 | A3 | **The thread sleuth** | P-3 "Researcher" (Dev) | Writes "dev funded 14 wallets" threads, rarely trades fast | Holder tables, insider and bundler links, dev history | "bought in the launch block? bundler. funded by the dev? insider." | Rug autopsies, glossary threads, mechanism quote-posts | Describe how the **sim** tags wallets, not a real-chain detector (SC-21) |
-| A4 | **The caller** | P-4 "Caller/KOL" (Rin) | Has followers, posts calls | A verifiable track record | Low priority for launch. Verified share cards are P1 and not built | Nothing targeted. Never tag callers to farm reach | No paid KOL deals: X treats crypto as ineligible for paid partnerships |
+| A4 | **The caller** | P-4 "Caller/KOL" (Rin) | Has followers, posts calls | A verifiable track record | Low priority for launch. Verified share cards are P1 and not built | Nothing targeted. Never tag callers to farm reach | No paid KOL deals: X's Paid Partnerships policy lists crypto as ineligible (CT_PLAYBOOK §1.1, §3.9) |
 | A5 | **The trench tourist** | P-5 "Newcomer" (Sam) | Curious, has watched friends get rugged, scared of losing money | To understand curves, migrations and rugs without risk | "get rugged for free." / "the trenches, with a respawn button." | Explainers, "trench dictionary", POV memes, guess-the-fate | No outcome promises ("learn to trade profitably" is MNC-19). No "risk-free" promo tone (MNC-18) |
 | A6 | **The builder** | P-6 "Builder" (Ana) | Dev-Twitter adjacent, likes build-in-public | A deterministic sim, a stable API (P2) | "shipped:" changelog posts | Build-in-public screenshots | Don't promise a public API (not built) |
 | A7 | **The spectator / meme lord** (not a PRD persona) | — | Doesn't trade much, reposts what's funny | Good jokes about the trenches | The self-aware larp, the trailer | Trailer, loss-porn diaries (watermarked) | Amplifiers, not users. Never bait them with giveaways |
@@ -118,8 +120,8 @@ CT archetypes mapped to the PRD personas (PRD §3). Launch priority: **A1 and A5
 
 | Do | Don't |
 |---|---|
-| "bought in the launch block, funded by the dev 6 minutes earlier. that's not a believer, that's an insider." (in-sim example) | "our AI detects every rug" |
-| "unknown shows as `—`, not `0%`. a zero you can't verify is a lie with good formatting." | "the most accurate data in crypto" |
+| "funded by the dev wallet 6 minutes before launch. bought 2 blocks in. that's not a believer. that's an insider." (in-sim example) | "our AI detects every rug" |
+| "unknown shows as `--`, not `0%`. a zero you can't verify is a lie with good formatting." | "the most accurate data in crypto" |
 | "~97 of 100 launches on major launchpads never leave the curve lately. most aren't rugs. they just die quietly." | "97% of memecoins are scams" |
 
 **Pillar 3: Trench humour.** Gallows humour from someone who has been rugged too. We laugh at the trenches and at ourselves, never at a named person.
@@ -134,7 +136,7 @@ CT archetypes mapped to the PRD personas (PRD §3). Launch priority: **A1 and A5
 
 | Do | Don't |
 |---|---|
-| "a bonding curve is a vending machine that raises the price every time someone buys. when it's full, the coin moves to a real pool. that's 'graduating'." | "if you don't know what a bonding curve is, you're exit liquidity" |
+| "a bonding curve is a vending machine that raises the price every time someone buys. when it's full, the coin moves to a dex pool. that's 'graduating'." | "if you don't know what a bonding curve is, you're exit liquidity" |
 | "you can even get sandwiched. with fake money. character building." | "buy when the dev buys, it graduates 8% of the time" (that is advice, KS-07) |
 | "nfa. it's literally fake money." | "this one's going to send, trust" |
 
@@ -142,11 +144,13 @@ CT archetypes mapped to the PRD personas (PRD §3). Launch priority: **A1 and A5
 
 - **Case.** Posts and replies are lowercase. Proper names may stay lowercase too (trenchscope, solana) in posts. Formal surfaces (end cards, the logo, any docs) use **Trenchscope**: one word, capital T. Never "TrenchScope", "Trench Scope" or "TS".
 - **Length.** First line is the hook and works on its own. 1–3 short lines. Threads are 4–6 posts, and the first post stands alone.
+- **Character limit.** Every post fits **280** as X counts it, or is marked **long-form (Premium)** in the draft. X weights characters: `·`, `—`, `×` and plain ASCII count 1; `→`, `≥`, `−` (true minus), `…` and every emoji count 2; any URL counts 23. Count with these rules, not a word processor. A disclaimer line (DIS-02, 32 chars) counts too, so leave room for it.
 - **Numbers.** Use digits ("14 coins", "~73%"). Real-world stats always carry "~", a time window and "on major launchpads". In-sim numbers always say "in the sim".
 - **Hashtags.** None. **Emojis.** Rare: at most one, and only when it is the joke. **Cashtags.** Never for sim tokens, never for the brand (MNC-16).
 - **Mentions.** Don't tag strangers, KOLs or projects to get noticed.
 - **Links.** None during warm-up. On launch day `[LINK]` goes in the first self-reply.
-- **Punctuation.** Full stops are fine, and so is a dry "." at the end. Use one exclamation mark a month, if any.
+- **Punctuation.** Full stops are fine, and so is a dry "." at the end. **No exclamation marks.** If a line needs one to land, the line is wrong.
+- **Replies.** Written by a person, one at a time. Never automated, scheduled in bulk or reused (X clusters duplicate replies as spam: CT_PLAYBOOK §3.4, §4.3). No "gm", "this", "🔥" replies, no product drop in most replies.
 
 ### 4.3 Words we use and words we avoid
 
@@ -155,9 +159,12 @@ CT archetypes mapped to the PRD personas (PRD §3). Launch priority: **A1 and A5
 | paper, sim, simulated, fake money, larp | risk-free (MNC-18), real trading, live trading, mainnet |
 | practice, reps, see, scope, read the board | learn to profit, beat the trenches, guaranteed (MNC-03, MNC-19) |
 | flags, labels, tags, shows | detects, predicts, accurate, AI-powered (MNC-06, MNC-07) |
+| real-feeling, realistic-ish, tuned to | full-fidelity, matches the real market, "same as mainnet" (SIM-03 says "tuned to") |
+| every audit check explained | "every number explained" (only the audit checks carry thresholds and hints) |
 | near grad, migrated, graduated | "almost bonded", "cooking", "P1/P2/P3" and other competitors' labels (MNC-11) |
-| hotkeys | "full keyboard map", "command palette" (not built) |
+| hotkeys | "keyboard-only", "full keyboard map", "command palette" (not built, MNC-12) |
 | points (in-app) | airdrop, allocation, farm, TGE, wen token (MNC-02) |
+| `[LINK]`, launch day only, in the first self-reply | "live now", "sign up", "join the beta", "24/7" (MNC-21) |
 
 ---
 
@@ -168,22 +175,22 @@ Use the words the trenches use, and use them right. Definitions follow the in-ap
 | Term | What it means | How we use it | Careful |
 |---|---|---|---|
 | **the trenches** | The launchpad meme-coin market: new coins on bonding curves, fast trading, high mortality | Our home turf. "larp the trenches." | — |
-| **launchpad** | A site where anyone mints a coin on a bonding curve in seconds | "8 made-up launchpads" (sim) | Never name a real launchpad in posts |
-| **bonding curve / the curve** | Price rises automatically with each buy. Once the curve fills, the coin graduates | "the first 25 sol of the curve is where coins go to die." | — |
+| **launchpad** | A site where anyone mints a coin on a bonding curve in seconds | "8 made-up launchpads. 1 made-up dex. 0 real money." (sim) | Never name a real launchpad in posts. Don't name the sim launchpads either: several echo real brands |
+| **bonding curve / the curve** | Price rises automatically with each buy. Once the curve fills, the coin graduates | "a vending machine that raises the price every buy." | Curve-fill stats (KS-08) are secondary and must be re-verified before posting |
 | **bonded / graduated / migration** | The curve filled and liquidity moved ("migrated") to an AMM pool. In the sim the DEX is the fictional TrenchSwap and LP is burned | Our lifecycle labels: **new · near grad · migrated** | Never say "almost bonded" (a competitor's label) |
-| **CA** | Contract address. "drop the ca" | "paste a ca, trade it" | Never post a real CA. Sim CAs are fictional |
+| **CA** | Contract address. "drop the ca" | "every sim coin has a ca. it's fake too." | Never post a real CA. Sim CAs are random, only resolve inside the sim, and never go in post copy (one could collide with a real address and read as a shill). Never imply you can paste a real CA and trade it |
 | **dev** | The token creator's wallet (or the dev team's) | "dev holds 4%." | — |
-| **dev sold / dev dumped** | The creator sold some or all of their supply. Often the start of a rug | One of our 13 signals. "13 signal types. 2 of them are 'the dev is selling'." | — |
+| **dev sold / dev dumped** | The creator sold some or all of their supply. Often the start of a rug | One of our 13 signals. "13 signal types. the one you learn to fear is 'dev sell'." | — |
 | **rug / rugged / rug pull** | Insiders pull liquidity or dump supply, and the price goes to ~zero | "get rugged for free." | **Not graduating ≠ a rug.** Most non-graduates are duds that die quietly (ledger §4.4) |
 | **slow rug** | The dev or insiders bleed supply out over hours | "slow rugs: the sim has those too." | — |
-| **sniper** | A wallet that bought within the first blocks after launch | "sniped in block 0. paper hands in block 40." | — |
-| **bundler / bundle** | Wallets that buy in the same block as token creation, likely linked to the dev, to grab supply cheaply and look like organic demand | "see the bundlers before they see you." | Describe it as how the sim tags wallets, not a real-chain detector |
-| **insider** | A wallet funded by or linked to the dev that accumulated early | "funded by the dev? insider." | — |
+| **sniper** | A wallet that bought within the first blocks after launch | "sniped in block 1. paper-handed by block 40." | In the sim: a buy within 3 blocks after the creation block. Block 0 buyers are tagged bundlers, not snipers |
+| **bundler / bundle** | Wallets that buy in the same block as token creation, likely linked to the dev, to grab supply cheaply and look like organic demand | "see the bundlers before they see you." | In the sim: any non-creator wallet that buys in the creation block. Describe it as how the sim tags wallets, not a real-chain detector |
+| **insider** | A wallet funded by or linked to the dev that accumulated early | "funded by the dev? insider." | In the sim: funded by the dev, the dev team or the dev's funder, or one of 3+ early buyers (first 10 min) funded by the same private wallet (`analytics/tokens/track.ts`). Sim only |
 | **fresh wallet** | A newly created wallet with little history. Often a burner | "40% fresh wallets. totally organic." | — |
 | **top 10** | Share of supply held by the ten largest holders. High means concentrated and fragile | "top 10 holds 61%. that's not a community, that's a group chat." | — |
 | **smart money** | Wallets with a statistically strong record of early, profitable entries | "smart money isn't a vibe here. it's a hit rate." | In the sim it's earned from behaviour. No accuracy numbers, no real-chain claims |
 | **KOL / caller** | Key opinion leader: an influencer whose buys move price. A caller posts "calls" | "kol buy" is a sim signal | Sim KOLs are fictional. Never name, tag or depict real ones |
-| **whale** | A wallet with a large balance or position | "leaderboard of fake whales. study them." | — |
+| **whale** | A wallet with a large balance or position | "a leaderboard of fake whales. somehow still humbling." | — |
 | **bot / MEV / sandwich** | Automated traders. A sandwich bot front-runs and back-runs your swap | "you can even get sandwiched. with fake money." | — |
 | **CTO** | Community takeover: the dev abandons the coin and holders take over its socials | "community takeover" is a sim signal | — |
 | **ape / aped** | Buy fast, usually without research | "scope it before you ape it." | — |
@@ -192,7 +199,7 @@ Use the words the trenches use, and use them right. Definitions follow the in-ap
 | **bags / bagholder** | Your position / stuck holding a coin that dumped | "my paper bag got bundled." | — |
 | **exit liquidity** | The late buyers that early holders sell into | "find out what 'exit liquidity' feels like, with fake money." | — |
 | **larp** | Live-action role play. On CT: pretending (fake rich, fake insider) | Our honest edge: paper trading is larping, and we say it first | Never use "larp" to accuse a named person |
-| **pnl / roi** | Profit and loss / return | "pnl that counts your fees. painful. accurate." | Every PnL image says SIMULATED · PAPER TRADE |
+| **pnl / roi** | Profit and loss / return | "pnl that counts your fees. painful. honest." | Every PnL image says SIMULATED · PAPER TRADE |
 | **mc / mcap, ath** | Market cap; all-time high | "limit order on market cap." | — |
 | **send it / runner / moon** | A coin that keeps going up | Only in jokes about the sim | Never as a prediction |
 | **nfa / dyor** | Not financial advice / do your own research | "nfa. it's literally fake money." | Using "nfa" doesn't make advice okay. Still give no advice |
@@ -210,14 +217,14 @@ Ranked by honesty, then ownability, then shareability. Use lowercase in posts. I
 | 2 | **see who's really buying.** | Promise line: launch thread, product clips | From the PRD one-liner. Long form: "see who's really buying, before you do." In v1, "who" means labelled sim wallets |
 | 3 | **scope it before you ape it.** | Action line: CTAs, keyboard clips | Puts the brand name to work |
 | 4 | **get rugged for free.** | Newcomer hook: explainers, pinned post | The honest joke in four words |
-| 5 | **fake money. real mechanics.** | Credibility line: clips that show curves, migrations, sandwiches | "Mechanics", not "results". Never "real money" |
+| 5 | **fake money. real-feeling trenches.** | Credibility line: clips that show curves, migrations, sandwiches | Ledger wording (SC-01). "Real-feeling", never "real", "accurate" or "results" |
 | 6 | **the trenches, with a respawn button.** | Faucet and onboarding posts | Gamer-literate. The faucet really refills (SC-03) |
 | 7 | **see the bundlers before they see you.** | Audit and risk-chip posts | Specific tag, built-in tension |
 | 8 | **paper hands welcome.** | Merch-tier pun, replies, loss-porn diaries | Pun on paper trading plus paper hands |
 | 9 | **all of the rugs. none of the rent money.** | Humour posts, trailer tag | Funny and true. Keep the "rent money" framing, never "zero risk" |
-| 10 | **every number explained. every fee up front.** | Build-in-public, explainer threads | Most "brand-safe" line, least CT. Fee claims need "simulated" (SC-12) |
+| 10 | **even the fees are fake. still shown before you click.** | Fee and quote clips, build-in-public | SC-11, SC-12. The 0.8% is a simulated fee: never compare it to anyone's real fee |
 
-**Retired before use:** "the only place getting rugged is free" (an "only" claim, MNC-09), "never get rugged again" (MNC-03), "risk-free trenches" (MNC-18), "trade smarter" (outcome promise, MNC-19).
+**Retired before use:** "the only place getting rugged is free" (an "only" claim, MNC-09), "never get rugged again" (MNC-03), "risk-free trenches" (MNC-18), "trade smarter" (outcome promise, MNC-19), "every number explained" (overclaim: only the audit checks carry definitions), "a fake trench running 24/7" (nothing is hosted yet), "fake money. real mechanics." ("real" invites a fidelity claim we can't back; use "real-feeling").
 
 ---
 
@@ -381,7 +388,7 @@ Both are free (SIL OFL) and on Google Fonts. The fallback stack is `ui-sans-seri
 **Rules.**
 - Nothing under **20 px on a 1080-wide canvas** (it becomes unreadable on a phone).
 - Headlines are lowercase or sentence case. UPPERCASE is for mono chips, stamps and the SIM bug only.
-- Numbers: mono and tabular. Always show the sign (`+312%`, `−84%`, with a true minus U+2212). Multiples use × (`3.2×`). Compact money (`$1.2M`). Tiny prices use subscript zeros (`0.0₅123`). **Unknown is `—`, never `0%`.**
+- Numbers: mono and tabular. In images, always show the sign (`+312%`, `−84%`, with a true minus U+2212; in post text use a plain hyphen, because X counts `−` as 2 characters). Multiples use × (`3.2×`). Compact money (`$1.2M`). Tiny prices use subscript zeros (`0.0₅123`, as the app formats them). **Unknown is `--`, never `0%`** (the app's own glyph, so a screenshot and a mock always agree).
 - One typeface pairing per asset. No display fonts, no script, no pixel fonts, no meme Impact text.
 
 ---
@@ -392,14 +399,14 @@ Both are free (SIL OFL) and on Google Fonts. The fallback stack is `ui-sans-seri
 |---|---|---|---|
 | **Scope reticle** | The ring plus four ticks from the mark, at any scale | Frame the subject of a post (a wallet, a chip, a candle). Transition wipes. Huge and cropped in key art (stroke ≈ 2.4/32 of the diameter) | Gun sights, bullet holes or anything aimed at a person |
 | **Crosshair ticks** | The four ticks used alone as corner brackets ("target lock") | Mark the region of a screenshot that matters. Lock-on animation (§12) | Rotating them, or more than four |
-| **Curve progress** | The bonding-curve bar: a `panel-3` track with an amber fill that **turns green at 100%**. On cards, a progress ring around the token avatar that turns amber at ≥ 80% | Countdowns, teasers ("trailer: 80% bonded"), section dividers, a loading motif | Implying a token sale or "presale progress" |
+| **Curve progress** | The bonding-curve bar: a `panel-3` track with an amber fill that **turns green at 100%**. On cards, an amber progress ring around the token avatar that also turns green when full, and a % label that turns amber at ≥ 80% | Countdowns, teasers ("trailer: curve 80%"), section dividers, a loading motif | Implying a token sale or "presale progress". Avoid "bonded" next to "almost" (MNC-11) |
 | **Risk chips** | Pills with 6 px radius, Mono, an optional 10 px icon, label then value. **Healthy:** `up` text on up/10%. **Risky:** `down` text on down/15%. **Unknown:** `faint` text on `panel-3` showing `--`. **Tags:** tag colour on tag/12% | Hero elements in posts ("TOP 10 61%", "BUNDLER 12%", "DEV SOLD"). Rows of chips as texture | Chips without labels. Inventing chip types the app doesn't have |
 | **Terminal grid** | A 4 px base grid, 1 px `line` hairlines, and panels separated by tone steps (bg → panel → panel-2) | Layout skeleton for every static asset. Subtle 32/64 px grid backgrounds at 4–6% | Heavy borders, skeuomorphic bezels |
 | **Scanlines** | Horizontal 1–2 px lines at 3–6% opacity, with light grain and a slight vignette (CRT war-room feel) | Key art, trailer, teaser frames, headers | Over small text or chips, or above 8% opacity (it hurts legibility and compression) |
 | **The rising line** | The mark's rise-dip-breakout polyline, used as a stroke graphic | Sign-offs, dividers, a "way out of the trench" beat | Turning it into a rocket or a parabolic "100x" curve |
 | **SIM stamp** | `SIM · PAPER TRADING` in Mono 600 uppercase, amber 1.5 px outline, 6 px radius | Corner bug on all app footage (DIS-05), stamp on mock cards | Hiding it, shrinking it below the size in §13, or making it look optional |
 | **Radar sweep** | A conic amber sweep over concentric rings, with blips coloured by wallet tag (KOL purple, whale cyan, insider pink) | Teasers, the trailer, "smart money" content | Blips that imply real wallets or real addresses |
-| **`—` not `0%`** | The em dash as a brand symbol of honesty | Build-in-public posts, merch-tier jokes | — |
+| **`--` not `0%`** | The unknown glyph as a brand symbol of honesty. It is what the risk chips render (`components/common/indicators.tsx:32`) | Build-in-public posts, merch-tier jokes | Swapping in `—`: the app shows `--`, and CT will check |
 
 ---
 
@@ -473,7 +480,7 @@ dramatized movie-trailer still, [CAMERA: e.g. slow low-angle push-in, 40mm anamo
    - **The stamp.** `SIM · PAPER TRADING` pops in (140 ms) and stays.
    - **Logo reveal (~1.2 s).** The ring draws on (400 ms), the ticks slide in with a 40 ms stagger (200 ms), the chart line draws left to right (300 ms), and an amber glint crosses the ring (300 ms). It always ends on the intact mark.
 4. **Trailer grammar.** Hard cuts. Slow 2–4% push-ins over 3 s. Anamorphic flares. Bass-hit cuts. A hook in the first second. Burned-in captions (autoplay is muted). The end card holds at least **3 s** so the disclaimer can be read.
-5. **Product footage.** 1080p capture, no cursor jitter, a keyboard overlay for hotkey clips, the SIM bug on screen the whole time. Pause-on-hover and real fills, never sped-up fake pumps.
+5. **Product footage.** 1080p capture, no cursor jitter, a keyboard overlay for hotkey clips, the SIM bug on screen the whole time. Pause-on-hover and genuine sim fills at real speed, never sped-up or edited pumps. Blur sim KOL `@handles`, sim token socials and tickers in close-ups (ledger §7, items 4–6), and check the labels in frame: the app now reads "Near graduation" and "S1/S2/S3" (`components/discovery/TrenchesColumn.tsx:21`, `hooks/useSettings.ts:21-25`), so never use older footage that still shows "Almost bonded" or "P1/P2/P3" (ledger §7, item 3).
 6. **Safety.** **No more than 3 flashes per second** (WCAG 2.3.1) and no full-screen red strobes. Provide a calm cut. In-app motion respects `prefers-reduced-motion`.
 7. **Don't.** Spinning 3D coins, money rain, rocket trails, fake parabolic pumps, glitch effects over disclaimers, shaky-cam on UI.
 
@@ -516,7 +523,7 @@ The owner must check availability, and **pick once**: X publicly counts username
 | 4 | `@trenchscopehq` | 13 | Signals "official account" for impersonation defence |
 | 5 | `@trenchscopexyz` | 14 | Crypto-native suffix. Pairs with a possible .xyz domain |
 | 6 | `@trenchscope_sim` | 15 | Puts the honesty in the handle. Every reply says "sim" |
-| 7 | `@trenchscopeapp` | 14 | Clear and neutral. Survives a future non-sim mode |
+| 7 | `@trenchscopeapp` | 14 | Clear and neutral. Reads as a tool, not a coin |
 | 8 | `@scopethetrench` | 14 | Verb-first, on-voice. Echoes "scope it before you ape it" |
 | 9 | `@larpthetrench` | 13 | Owns the larp angle. Best for meme reach, weakest for brand recall |
 | 10 | `@thetrenchscope` | 14 | Brand name with an article. Clean fallback if 1–4 are taken |
@@ -530,38 +537,41 @@ The owner must check availability, and **pick once**: X publicly counts username
 | B3 | `the trenches, with a respawn button. paper-trade launches, migrations and dev sells on a simulated market. no real funds · no token · nfa` | 137 |
 | B4 | `paper trading is just larping with extra steps. we built the extra steps. simulated memecoin market · fake money · no token · nfa` | 129 |
 | B5 | `get rugged for free. a memecoin terminal where every coin, wallet and rug is simulated. paper trading only · no token · nfa` | 123 |
+| B6 | `the rugs feel real. the money isn't. paper-trade the trenches. simulated market · fake money · no token · nfa` | 109 |
 
-Recommended: **B1** for launch (it leads with the primary tagline and lists the cast). **B4** is the fallback if the account leans harder into the joke. No link in the bio during warm-up, and never a shortener.
+Recommended: **B1** for launch (it leads with the primary tagline and lists the cast). **B4** is the fallback if the account leans harder into the joke. **B6** carries DIS-01 word for word, if the owner wants the exact ledger text. No link in the bio during warm-up, and never a shortener.
 
 ### 14.3 Recurring content series
 
 | Series | Concept | Cadence |
 |---|---|---|
-| **spot the rug** | Two or three sim token cards with chips cropped or blurred: "one of these is bundled. which?" Reveal the chips in a self-reply 2–4 h later, with the mechanism explained | 2× a week in warm-up (from Wed Oct 21), then weekly |
-| **rug autopsy** | A 15–25 s sim replay of a launch dying: snipers in block 0, a bundler sell, the dev sell, the candles collapsing. Caption explains the tells. SIM bug on screen | Weekly (Fridays). 1–2× a week after launch |
-| **trench dictionary** | One term per card (bundler, insider, fresh wallet, CTO, migration) with its plain definition and how the sim tags it. A 4–6 post micro-thread once a week | 2–3 cards a week + 1 thread (Thursdays) |
-| **guess the fate** | Post a fresh sim launch at T+0: "graduates, rugs, or dies quietly? reply your call." Reveal with a replay later. Only a simulator can do this honestly, because the fate is scripted and the reveal is a replay | 2× a week from launch week |
-| **paper bag diaries** | Self-deprecating sim PnL confessions, losses as often as wins, with **SIMULATED · PAPER TRADE** burned in. "my paper bag got bundled. the faucet refilled it. growth." | Weekly (weekends) |
-| **shipped:** | Build-in-public changelog: a screenshot of a new chip, filter, hotkey or fix. "shipped: unknown now shows `—` instead of `0%`." Never name competitors | 1–2× a week (Mondays and Thursdays) |
+| **spot the rug** | Two or three sim token cards with chips cropped or blurred: "one of these is bundled. which one are you aping?" Reveal the chips in a hand-written self-reply 2–4 h later, with the mechanism (e.g. "4 wallets bought in the creation block. that's the bundle."). Tickers blurred, never cashtagged. DIS-02 on the post, DIS-11 in the reveal | 2× a week in warm-up (from Wed Oct 21), then weekly |
+| **rug autopsy** | A 15–25 s sim replay of a launch dying: bundlers in the creation block, snipers right behind, a bundler sell, the dev sell, the candles collapsing. Caption names the tells in the order they happened ("watch the bundlers leave before you do."). SIM bug on screen | Weekly (Fridays). 1–2× a week after launch |
+| **trench dictionary** | One term per card (bundler, insider, fresh wallet, CTO, migration) with its plain definition and how the sim tags it (§5). A 4–6 post micro-thread once a week | 2–3 cards a week + 1 thread (Thursdays) |
+| **guess the fate** | Post a fresh sim launch at T+0: "fresh sim launch. graduates, rugs, or dies quietly? call it." Reveal with the replay later. A simulator can do this honestly: the sim sets the fate and the reveal is a replay of what happened. No ticker in the copy. DIS-11 in the reply. A reply prompt only: never "like/RT to win" | 2× a week from launch week |
+| **paper bag diaries** | Self-deprecating sim PnL confessions from real sim sessions, losses included and never curated into a "strategy", with **SIMULATED · PAPER TRADE** burned in. "my paper bag got bundled. the faucet refilled it. growth." | Weekly (weekends) |
+| **shipped:** | Build-in-public changelog: a screenshot of a chip, filter, hotkey or fix **that actually merged this week**. Template: "shipped: [the change]. [why, in one line]." Never present an existing feature as new, never post a roadmap item, never name competitors | 1–2× a week (Mondays and Thursdays) |
 
-Space originals ≥ 2–3 h apart. Posts are link-free in warm-up, hand-written replies, and no series is ever "engage to win" (CT_PLAYBOOK §3.9, §4).
+Space originals ≥ 2–3 h apart. Posts are link-free in warm-up. Replies are hand-written, one at a time, never automated or reused. No series is ever "engage to win", and no follow-for-follow, pods, giveaways or bought engagement (MNC-22, CT_PLAYBOOK §3.9, §4).
 
 ### 14.4 Profile art specs
 
 - **Avatar.** `mark-tile-dark.png` → 400 × 400. Circle-crop safe as-is.
 - **Header.** 1500 × 500. Key art K1 or K3, graded to the palette. Optional small `larp the trenches.` in Inter 600 at 64–80 px, centre-right. Bottom-left ~400 × 200 kept dark for the avatar. No URL, no date during warm-up.
-- **Pinned post (warm-up).** Link-free. One line on what this is, plus a UI screenshot with the SIM bug.
+- **Pinned post (warm-up).** Link-free, and never edited to add a link. Use **PIN-A** from `marketing/x/PROFILE.md` §9.2 ("we built a fake memecoin market so you can get rugged for free.", 276 / 280) with `marketing/x/posts/screen-trenches.png` (SIM stamp burned in), then the FAQ self-replies from §9.4 (DIS-08 to DIS-11). Don't re-post PIN-A's lines as an original later (duplicate text).
 
 ---
 
 ## 15. Pre-flight checklist (every asset)
 
 - [ ] The voice passes the four pillars: honest, specific, funny without punching down, explains without advising.
-- [ ] Every claim maps to a ledger SC-xx. Every number is KS-xx (hedged) or SIM-xx ("in the sim").
+- [ ] Every claim maps to a ledger SC-xx. Every number is KS-xx (hedged: "~", a time window, "on major launchpads", source in the first reply) or SIM-xx ("in the sim"). No real stat and sim stat in one sentence unless the sim one is labelled.
 - [ ] Nothing from ledger §5 (MNC-xx) appears: no token, profit promise, traction, accuracy, "AI-powered", "first/only", competitor, real person.
 - [ ] Colours: one amber focal point. Green and red only for up and down. Every chip carries a label.
 - [ ] Type: Inter + JetBrains Mono, numbers in mono, nothing under 20 px on a 1080 canvas.
 - [ ] Logo: correct version for the background, clear space respected, unaltered.
 - [ ] Disclaimer: SIM bug on app footage, SIMULATED · PAPER TRADE in the pixels of any PnL, AI label on generated media.
 - [ ] AI art: no text, no real people, no real coin logos, no brands or insignia, no profit imagery.
-- [ ] X hygiene: no hashtags, no link in warm-up, no mass tags, no duplicate text.
+- [ ] X hygiene: no hashtags, no exclamation marks, no link in warm-up, no mass tags, no duplicate text, no cashtags.
+- [ ] Length: ≤ 280 as X counts it (§4.2), or marked long-form (Premium). The count includes the disclaimer line.
+- [ ] Organic only: no follow-for-follow, pods, follow/RT giveaways, bought engagement, automated or templated replies (MNC-22).

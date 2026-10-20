@@ -5,7 +5,7 @@
 | **For** | The owner, setting up the brand account **today, Tue 2026-10-20** (warm-up Oct 20–26, trailer + launch thread Tue Oct 27) |
 | **Placeholders** | `@trenchscope` (handle not yet confirmed) and `[LINK]` (no live URL exists) |
 | **Rules come from** | `marketing/research/CLAIMS_LEDGER.md` (what we may say; it wins any conflict), `marketing/research/CT_PLAYBOOK.md` (ranking, warm-up, spam triggers), `marketing/brand/BRAND_GUIDE.md` §13–14 (disclaimers, X kit) |
-| **Art goes in** | `marketing/x/profile/art/` as `avatar.png`, `header-main.png`, `header-alt.png` |
+| **Art lives in** | `marketing/x/profile/`: `avatar.png` and `header-alt.png` are **built** (by `marketing/tools/profile.py`); `header-main.png` goes here when the key art passes QA. (`profile/art/` is an empty leftover; ignore it) |
 | **Scheduler** | Metricool. A brand already exists (blogId `7078702`). Checked today through the Metricool connector: **no social network is connected yet** (see §11) |
 
 Character counts below are **X-weighted** (twitter-text v3 rules: `·` and `—` count as 1, emoji count as 2). Every post here is ≤ 280 so it shows in full without "Show more". Bios are checked against the 160-character limit.
@@ -21,8 +21,8 @@ Character counts below are **X-weighted** (twitter-text v3 rules: `·` and `—`
 | Bio | BIO-1 (150) | BIO-2 (129), BIO-3 (130) | §5 |
 | Location | `the trenches (simulated)` | `in the sim`, or blank | §6 |
 | Website | **Blank until launch day** | `[LINK]` on Oct 27 (own domain, no shortener) | §6 |
-| Avatar | `avatar` (scope mark tile, 400 × 400) | none | §7 |
-| Header | `header-main` (periscope key art) | `header-alt` (non-AI brand graphic; use it today if the key art isn't ready) | §7 |
+| Avatar | `avatar` (scope mark, 400 × 400, **built**) | none | §7 |
+| Header | `header-main` (periscope key art, not generated yet) | `header-alt` (non-AI brand graphic, **built**; use it today if the key art isn't ready) | §7 |
 | Pinned post | PIN-A + 2 FAQ self-replies, link-free, with `screen-trenches.png` | PIN-B | §9 |
 | Premium | Yes, **Premium** (not Basic), bought **after** the profile is complete | Verified Organization is an optional owner decision | §2 phase E |
 | Scheduling | Metricool, original posts only, never replies | none | §11 |
@@ -36,7 +36,7 @@ Character counts below are **X-weighted** (twitter-text v3 rules: `·` and `—`
 - [ ] **A password manager entry** with a unique 20+ character password.
 - [ ] **An authenticator app** (for 2FA) on the owner's phone.
 - [ ] **The owner's normal device and network.** No VPN, no hopping between locations. "About this account" shows country, VPN warnings, username-change count and how the app was installed.
-- [ ] **The art files**: `avatar.png` and one header (`header-main.png` or `header-alt.png`). See §7.
+- [ ] **The art files**: `marketing/x/profile/avatar.png` and one header (`marketing/x/profile/header-alt.png` today, or `header-main.png` once it exists). See §7.
 - [ ] **The chosen handle, display name and bio** (§3–§5), copied somewhere you can paste from.
 - [ ] **The pinned post image**: `marketing/x/posts/screen-trenches.png` (1600 × 900, has the `SIM · PAPER TRADING` stamp).
 
@@ -93,13 +93,13 @@ Use the full table in §8. The essentials:
 ### Phase E: Premium (10 min)
 
 - [ ] Subscribe to **Premium** (not Basic) from the web (Settings → Premium). It's usually cheaper on the web than through an app store, but check current pricing.
-- [ ] Why: Premium accounts seed X's credibility PageRank, and they reported a median of about 600 impressions per post against under 100 for free accounts (Buffer, correlational). Unverified accounts also get lower daily caps (CT_PLAYBOOK §3.7).
-- [ ] The checkmark appears **after a review** that can take days. Older help pages also listed eligibility rules such as minimum account age and a confirmed phone. Check X's current verification page, and don't change the photo, name or handle while the review is pending.
+- [ ] Why: in X's open-source ranker, Premium/verified accounts seed the credibility PageRank. Buffer's study of 18.8M posts found a median of ~600 impressions per post for Premium vs under 100 for free accounts (correlational: paying accounts differ). Unverified accounts also get lower daily caps (CT_PLAYBOOK §3.7).
+- [ ] The checkmark appears **after a review** that can take days. Older help pages also listed eligibility rules such as a minimum account age and a confirmed phone. Check X's current verification page, and **plan for the checkmark possibly not showing by Oct 27**: nothing in the launch plan depends on it. Don't change the photo, name or handle while the review is pending.
 - [ ] **Verified Organization** (gold check, square avatar) is optional and the owner's call. The tile avatar works as a circle and as a square.
 
 ### Phase F: Pinned post and FAQ (10 min, inside a posting window)
 
-- [ ] Post **PIN-A** (§9) with `screen-trenches.png` and its alt text, as the first original post of the account. Aim for **window B, 12:00–3:00 p.m. ET** today, or **window C, 8:00–10:30 p.m. ET** if setup runs late.
+- [ ] Post **PIN-A** (§9) with `screen-trenches.png` and its alt text. Aim for **window B, 12:00–3:00 p.m. ET** today, or **window C, 8:00–10:30 p.m. ET** if setup runs late. It can be the account's first original, or come ≥ 3 h after the low-key D1-P1 opener in `WARMUP_WEEK.md` (that calendar's order). Pick one order; either way, PIN-A goes up today.
 - [ ] Post **FAQ-1** as a reply to PIN-A, then **FAQ-2** as a reply to FAQ-1.
 - [ ] Pin PIN-A: **••• → Pin to your profile**.
 - [ ] Stay in the replies for **60 minutes**. Answer every real reply, in fresh words each time.
@@ -122,7 +122,7 @@ Use the full table in §8. The essentials:
 
 ### Not today (or ever)
 
-No links in posts, no hashtags, no follow-for-follow, no bulk following or unfollowing, no follow/unfollow tracker apps, no second account, no tagging KOLs or projects, no giveaways, no auto-replies or auto-likes, no handle changes, no VPN.
+No links in posts before launch day (on Oct 27, `[LINK]` goes only in the bio and the trailer's self-reply thread, per `LAUNCH_DAY.md`), no hashtags, no follow-for-follow, no bulk following or unfollowing, no follow/unfollow tracker apps, no second account, no tagging KOLs or projects, no giveaways, no auto-replies or auto-likes, no handle changes, no VPN.
 
 ---
 
@@ -208,19 +208,19 @@ If BIO-2 goes in the bio, don't also post "paper trading is just larping with ex
 
 ## 7. Profile art: assets to request
 
-Save the finished files to `marketing/x/profile/art/`. Run every file through the brand guide's pre-flight checklist (§15): one amber focal point, no AI glyphs, no real people, no coin logos.
+Finished files live in `marketing/x/profile/`. Run every file through the brand guide's pre-flight checklist (§15): one amber focal point, no AI glyphs, no real people, no coin logos.
 
 | Ref | Size | File | Format / limit | Status |
 |---|---|---|---|---|
-| `avatar` | 400 × 400 | `marketing/x/profile/art/avatar.png` | PNG, sRGB, under ~2 MB | Export from an existing master. Can be done now |
-| `header-main` | 1500 × 500 | `marketing/x/profile/art/header-main.png` | PNG or JPG, under ~5 MB | Needs AI key art (K1), then type added in post |
-| `header-alt` | 1500 × 500 | `marketing/x/profile/art/header-alt.png` | PNG, under ~5 MB | Pure brand graphic, no AI. Can be built now |
+| `avatar` | 400 × 400 | `marketing/x/profile/avatar.png` | PNG, sRGB, under ~2 MB | **Built** (66 KB), by `marketing/tools/profile.py` |
+| `header-main` | 1500 × 500 | `marketing/x/profile/header-main.png` | PNG or JPG, under ~5 MB | **Not generated yet.** Needs AI key art (K1), then type added in post |
+| `header-alt` | 1500 × 500 | `marketing/x/profile/header-alt.png` | PNG, under ~5 MB | **Built** (258 KB). Pure brand graphic, no AI, by `marketing/tools/profile.py` |
 
-### `avatar`: 400 × 400
+### `avatar`: 400 × 400 (built)
 
-- **Source:** `marketing/brand/logo/mark-tile-dark.svg` (the 1024 px PNG is in `marketing/brand/logo/png/mark-tile-dark.png`).
-- **What it is:** the scope mark. An amber `#FFB547` ring with four crosshair ticks at 12, 3, 6 and 9 o'clock, around a light `#E6E9F0` rising chart line, on the `#0D1016` rounded tile.
-- **Export:** flatten onto a **full-bleed `#0A0C10` square** (no transparent corners), so it looks right as a circle (Premium) and as a rounded square (a Verified Organization). The tile's corners sit outside X's circle crop, and the ticks reach 78% of the half-width, so the mark survives the crop.
+- **Source:** `marketing/brand/logo/mark-dark.svg`, rendered by `marketing/tools/profile.py`.
+- **What it is:** the scope mark. An amber `#FFB547` ring with four crosshair ticks at 12, 3, 6 and 9 o'clock, around a light `#E6E9F0` rising chart line, with a soft amber glow.
+- **As built:** a **full-bleed `#0A0C10` square** (no transparent corners, no rounded tile), so it looks right as a circle (Premium) and as a rounded square (a Verified Organization). The ticks reach about 80% of the half-width, so the whole mark survives X's circle crop.
 - **Text:** none. Never add a coin, ticker or chain logo inside the reticle.
 
 ### `header-main`: 1500 × 500 (warm-up and launch header)
@@ -245,15 +245,16 @@ text, letters, words, numbers, typography, watermark, signature, logo, brand, UI
 
 Reject the frame for any hallucinated glyph, a recognizable face, a real logo, insignia, or anything that reads as real combat footage.
 
-### `header-alt`: 1500 × 500 (fallback for today and the post-launch refresh)
+### `header-alt`: 1500 × 500 (built; fallback for today and the post-launch refresh)
 
-- **Concept: "The cast."** No AI. Built in Figma, Canva or HTML from brand parts, so it can go live **today** if `header-main` isn't ready.
-- **Background:** `#0A0C10` with a 64 px terminal grid of 1 px `#222731` lines at about 5% opacity. A huge, cropped **scope reticle** (amber ring plus four ticks, stroke ratio 2.4/32 of the diameter) bleeds off the right edge at about 25% opacity. An amber radial flare (`#FFB547`, at most 35% alpha) sits behind the headline. Scanlines at 3%.
-- **Headline** (Inter SemiBold 600, 64–72 px, `#E6E9F0`): `see who's really buying.`
-- **Subtext** (JetBrains Mono 600, 20 px, `#8C94A3`): `with fake money. simulated market · paper trading · no token`
-- **Chip row** (JetBrains Mono 600, 20–22 px, uppercase, 6 px radius, tag colour text on that colour at 12%). **Labels only, no numbers**: `SMART MONEY` `#4ADE80` · `KOL` `#C084FC` · `DEV` `#FB923C` · `SNIPER` `#F87171` · `INSIDER` `#F472B6` · `BUNDLER` `#FACC15` · `WHALE` `#38BDF8` · `FRESH` `#2DD4BF` · `BOT` `#94A3B8`.
-- **Stamp**: `SIM · PAPER TRADING` (JetBrains Mono 600, amber 1.5 px outline pill), top-right, inside the safe zone.
-- **Layout:** the same safe zone as `header-main`. Bottom-left 400 × 200 empty and dark. Headline, subtext and chips stacked centre-right.
+- **Concept: "The cast."** No AI. Built in HTML from brand parts (`marketing/tools/profile.py`), so it can go live **today** if `header-main` isn't ready.
+- **Background:** `#0A0C10` with a 64 px terminal grid of faint 1 px lines. A huge, cropped **scope reticle** (amber ring plus four ticks) bleeds off the **left** edge at about 11% opacity, behind the avatar zone. An amber radial flare sits behind the headline. Scanlines at 3%.
+- **Headline** (Inter SemiBold 600, 70 px, `#E6E9F0`, "really" in amber): `see who's really buying.`
+- **Subtext** (JetBrains Mono 600, 19 px, `#8C94A3`): `with fake money. simulated market · paper trading · no token`
+- **Chip row** (JetBrains Mono 600, 15 px, uppercase, 6 px radius, tag colour text on that colour at 12%). **Labels only, no numbers**: `SMART MONEY` `#4ADE80` · `KOL` `#C084FC` · `DEV` `#FB923C` · `SNIPER` `#F87171` · `INSIDER` `#F472B6` · `BUNDLER` `#FACC15` · `WHALE` `#38BDF8` · `FRESH` `#2DD4BF` · `BOT` `#94A3B8`.
+- **Stamp**: `SIM · PAPER TRADING` (JetBrains Mono 600, 15 px, amber 1.5 px outline pill), top-right, inside the safe zone.
+- **Layout:** the same safe zone as `header-main`. Bottom-left 400 × 200 dark (only the faint reticle). Headline, subtext and chips stacked centre-right.
+- **QA note:** on a phone the header renders ~390 px wide, so the 15 px chips, stamp and 19 px subtext shrink to roughly 4–5 px and won't be readable. That's acceptable because the bio and display name carry the disclosure, but if the header is re-rendered, take the chips and stamp up to 20–22 px and the subtext to 22 px.
 
 **Swap plan:** use `header-main` from day 0 if it's ready, otherwise `header-alt` today and switch to `header-main` when it passes QA. Keep `header-alt` for the post-launch refresh. Header swaps don't affect verification. Avatar, display name and handle changes do.
 
@@ -261,7 +262,7 @@ Reject the frame for any hallucinated glyph, a recognizable face, a real logo, i
 
 ## 8. Settings reference
 
-Paths are as of Oct 2026. If a name differs, search for it in Settings.
+Paths are best-known, not checked live today, and X renames menus often. If a name differs, search for it in Settings.
 
 | Area | Path (Settings and privacy → …) | Set to | Why |
 |---|---|---|---|
@@ -296,36 +297,36 @@ Paths are as of Oct 2026. If a name differs, search for it in Settings.
 | From → to | Pinned | Notes |
 |---|---|---|
 | **Tue Oct 20 → Tue Oct 27, 10:00 a.m. ET** | **PIN-A** with FAQ-1 and FAQ-2 as self-replies | Link-free. **Never** add a link to it, including by editing it |
-| **Tue Oct 27, 10:00 a.m. ET → about Nov 10** | **The trailer post** | The trailer post stays link-free. `[LINK]` goes in its **first self-reply**, and the trailer caption carries DIS-07. Add a fresh FAQ reply to that thread, worded differently from FAQ-1 |
+| **Tue Oct 27, 10:00 a.m. ET → about Nov 10** | **The trailer post** | The trailer post stays link-free. `[LINK]` goes in its **self-reply thread** (T1 first, then T9 and T10 per `LAUNCH_DAY.md`), never in the caption, and the trailer caption carries DIS-07. Add a fresh FAQ reply to that thread, worded differently from FAQ-1 |
 | After about Nov 10 | Re-evaluate | Keep the trailer, or re-pin the best evergreen explainer from analytics |
 
 Optional (Premium): add PIN-A and the best warm-up posts to the profile **Highlights** tab.
 
 ### 9.2 PIN-A (recommended): "what is this", link-free
 
-**272 / 280**
+**276 / 280**. The first line is the hook and works alone: it's the joke, the product and the disclosure in one sentence.
 
 ```text
-this is trenchscope: a memecoin trading terminal on a simulated market.
+we built a fake memecoin market so you can get rugged for free.
 
-launches, migrations, rugs. snipers, bundlers, insiders, the dev. all fake, all labelled.
+trenchscope is the terminal on top of it. snipers, bundlers, insiders, the dev: all on the card.
 
-paper-trade it. get rugged for free. hit the faucet.
+50 paper sol to start. lose it, hit the faucet, go again.
 
 no wallet. no token.
 
 sim market · paper trading · nfa
 ```
 
-- **Image:** `marketing/x/posts/screen-trenches.png` (1600 × 900, 16:9). The Trenches board with "near graduation" as the middle column, a highlighted "risk chips on every card" row, the `SIM · PAPER TRADING` stamp and the Trenchscope lockup.
-- **Alt text** (354 / 1000):
+- **Image:** `marketing/x/posts/screen-trenches.png` (1600 × 900, 16:9). The Trenches board with "Near graduation" as the middle column, a highlighted "risk chips on every card" row, the `SIM · PAPER TRADING` stamp and the Trenchscope lockup.
+- **Alt text** (410 / 1000):
 
 ```text
-Trenchscope's Trenches board on a simulated market: three columns (new, near graduation, migrated) of fictional memecoin launches. Each card shows market cap, volume and colour-coded risk chips; one row is highlighted with the caption 'risk chips on every card'. A 'SIM · PAPER TRADING' stamp sits in the top-right corner. All tokens shown are fictional.
+Trenchscope's Trenches board on a simulated market: three columns (new, near graduation, migrated) of fictional memecoin launches. Each card shows market cap, volume and colour-coded risk chips; one row is highlighted with the caption 'risk chips on every card'. A 'SIM · PAPER TRADING' stamp sits in the top-right corner and the footer reads 'Simulated market · paper trading'. All tokens shown are fictional.
 ```
 
-- **Claims check:** simulated market and paper trading (SC-01, SC-04); wallet labels (SC-19); faucet (SC-03); no token (SC-35); disclaimer DIS-02 at the end; DIS-11 in FAQ-2 because the image shows sim tokens.
-- **Image QA note:** the screenshot's sub-header reads "Live launchpad tokens on Solana", and the top bar has a "+ Deposit" pill (the faucet). Both are small, and the SIM stamp and the footer's "Simulated market · paper trading" are in frame, so the image is usable. Before recording hero footage, ask the owner to change those in-app strings (e.g. "Simulated launches · Solana (sim)" and "Faucet"), because "deposit" is on the ledger's never-say list (MNC-01).
+- **Claims check:** fake/simulated market and paper trading (SC-01, SC-04); snipers, bundlers, insiders and dev on every card (SC-09, SC-19, ledger line "all on the card"); 50 paper SOL on sign-up (SC-02); faucet (SC-03); no wallet (SC-01, SC-37); no token (SC-35); disclaimer DIS-02 at the end; DIS-11 in FAQ-2 because the image shows sim tokens. No cashtags, no sim tickers in the copy.
+- **Image QA note:** the top-bar button already reads "+ Faucet" (renamed in-app, commit `fb440a5`) and the middle column reads "Near graduation", so neither ledger problem (MNC-01 "deposit", MNC-11 "Almost bonded") is in this frame. Still in frame and worth knowing: the sub-header "Live launchpad tokens on Solana", a "Live" pill, simulated SOL/BNB/ETH prices and "24.2 trades/s" in the footer, and the "50 SOL" paper balance. The SIM stamp and the footer notice cover them, so the image is usable. **Never quote the footer's trades/s or prices** as real activity (MNC-05, ledger §7.7). Before recording hero footage, ask the owner to change the sub-header (e.g. "Simulated launches · Solana (sim)").
 
 ### 9.3 PIN-B (alternate): the larp confession
 
@@ -343,17 +344,17 @@ sim market · paper trading · nfa
 
 ### 9.4 FAQ self-replies (post right after the pinned post, as a thread)
 
-**FAQ-1**: reply to PIN-A. Carries DIS-08 and DIS-09 verbatim. **223 / 280**
+**FAQ-1**: reply to PIN-A. Carries DIS-08 and DIS-09 verbatim, under a native "wen token" lead-in. **230 / 280**
 
 ```text
-faq, before anyone asks:
+before anyone asks "wen token":
 
 there is no trenchscope token. no airdrop, no presale, no points-to-token. anyone selling you one is scamming you.
 
 we never dm first and never ask for keys or a wallet. there's nothing to connect.
 ```
 
-**FAQ-2**: reply to FAQ-1. Carries DIS-11 and DIS-10. **218 / 280**
+**FAQ-2**: reply to FAQ-1. Carries DIS-11 and DIS-10. **230 / 280**. The last line names both places `[LINK]` will appear on Oct 27 (the bio's website field and the pinned trailer's self-reply thread), so any link anywhere else reads as a scam.
 
 ```text
 also:
@@ -361,7 +362,7 @@ also:
 all tokens, wallets and kols shown are fictional sim entities.
 not affiliated with any chain, launchpad or trading platform.
 
-no link yet. when there is one, it'll be in the pinned post's replies. never in a dm.
+no link yet. when there is one, it'll be in the bio and the pinned post's replies. never in a dm.
 ```
 
 **Answering "wen token" or "where's the link" later:** point people to the pinned FAQ and **write each reply fresh**. Pasting the same reply twice gets clustered as `COPYPASTA_SPAM` (CT_PLAYBOOK §3.4).
@@ -370,7 +371,7 @@ no link yet. when there is one, it'll be in the pinned post's replies. never in 
 
 ## 10. The first 50 follows, by category
 
-**Goal:** 50 hand-picked follows over days 1–3 that (a) teach X's recommender that this is a crypto, memes and trading-tools account, (b) fill the home feed with posts worth replying to, and (c) start real two-way relationships. Mutual replies carry a +15 weight (CT_PLAYBOOK §3.2). Stay under about 200 following by launch.
+**Goal:** 50 hand-picked follows over days 1–3 that (a) teach X's recommender that this is a crypto, memes and trading-tools account, (b) fill the home feed with posts worth replying to, and (c) start real two-way relationships. In X's open-source ranker a reply between mutuals is weighted 20 instead of 5 (a +15 boost, CT_PLAYBOOK §3.2), so real mutuals matter. Stay under about 200 following by launch.
 
 ### 10.1 The mix
 
@@ -465,5 +466,5 @@ Follow only if **all** of these hold:
 3. **Approve Premium** on day 0. Decide on a Verified Organization (optional).
 4. **Connect X in Metricool** (§11.1). Decide whether a Metricool plan upgrade is needed.
 5. **Confirm who operates the account daily** Oct 20–27. Replies must be written by a human.
-6. **Rename in-app strings** before hero footage: "Live launchpad tokens on Solana" and "+ Deposit" (see §9.2), plus "Almost bonded" and "P1/P2/P3" anywhere they remain (CLAIMS_LEDGER §7).
+6. **Rename in-app strings** before hero footage. Already done: "+ Deposit" → "Faucet" and "Almost bonded" → "Near graduation". Still to do: the Trenches sub-header "Live launchpad tokens on {chain}" (`apps/web/src/pages/TrenchesPage.tsx:186`, see §9.2) and the "P1/P2/P3" preset labels (`components/token/trade/PresetBar.tsx`, `components/account/FormBits.tsx`, `components/account/settings/model.ts`; CLAIMS_LEDGER §7).
 7. **Pick the domain** for `[LINK]` so the bio link and handle match on Oct 27.

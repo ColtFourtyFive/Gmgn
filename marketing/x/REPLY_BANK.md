@@ -4,7 +4,7 @@
 |---|---|
 | **For** | Whoever runs the brand account, from day 1 of warm-up (Tue Oct 20) onward. This file is for **replies and filler originals**. The scheduled posts live in `WARMUP_WEEK.md` and `LAUNCH_DAY.md`. |
 | **What's inside** | 40 reply templates in 8 situations · 30 standalone one-liners · 12 polls · 10 meme-card formats with an asset list (`meme-1` … `meme-10`) |
-| **Rules come from** | `marketing/research/CLAIMS_LEDGER.md` (wins any conflict), `marketing/research/CT_PLAYBOOK.md`, `marketing/brand/BRAND_GUIDE.md` §4–5 |
+| **Rules come from** | `marketing/research/CLAIMS_LEDGER.md` (wins any conflict), `marketing/research/CT_PLAYBOOK.md`, `marketing/brand/BRAND_GUIDE.md` §4–5. On daily product-mention caps during warm-up, a stricter `WARMUP_WEEK.md` day note wins |
 | **Placeholders** | `@trenchscope` (handle not confirmed) and `[LINK]` (no live URL). Nothing in this bank needs a link. |
 | **Character counts** | X-weighted (twitter-text v3: `·`, `—` and `–` count as 1, arrows and emoji as 2). Text inside `{braces}` is a **slot**: it must change every time, and the words inside are a working default. Counts are for the default with the braces removed. |
 
@@ -12,7 +12,7 @@
 
 | Tag | Meaning |
 |---|---|
-| **[TS]** | Mentions Trenchscope or our sim. 8 of the 40 replies (1 in 5). Only use when the post asks for it (see §1.2) |
+| **[TS]** | Mentions Trenchscope or our sim. 8 of the 40 replies (1 in 5). Each one has a **Trigger**: a question in the post or thread that it answers. No question, no [TS] (§1.2) |
 | **[stat]** | Real-market number. Keep the "~" and the time window, and have the source line ready (DIS-03) |
 | **[truth]** | Describes something the operator must actually do in the app first. Do it, or don't post it |
 | **DIS-02** | Ends with `sim market · paper trading · nfa`, because it names a feature or shows an app number |
@@ -57,11 +57,13 @@ These matter more than any single line in this file. One spam label can cost mor
 | Dates | Max [TS] replies under other people's posts | Conditions |
 |---|---|---|
 | **Tue Oct 20** (day 1) | **0** | Day 1 has no product mention at all (`WARMUP_WEEK.md` Day 1) |
-| **Wed Oct 21 – Mon Oct 26** | **1 a day** | Only when someone asks directly ("what do you use?", "how do i practice this?"). No link: say "pinned post" |
+| **Wed Oct 21 – Mon Oct 26** | **1 a day**, except **0 on Sat Oct 24** and **2 on Fri Oct 23** (counting any "the clip is on our profile" line), per the `WARMUP_WEEK.md` day notes | Only when someone asks directly ("what do you use?", "how do i practice this?"). No link: say "pinned post" |
 | **Tue Oct 27** (launch) | Under our own launch posts, answer everything (use the `LAUNCH_DAY.md` §9.1 answer kit). Under other people's posts, **at most 1 in 5** | A link only to someone who asked for it |
 | **From Wed Oct 28** | **At most 1 in 5 replies, and at most 5 a day** | Never two [TS] replies to the same account in one week |
 
-Never post a [TS] reply under an account above ~250k followers (an LLM scores reply quality there), under someone's real-money loss, or under a post that isn't asking a question.
+**Every [TS] reply needs a question in the post or thread that it directly answers**, at every stage, including after launch. Each [TS] template below names its **Trigger**. A matching topic is not a trigger: a dev-sold post with no question gets R16–R19, not R20. An unprompted plug under someone else's post is the reply-spam pattern X's classifiers are built to catch.
+
+Never post a [TS] reply under an account above ~250k followers (an LLM scores reply quality there) or under someone's real-money loss, even if they asked.
 
 ### 1.3 Big accounts: how not to reply-spam them
 
@@ -87,7 +89,7 @@ Never post a [TS] reply under an account above ~250k followers (an LLM scores re
 Skeleton R01 (§2.1):
 
 ```text
-{rough.} the cheapest tell on most of these is the launch block: if the first {30} buyers all got funded by the same wallet, the chart was decided before you ever saw it.
+{rough.} cheapest tell on these is the launch block. if the first {30} buyers were all funded by the same wallet, the chart was decided before you ever saw it.
 ```
 
 Under a post that says *"bought at 40k mc, dead 6 min later"*, one honest rewrite (example only, don't paste):
@@ -116,16 +118,16 @@ Same idea, different opener, different detail, different sentence shapes. That's
 
 ## 2. Reply templates (40)
 
-Five per situation. The **[TS]** one in each group is the exception, not the default. The "gm" group has none, and the terminal-rec group has two because the question invites it.
+Five per situation. The **[TS]** one in each group is the exception, not the default, and it only fires on its **Trigger**. The "gm" group has none, and the terminal-rec group has two because the question invites it.
 
 ### 2.1 Someone got rugged
 
 **Read the room.** Empathy first. Never sound like "you should have checked". Never ask for the coin's name or CA. If the loss sounds serious (rent, savings), skip R04 and R05. Openers to rotate: `rough.` · `brutal.` · `oof, sorry.` · `been there.` · `that one stings.` · `classic, and still awful.`
 
-**R01 · the launch-block tell** · `166/280`
+**R01 · the launch-block tell** · `155/280`
 
 ```text
-{rough.} the cheapest tell on most of these is the launch block: if the first {30} buyers all got funded by the same wallet, the chart was decided before you ever saw it.
+{rough.} cheapest tell on these is the launch block. if the first {30} buyers were all funded by the same wallet, the chart was decided before you ever saw it.
 ```
 
 Use when they post the chart or the timeline. Swap the slot for their detail (their minute, their entry). Claims: general mechanism (SC-21 describes how our sim tags it, but this reply doesn't mention the sim).
@@ -138,31 +140,31 @@ Use when they post the chart or the timeline. Swap the slot for their detail (th
 
 A question gets a reply back, and a reply back is the strongest signal there is. Answer their answer.
 
-**R03 · it was a slow rug** · `212/280`
+**R03 · how a slow rug looks** · `205/280`
 
 ```text
-{that shape is a slow rug.} nobody pulls the pool, they just sell in small pieces every few minutes so it reads as a dip. the trade list gives it away before the chart does: same wallets, similar sizes, on a timer.
+{if it's the slow kind:} nobody pulls the pool. someone sells small pieces every few minutes so it reads as a dip. the trade list gives it away before the chart does: same wallets, similar sizes, on a timer.
 ```
 
-Only when the chart really is a slow bleed (hours, not one candle).
+Only when the chart really is a slow bleed (hours, not one candle). The opener stays conditional (`if it's the slow kind:` · `if that's a slow bleed:`): describe the mechanism, never label their coin a rug (rule 9).
 
-**R04 · gallows humour** · `138/280`
+**R04 · gallows humour** · `160/280`
 
 ```text
-{pouring one out.} every trench veteran has a coin they don't say out loud anymore. {ours had a roadmap with five phases and a dev with zero.}
+{pouring one out.} every trench veteran has a coin they don't say out loud anymore. {usually the one with a five-phase roadmap and a dev who left during phase one.}
 ```
 
 Only for small or joking losses, when the poster is laughing too. Never under a serious loss.
 
-**R05 · [TS] reps without the bill** · `225/280`
+**R05 · [TS] reps without the bill** · `218/280`
 
 ```text
-{if you want reps at spotting this without paying for them:} we run a simulated trench where every dev, bundler and rug is fake, and the wallets come labelled. paper money, no wallet, no token.
+{want the reps without paying tuition?} we built a fake trench for exactly this: fake devs, fake bundlers, scripted rugs, and the wallets come labelled. paper money, no wallet, no token.
 
 sim market · paper trading · nfa
 ```
 
-Only if they (or someone in the thread) ask "how do people spot this?" Never under a raw loss post. Claims: SC-01, SC-04, SC-19. DIS-02.
+**Trigger:** the poster or someone in the thread asks "how do people spot this?" or "how do i practice this?". Never under a raw loss post. Claims: SC-01, SC-04, SC-19, SIM-01 ("scripted"). DIS-02.
 
 ### 2.2 Someone posts a huge win
 
@@ -182,42 +184,42 @@ Only if they (or someone in the thread) ask "how do people spot this?" Never und
 
 A question, not advice. Don't follow up with what they "should" have done.
 
-**R08 · the graveyard joke** · `106/280`
+**R08 · the graveyard joke** · `120/280`
 
 ```text
-{well played.} this is the trade that makes everyone forget all the ones that went quiet. enjoy it properly.
+{well played.} one trade like this and the whole graveyard of coins that went quiet suddenly counts as research. enjoy it.
 ```
 
-**R09 · the trenches aren't dead** · `147/280`
+**R09 · the trenches aren't dead** · `145/280`
 
 ```text
-{respect.} saving this for the next person who says the trenches are dead. they're not dead, they're just very picky about who gets out in one piece.
+{respect.} saving this for the next person who says the trenches are dead. they're not dead. they're just very picky about who leaves in one piece.
 ```
 
-**R10 · [TS] [truth] the self-own** · `180/280`
+**R10 · [TS] [truth] the self-own** · `195/280`
 
 ```text
-{congrats.} our best trade this week was a paper buy that got sandwiched by our own sim's bot because we left anti-mev off. you're winning this one.
+{congrats. ours this week:} a paper buy that got sandwiched by a bot in our own simulator because we left anti-mev off. fake money, real shame. you win this round.
 
 sim market · paper trading · nfa
 ```
 
-Truth check: actually take a large paper buy on a migrated pool with anti-MEV off and get the MEV loss in the fill toast (FB-10) before you use it. Only under friendly, mid-size accounts. Claims: SC-13. DIS-02.
+**Trigger:** the poster asks back, e.g. "what was your best trade this week?" or "how's everyone's week going?". Never as an unprompted reply to a win. Truth check: actually take a large paper buy on a migrated pool with anti-MEV off and get the MEV loss in the fill toast (FB-10) that week before you use it (`screens/launch/mev-toast.png` shows one from Oct 20). Only under friendly, mid-size accounts. Claims: SC-13. DIS-02.
 
 ### 2.3 Someone asks for a terminal rec
 
 **Read the room.** Never name, rank or dunk on any terminal, bot or launchpad, including ones other repliers suggest (MNC-10). Give criteria they can apply to anything. Use **[TS]** only when the question is open ("what should I use?"), once per thread, and always say it's a paper-trading sim, not a place to trade real money.
 
-**R11 · four things to check** · `223/280`
+**R11 · four things to check** · `210/280`
 
 ```text
-whatever you end up using, check four things first: does it show the full cost before you click, does it label wallets (dev, snipers, bundlers), does it show the dev's past launches, and does it say "unknown" instead of 0%.
+whatever you pick, check four things: full cost shown before you click, wallets labelled (dev, snipers, bundlers), the dev's past launches easy to find, and a warning before you buy something flagged high-risk.
 ```
 
-**R12 · habit beats tool** · `184/280`
+**R12 · habit beats tool** · `157/280`
 
 ```text
-{honestly} the tool matters less than the order you look at things in: holders first, chart second, buy button last. whichever terminal makes that order easiest is the right one for you.
+{honestly} the tool matters less than the order: holders first, chart second, buy button last. whichever one makes that order easiest is the right one for you.
 ```
 
 **R13 · the fee test** · `194/280`
@@ -228,25 +230,25 @@ one test for any rec you get: ask what a {0.5 sol} trade costs all in. platform 
 
 Never put a fee figure for a named product in the reply (KS-11 is our own arithmetic, not a measured stat).
 
-**R14 · [TS] the biased answer** · `266/280`
+**R14 · [TS] the biased answer** · `229/280`
 
 ```text
-biased answer, since we're building one: ours is a paper-trading terminal on a simulated market, with dev, sniper, bundler and insider labels and the full cost shown before you click. it's for practice, not real trades. pinned post.
+biased answer, we're building one: a paper-trading terminal on a simulated market. dev, sniper, bundler and insider labels, full cost before you click. for practice, not real trades. pinned post.
 
 sim market · paper trading · nfa
 ```
 
-Before launch, "pinned post" points to the "what is this" post. After launch, the link is in the pinned post's replies. Paste `[LINK]` only if they reply asking for it. Claims: SC-01, SC-11, SC-19. DIS-02.
+**Trigger:** an open "what should i use?" question, once per thread. Before launch, "pinned post" points to the "what is this" post. After launch, the link is in the pinned post's replies. Paste `[LINK]` only if they reply asking for it. Claims: SC-01, SC-11, SC-19. DIS-02.
 
-**R15 · [TS] for someone brand new** · `231/280`
+**R15 · [TS] for someone brand new** · `222/280`
 
 ```text
-if you're brand new: most people's first lessons in the trenches cost real money. we're building the version where they cost fake money, a simulated market with paper balances. no wallet, no token.
+if you're brand new: most people's first trench lessons cost real money. we're building the version where they cost fake money: a simulated market with paper balances. no wallet, no token.
 
 sim market · paper trading · nfa
 ```
 
-Only when the poster says they're new. It offers practice, not outcomes: never add "so you'll be ready" or "learn to win" (MNC-19). Claims: SC-01, SC-02, SC-35. DIS-02.
+**Trigger:** the poster says they're new and asks where to start or what to use. It offers practice, not outcomes: never add "so you'll be ready" or "learn to win" (MNC-19). Claims: SC-01, SC-02, SC-35. DIS-02.
 
 ### 2.4 Dev-sold drama
 
@@ -261,10 +263,10 @@ a dev selling isn't automatically a rug. what matters is when and how much: dump
 **R17 · the résumé** · `195/280`
 
 ```text
-worth pulling up the wallet's history: how many coins it launched before this one and how many ever made it off the curve. a long list with nothing migrated isn't bad luck, it's a business model.
+worth pulling up the wallet's history: how many coins it launched before this one, how many ever left the curve. 20 launches, 0 migrations doesn't prove anything. it's just a very specific hobby.
 ```
 
-General advice on what to look at. Never post the history of a real dev wallet yourself.
+General advice on what to look at. Most launches never graduate (KS-01), so a long list with nothing migrated is volume, not proof of intent: the joke says so instead of calling the dev a scammer. Never post the history of a real dev wallet yourself.
 
 **R18 · character arc** · `75/280`
 
@@ -272,21 +274,21 @@ General advice on what to look at. Never post the history of a real dev wallet y
 "dev is based" to "dev sold" is still the fastest character arc in fiction.
 ```
 
-**R19 · the scarier dev** · `209/280`
+**R19 · the scarier dev** · `191/280`
 
 ```text
-unpopular take: a dev who already sold everything can't dump that bag twice. the one to worry about is the dev still sitting on a big chunk who stopped posting. (the other wallets are a separate conversation.)
+unpopular take: a dev who sold everything can't dump that bag twice. the scarier one is still sitting on a big chunk and stopped posting. (their friends' wallets are a separate conversation.)
 ```
 
-**R20 · [TS] the dev-sell exit** · `227/280`
+**R20 · [TS] the dev-sell exit** · `194/280`
 
 ```text
-this exact moment is why our sim has a "dev sell" signal and an exit that sells when the dev does. on paper you get to find out whether it fires fast enough, which is the cheap way to find out.
+this exact moment is why our sim has a dev-sell signal and a sell-on-dev-sell exit. whether it fires fast enough, you find out on paper first. cheaper that way.
 
 sim market · paper trading · nfa
 ```
 
-Never claim it gets you out in time: fills have 120–600 ms of simulated latency (SC-13). Claims: SC-14, SC-18. DIS-02.
+**Trigger:** someone asks "is there a way to auto-sell when the dev sells?" or "how do you get out before the dev?". Never claim it gets you out in time: fills have 120–600 ms of simulated latency (SC-13). Claims: SC-14, SC-18. DIS-02.
 
 ### 2.5 Bundler drama
 
@@ -315,8 +317,10 @@ every "stealth launch" somehow has {30} wallets that heard about it in the same 
 **R24 · funding trail or timing?** · `161/280`
 
 ```text
-{good catch.} was it the funding trail or just the same-block timing? timing alone can be snipers racing each other. shared funders are what turn it into a bundle.
+{good catch.} was it the funding trail or just same-block timing? timing alone can be snipers racing each other. a shared funder is what makes it look coordinated.
 ```
+
+(Not "shared funders make it a bundle": our own sim tags any creation-block buyer other than the dev as a bundler, R25, so don't define it two ways.)
 
 **R25 · [TS] how the sim tags it** · `213/280`
 
@@ -326,7 +330,7 @@ in our sim, a wallet that buys in the creation block gets a bundler tag, and the
 sim market · paper trading · nfa
 ```
 
-Claims: SC-09, SC-21. Say "tags", never "detects". DIS-02.
+**Trigger:** someone asks how to spot a bundled launch, or which tool shows bundles. Claims: SC-09, SC-21 (`analytics/tokens/track.ts`: a non-creator buy in the creation block = bundler). Say "tags", never "detects". DIS-02.
 
 ### 2.6 "gm"
 
@@ -384,23 +388,23 @@ nobody's a genius on a red day, which makes it the most honest day of the week i
 green days are when everyone's early and nobody checks who was earlier.
 ```
 
-**R34 · [stat] green day: the footnote** · `166/280`
+**R34 · [stat] green day: the footnote** · `191/280`
 
 ```text
-enjoy it. sobering footnote: in one major launchpad's data, ~73% of graduates were down 60%+ from their migration price within 20 minutes. the curve is the easy part.
+enjoy it. sobering footnote: in one major launchpad's data (secondary, approximate), ~73% of graduates were down 60%+ from their migration price within 20 minutes. the curve is the easy part.
 ```
 
-KS-02, hedged. If anyone asks for the source, reply in fresh words with the meaning of: `source: launchpad lifecycle data (secondary), one launchpad, sample window not published. approximate.` Use it at most once a week, and never in the 48 h after a post that used the same stat (D7-P2 on Oct 26).
+KS-02, hedged, with the DIS-03 source note inline, because a second self-reply in someone else's thread breaks the one-reply-per-thread rule (§1.3). If anyone asks for more, reply in fresh words with the meaning of: `source: launchpad lifecycle data (secondary), one launchpad, sample window not published. approximate.` **Verify first** (ledger §4.1): if D7-P2 had to be swapped for its fallback because the stat couldn't be verified, R34 is off too. Use it at most once a week, and never in the 48 h after a post that used the same stat (D7-P2 on Oct 26).
 
-**R35 · [TS] red day plan** · `194/280`
+**R35 · [TS] red day plan** · `175/280`
 
 ```text
-red day plan: get rugged on paper instead. our simulated trench keeps launching, migrating and rugging coins with fake money, whatever the real market is doing.
+red day plan: get rugged on paper instead. our sim trench keeps launching, migrating and rugging fake coins whatever the real chart is doing.
 
 sim market · paper trading · nfa
 ```
 
-Claims: SC-01, SC-04. DIS-02.
+**Trigger:** someone asks "what are you doing today?" or "how are you spending the dump?". Claims: SC-01, SC-04. DIS-02.
 
 ### 2.8 New launchpad meta
 
@@ -432,15 +436,15 @@ Swap `sol` for the chain's native coin.
 new meta, same lifecycle: launch, snipers, bundles, the dev's first sell, and a lot of coins that just go quiet. the mascot's new. the chart shape isn't.
 ```
 
-**R40 · [TS] 8 fake launchpads** · `200/280`
+**R40 · [TS] 8 fake launchpads** · `195/280`
 
 ```text
-our sim runs 8 made-up launchpads across 4 fake chains. the names are invented. we scripted bundlers into every one of them anyway, because that's the realistic part.
+our sim runs 8 made-up launchpads across 4 simulated chains. every name is invented. we still gave every one of them bundlers, because that's the realistic part.
 
 sim market · paper trading · nfa
 ```
 
-Never name the sim launchpads. Claims: SC-04, SC-06. DIS-02.
+**Trigger:** someone asks "which launchpad are you on?" or "where can i try a new curve without losing money?". Never name the sim launchpads. Claims: SC-04, SC-06 (bundler crews come from the chain-agnostic launch behaviour, `sim/behaviors/launch.ts`). DIS-02.
 
 ---
 
@@ -516,10 +520,10 @@ the most expensive sentence in the trenches: "it's just a healthy dip."
 being early is a skill. being early to the same dev's fourth coin this week is a lifestyle.
 ```
 
-**L12** · `65/280`
+**L12** · `55/280`
 
 ```text
-the curve doesn't care about your conviction. it only counts sol.
+the bonding curve does not accept conviction. sol only.
 ```
 
 **L13** · `45/280`
@@ -574,10 +578,10 @@ a sniper buys in the first few blocks. a bundler buys in the block the coin was 
 three different villains. one chart.
 ```
 
-**L21** · `123/280`
+**L21** · `136/280`
 
 ```text
-a coin graduating means the curve filled and there's a real pool now. for the early wallets, a real pool means a real exit.
+graduation day: the curve fills, a real pool opens, and the early wallets finally have enough liquidity to leave. congrats to the class.
 ```
 
 **L22** · `61/280`
@@ -594,10 +598,10 @@ slippage is the price you agreed to pay for being in a hurry.
 our entire market is fake and it still has more drama than most real ones.
 ```
 
-**L24** · `77/280`
+**L24** · `90/280`
 
 ```text
-paper hands are a personality. paper trading is a hobby. we're here for both.
+paper hands is a personality. paper trading is a hobby. we can only help with one of them.
 ```
 
 **L25** · `25/280`
@@ -622,17 +626,17 @@ Claims: SIM-01 (fates are scripted). No number, no feature, so no disclaimer nee
 
 ### 3.4 Product-light (DIS-02 included)
 
-**L28 · [truth]** · `168/280`
+**L28 · [truth]** · `163/280`
 
 ```text
-lost the whole paper bag before lunch. hit the faucet. back in a minute later.
+lost the whole paper bag before lunch. hit the faucet. lost that one too.
 
 the healthiest relationship with money we've ever had.
 
 sim market · paper trading · nfa
 ```
 
-Truth check: actually lose a paper balance and refill it. Claims: SC-03 (once a minute per chain).
+Truth check: actually lose a paper balance, refill it from the faucet, and lose the refill too, the same day. Claims: SC-03 (once a minute per chain).
 
 **L29** · `117/280`
 
@@ -660,7 +664,7 @@ Claims: SC-09.
 
 **How to run them.** Run each poll for 24 h, in window A or B. **At most one every 2–3 days.** `WARMUP_WEEK.md` already runs one on Fri Oct 23 (R3 is in reserve) and `LAUNCH_DAY.md` runs one on Thu Oct 29, so this bank starts around **Sat Oct 31**. Twelve polls cover about five weeks. Each option is within X's 25-character limit.
 
-Reply to voters with one line of mechanism for their pick, written fresh each time. When you follow up on a result, say which option won, in words. **Never post vote counts or percentages as if they were a stat about traders** (a small, self-selected poll is not data, MNC-05).
+Reply to voters with one line of mechanism for their pick, written fresh each time. When you follow up on a result, say which option won, in words. **Never post vote counts or percentages as if they were a stat about traders** (a small, self-selected poll is not data, MNC-05). A follow-up that names a feature ends with DIS-02. A follow-up with a real-market number keeps DIS-03 (`~`, the window, source in the first reply).
 
 **P01 · first check** · question `42/280`
 
@@ -778,7 +782,7 @@ would you practice with fake money before aping with real money?
 | `i already do` | 12 |
 | `what's paper trading` | 20 |
 
-This is the most product-adjacent poll, so keep the follow-up honest and self-aware: "the people have spoken. the pain-teaches crowd is welcome too, the faucet doesn't judge." Never cite the result as demand for the product.
+This is the most product-adjacent poll, so keep the follow-up honest and self-aware: "the people have spoken. the pain-teaches crowd is welcome too, the faucet doesn't judge." It names a feature, so it ends with DIS-02. Never cite the result as demand for the product.
 
 **P09 · bundle check** · question `48/280`
 
@@ -843,7 +847,7 @@ Follow-up: if "i'm not in yet" gets votes, that's an audience worth writing newc
 **How they're built.** All ten are type-only or vector cards rendered with `marketing/tools/cards.py` (HTML → PNG). There's **no AI and no stock imagery**: no real people, no real meme-template art, no real coin logos. Brand rules: bg `#0A0C10`, panels `#11141A`, fg `#E6E9F0`, muted `#8C94A3`, one amber `#FFB547` accent, red `#FF5468` only for loss or danger, wallet-tag colours only on wallet labels. Inter for words, JetBrains Mono for numbers and chips. Nothing under 20 px on a 1080-wide canvas. Trenchscope mark in the footer corner.
 
 **Rules for these cards.**
-- A card that shows sim numbers or app UI (meme-3, meme-5, meme-7) gets the `SIM · PAPER TRADING` stamp in the pixels, uses only numbers from a real capture, blurs the ticker, and ends its caption with DIS-02.
+- A card that shows sim numbers or app UI (meme-3, meme-5, meme-7) gets the `SIM · PAPER TRADING` stamp in the pixels, uses only numbers read off a real capture (check every one against the file named in its spec), blurs the ticker, says on the image that the token is fictional (DIS-11), and ends its caption with DIS-02.
 - Never a real ticker, CA, project, launchpad or person, even as a joke square.
 - Post each card once. A "vol. 2" is a new card with new lines.
 - Alt text goes on every image, written plainly.
@@ -856,19 +860,19 @@ Follow-up: if "i'm not in yet" gets votes, that's an audience worth writing newc
 
 **Headline:** `trench bingo` · **Subtext:** `how many squares did your last coin hit?`
 
-**Caption** · `111/280`
+**Caption** · `88/280`
 
 ```text
 trench bingo.
 
-how many squares did your last coin hit? reply with your count. blackout wins nothing, as usual.
+how many squares did your last coin hit? blackout wins nothing, as usual.
 ```
 
 > Alt (269 chars): A dark bingo card titled trench bingo with 25 squares of memecoin clichés, such as dev stepping away, it's a social experiment, 30 buyers in the launch block, just a shakeout, sell tx fails and the socials link to nothing. The centre free square reads: you aped anyway.
 
 ### meme-2 · trench alignment chart · 1200 × 1200 · `grid` 3×3
 
-**Image.** A classic 3×3 alignment grid (lawful / neutral / chaotic × good / neutral / evil) as type-only cells. Each cell has the wallet-tag chip in its tag colour on top and a one-line description underneath. Lawful good: **smart money** `in early, out on schedule, never posts about it`. Neutral good: **whale** `buys big and just… holds`. Chaotic good: **cto crew** `rebuilding the socials at 4am`. Lawful neutral: **sniper** `block 1, sells into the first wave, every time`. True neutral: **fresh wallet** `no history. no personality. no comment.` Chaotic neutral: **bot** `trading with itself every 3 seconds`. Lawful evil: **bundler** `same block as creation, funded by the dev`. Neutral evil: **insider** `gas money from the dev, "just a fan"`. Chaotic evil: **dev** (no description, just the chip).
+**Image.** A classic 3×3 alignment grid (lawful / neutral / chaotic × good / neutral / evil) as type-only cells. Each cell has the wallet-tag chip in its tag colour on top and a one-line description underneath. Lawful good: **smart money** `in early, out on schedule, never posts about it`. Neutral good: **whale** `buys big and just… holds`. Chaotic good: **cto crew** `rebuilding the socials at 4am` (not a product label, so its chip is neutral `#8C94A3`, never a wallet-tag colour). Lawful neutral: **sniper** `block 1, sells into the first wave, every time`. True neutral: **fresh wallet** `no history. no personality. no comment.` Chaotic neutral: **bot** `trading with itself every 3 seconds`. Lawful evil: **bundler** `same block as creation, funded by the dev`. Neutral evil: **insider** `gas money from the dev, "just a fan"`. Chaotic evil: **dev** (no description, just the chip).
 
 **Headline:** `trench alignment chart` · **Subtext:** `every wallet here is an archetype, not a person`
 
@@ -884,23 +888,23 @@ which one are you, and which one keeps buying your coins first?
 
 ### meme-3 · trench facts (nutrition label) · 1080 × 1350 · `meme`
 
-**Image.** A nutrition-facts label drawn in the brand palette: a `#11141A` panel with heavy `#E6E9F0` rules, the title **Trench Facts** in Inter Black, `serving size: 1 launch · servings per container: 7 holders`. Rows in Mono, red for the bad ones, using the real numbers from spot the rug #1's token B (`marketing/screens/screen-token-audit.png`): `dev holding 17%` · `insiders 30%` · `bundlers 49%` · `fresh wallets 71%` · `top 10 holders 49%` · `smart money 0` · `rug ratio 82%`. A bold rule, then `audit: 7 flags · high risk`. Footer lines: `ingredients: one dev, one funder, many wallets.` and `may contain traces of a community.` `SIM · PAPER TRADING` stamp top-right. Ticker and name not shown.
+**Image.** A nutrition-facts label drawn in the brand palette: a `#11141A` panel with heavy `#E6E9F0` rules, the title **Trench Facts** in Inter Black, `serving size: 1 launch · servings per container: 18 holders`. Rows in Mono, every number read off the real audit capture `marketing/screens/screen-token-audit.png` and coloured the way the app colours them. Red: `dev holding 15%` · `insiders 40%` · `bundlers 48%` · `fresh wallets 83%` · `rug ratio 81%`. Amber: `top 10 holders 50%` · `smart money 0`. A bold rule, then `audit: 7 flags · high risk`. Footer lines: `ingredients: a dev, some insiders, a bundle, a lot of fresh wallets.` and `may contain traces of a community.` `SIM · PAPER TRADING` stamp top-right. Ticker, name and launchpad not shown.
 
-**Headline:** `trench facts` · **Subtext:** `token B from spot the rug #1 · a fictional sim entity`
+**Headline:** `trench facts` · **Subtext:** `one sim launch · fictional token · simulated audit`
 
-**Caption** · `167/280`
+**Caption** · `159/280`
 
 ```text
-nutrition label for token B from spot the rug #1.
+nutrition facts for one sim launch.
 
-ingredients: one dev, one funder, many wallets. may contain traces of a community.
+ingredients: a dev, a bundle, a lot of fresh wallets. may contain traces of a community.
 
 sim market · paper trading · nfa
 ```
 
-> Alt (329 chars): A nutrition-facts style label titled Trench Facts for a fictional simulated token. Serving size one launch, 7 holders. Dev holding 17%, insiders 30%, bundlers 49%, fresh wallets 71%, top 10 holders 49%, smart money 0, rug ratio 82%. Audit: 7 flags, high risk. Footer: may contain traces of a community. SIM · PAPER TRADING stamp.
+> Alt (330 chars): A nutrition-facts style label titled Trench Facts for a fictional simulated token. Serving size one launch, 18 holders. Dev holding 15%, insiders 40%, bundlers 48%, fresh wallets 83%, rug ratio 81%, top 10 holders 50%, smart money 0. Audit: 7 flags, high risk. Footer: may contain traces of a community. SIM · PAPER TRADING stamp.
 
-Post only after spot the rug #1 has run (Wed Oct 21). If the audit image is re-captured, update every number to match. Claims: SC-09, SC-10.
+This is **not** spot the rug #1's token B: `screen-token-audit` is a different sim token (`WARMUP_WEEK.md` §9 lists it as a spare), so never tie the card to the puzzle. Post it after Wed Oct 21 so it doesn't muddy the puzzle. The audit bar reads 81.2% and the row 81%: use 81%. If the audit image is re-captured, update every number, the holder count and the alt text to match. Claims: SC-09, SC-10.
 
 ### meme-4 · trench translator · 1080 × 1350 · `meme`
 
@@ -916,15 +920,15 @@ trench translator, vol. 1.
 what did we miss? we'll paraphrase the best ones into vol. 2 (no names).
 ```
 
-> Alt (327 chars): A two-column card titled trench translator. Left, phrases traders hear; right, what they usually mean. Stealth launch: the bundle knew first. Community takeover: the dev left. Healthy dip: slow rug, chapter 1. Organic volume: four wallets on a loop. LP is burned: the pool is safe, you aren't. We're so early: you're buyer 200.
+> Alt (430 chars): A two-column card titled trench translator. Left, phrases traders hear; right, what they usually mean. Stealth launch: the bundle knew first. Community takeover: the dev left. Healthy dip: slow rug, chapter 1. Organic volume: four wallets on a loop. LP is burned, it's safe: the pool is safe, you aren't. The devs are doxxed: a profile picture exists. The devs are building: the devs are selling. We're so early: you're buyer 200.
 
 Vol. 2 uses reply ideas paraphrased, never quoted with a handle, and it's not a prize.
 
 ### meme-5 · the chart in your head vs the chart · 1600 × 900 · `split`
 
-**Image.** Left panel, labelled `the chart in your head`: a clean vector line in amber climbing smoothly up and to the right, with a small `you` pin at the bottom-left. Right panel, labelled `the chart`: a **real crop** of 1-second candles from a sim token page during a rug (the same replay as the rug autopsy), with two amber pins on the real signal moments, `dev sell` and `bundler sell`, and the candles falling off a cliff. Ticker blurred. `SIM · PAPER TRADING` stamp on the right panel. No AI, no invented chart data.
+**Image.** Left panel, labelled `the chart in your head`: a clean vector line in amber climbing smoothly up and to the right, with a small `you` pin at the bottom-left. Right panel, labelled `the chart`: a **real crop** of 1-second candles from a sim token page during a rug (the same replay as the rug autopsy), with two amber pins on the real signal moments, `dev sell` and `bundler sell`, and the candles falling off a cliff. Ticker blurred hard: that replay's ticker is also a real memecoin's (`WARMUP_WEEK.md` D4-P1 blocker). `SIM · PAPER TRADING` stamp on the right panel. No AI, no invented chart data.
 
-**Headline:** `the chart in your head / the chart` · **Subtext:** `right panel: a real sim replay. left panel: your imagination.`
+**Headline:** `the chart in your head / the chart` · **Subtext:** `right panel: a real sim replay, fictional token. left panel: your imagination.`
 
 **Caption** · `102/280`
 
@@ -962,23 +966,23 @@ Post after launch, when the trailer has introduced the cast. Don't reuse the D6-
 
 ### meme-7 · rug autopsy report (toe tag) · 1080 × 1350 · `meme`
 
-**Image.** A morgue toe tag drawn as a `#11141A` card with a punched hole and an amber string. Fields in Mono, **filled only from one real sim replay** (use the launch recorded for the rug-autopsy clip): `deceased: [blurred], age [N] min` · `cause of death: dev sell` · `contributing factors: bundled in the creation block, snipers in blocks 1–3` · `time of death: [N] min after launch` · `holders at time of death: [N]` · `witnesses: the audit panel, [N] flags`. Stamp: `SIM · PAPER TRADING`.
+**Image.** A morgue toe tag drawn as a `#11141A` card with a punched hole and an amber string. Fields in Mono, **filled only from one real sim replay** (use the launch recorded for the rug-autopsy clip, `x/posts/d4-a.mp4`): `deceased: [blurred], age [N] min` · `cause of death: dev sell, bundle sold the same minute` · `contributing factors: bundled at launch, snipers in blocks 1–3, out early` · `time of death: [N] min after launch` · `holders at time of death: [N]` · `coroner's note: audit, 2 flags · high risk · rug ratio 81% (filed after death)`. Stamp: `SIM · PAPER TRADING`.
 
 **Headline:** `rug autopsy report` · **Subtext:** `every field from one real sim replay · the token is fictional`
 
-**Caption** · `128/280`
+**Caption** · `172/280`
 
 ```text
 coroner's report on one sim launch.
 
-the cause of death was on the audit panel before it died.
+the snipers left a minute early. the dev and the bundle left together. the chart stayed behind alone.
 
 sim market · paper trading · nfa
 ```
 
-> Alt (297 chars): A toe tag styled as a coroner's report for a fictional simulated token. Cause of death: dev sell. Contributing factors: bundled in the creation block, snipers in blocks 1 to 3. Time of death and holder count are filled from a real sim replay. Witnesses: the audit panel. SIM · PAPER TRADING stamp.
+> Alt (393 chars): A toe tag styled as a coroner's report for a fictional simulated token. Cause of death: dev sell, with the bundle selling the same minute. Contributing factors: bundled at launch, snipers in blocks 1 to 3 who got out early. Time of death and holder count are filled from a real sim replay. Coroner's note: audit, 2 flags, high risk, rug ratio 81%, filed after death. SIM · PAPER TRADING stamp.
 
-**[truth]** Only use the caption's second line if the audit really showed red rows before the dev sell in that replay. Fill every `[N]` with the real value and update the alt text to match. Claims: SC-09, SC-18, SC-21.
+**[truth]** The caption and fields follow the D4-P1 truth check in `WARMUP_WEEK.md`: in that replay the sniper sells land ~1 min before the dev and bundler sells, which land together, and the audit frame (2 flags, high risk, rug ratio 81%) was captured **after** the cliff. So never claim the panel was red before the dump. "Snipers in blocks 1–3" is the sim's own tag rule (`SNIPER_BLOCKS = 3`). If you use a different replay, re-check all of it. Fill every `[N]` with the real value and update the alt text to match. Claims: SC-09, SC-10, SC-18, SC-21.
 
 ### meme-8 · trench newcomer starter pack · 1200 × 1200 · `tiles` 2×3
 
@@ -1040,11 +1044,11 @@ All status **NEW**. Build with `marketing/tools/cards.py`, export PNG to `market
 |---|---|---|---|---|---|---|---|
 | `meme-1` | 1080 × 1350 | `grid` 5×5 (new) | none | Trench bingo: 24 cliché squares + FREE "you aped anyway" | `trench bingo` | `how many squares did your last coin hit?` | none |
 | `meme-2` | 1200 × 1200 | `grid` 3×3 (new) | wallet-tag colours | Alignment chart of wallet archetypes, chip per cell | `trench alignment chart` | `every wallet here is an archetype, not a person` | none |
-| `meme-3` | 1080 × 1350 | `meme` | `screens/screen-token-audit.png` (token B) | Nutrition label of real sim audit numbers | `trench facts` | `token B from spot the rug #1 · a fictional sim entity` | `SIM · PAPER TRADING` |
+| `meme-3` | 1080 × 1350 | `meme` | `screens/screen-token-audit.png` (a spare sim token, **not** spot the rug #1's B) | Nutrition label of one real sim audit capture (18 holders, 7 flags) | `trench facts` | `one sim launch · fictional token · simulated audit` | `SIM · PAPER TRADING` |
 | `meme-4` | 1080 × 1350 | `meme` | none | Two-column "what they say / what it means" | `trench translator` | `what they say vs what it usually means. not about anyone in particular.` | none |
-| `meme-5` | 1600 × 900 | `split` (new) | real 1s-candle crop of a sim rug replay | Imagined smooth chart vs the real sim cliff with dev/bundler-sell pins | `the chart in your head / the chart` | `right panel: a real sim replay. left panel: your imagination.` | `SIM · PAPER TRADING` (right panel) |
+| `meme-5` | 1600 × 900 | `split` (new) | real 1s-candle crop of a sim rug replay | Imagined smooth chart vs the real sim cliff with dev/bundler-sell pins | `the chart in your head / the chart` | `right panel: a real sim replay, fictional token. left panel: your imagination.` | `SIM · PAPER TRADING` (right panel) |
 | `meme-6` | 1080 × 1350 | `poster` (new) | vector silhouette (SVG, no AI) | Wanted poster, THE BUNDLER (series: sniper, insider, dev) | `WANTED: THE BUNDLER` | `a fictional archetype, not a person · part 1 of 4` | none |
-| `meme-7` | 1080 × 1350 | `meme` | one real sim rug replay (the autopsy launch) | Toe-tag coroner's report, every field real | `rug autopsy report` | `every field from one real sim replay · the token is fictional` | `SIM · PAPER TRADING` |
+| `meme-7` | 1080 × 1350 | `meme` | one real sim rug replay (the autopsy launch, `x/posts/d4-a.mp4`) | Toe-tag coroner's report, every field real, audit filed after death | `rug autopsy report` | `every field from one real sim replay · the token is fictional` | `SIM · PAPER TRADING` |
 | `meme-8` | 1200 × 1200 | `tiles` 2×3 (new) | line icons | Newcomer starter pack, six habits | `trench newcomer starter pack` | `we've owned every item on this card` | none |
 | `meme-9` | 1200 × 1200 | `meme` | none | Tier list of famous last words | `famous last words` | `ranked by how fast they age` | none |
 | `meme-10` | 1600 × 900 | `forecast` (new) | candle-shaped weather icons | Seven-day trench weather forecast, no numbers | `trench forecast` | `this week: same as last week` | none |
@@ -1057,22 +1061,23 @@ All status **NEW**. Build with `marketing/tools/cards.py`, export PNG to `market
 
 | Item | Claims used | Disclaimer |
 |---|---|---|
-| R05 | SC-01, SC-04, SC-19 | DIS-02 |
-| R10 | SC-13 (truth check: FB-10) | DIS-02 |
-| R14 | SC-01, SC-11, SC-19 | DIS-02 |
-| R15 | SC-01, SC-02, SC-35 | DIS-02 |
-| R20 | SC-14, SC-18 (latency caveat SC-13) | DIS-02 |
-| R25 | SC-09, SC-21 | DIS-02 |
-| R34 | KS-02 | DIS-03 (hedged in text; source reply ready) |
-| R35 | SC-01, SC-04 | DIS-02 |
-| R40 | SC-04, SC-06 | DIS-02 |
+| R05 | SC-01, SC-04, SC-19, SIM-01 | DIS-02 · trigger: "how do people spot / practice this?" |
+| R10 | SC-13 (truth check: FB-10) | DIS-02 · trigger: "what was your best trade this week?" |
+| R14 | SC-01, SC-11, SC-19 | DIS-02 · trigger: open "what should i use?" |
+| R15 | SC-01, SC-02, SC-35 | DIS-02 · trigger: a newcomer asking where to start |
+| R20 | SC-14, SC-18 (latency caveat SC-13) | DIS-02 · trigger: "can you auto-sell when the dev sells?" |
+| R25 | SC-09, SC-21 | DIS-02 · trigger: "how do you spot a bundle?" |
+| R34 | KS-02 (verify first, ledger §4.1) | DIS-03 (hedged and sourced inline; fuller source line ready) |
+| R35 | SC-01, SC-04 | DIS-02 · trigger: "what are you doing on a red day?" |
+| R40 | SC-04, SC-06 | DIS-02 · trigger: "which launchpad are you on?" |
 | L27 | SIM-01 | none needed (no feature or number) |
 | L28, L29 | SC-03 | DIS-02 |
 | L30 | SC-09 | DIS-02 |
-| meme-3 | SC-09, SC-10 | DIS-02 + SIM stamp |
-| meme-5 | SC-18, SC-25 | DIS-02 + SIM stamp |
-| meme-7 | SC-09, SC-18, SC-21 | DIS-02 + SIM stamp |
+| P02, P03, P06, P08, P10 follow-ups | SC-26, SC-13, SC-20, SC-03, SC-14 | DIS-02 |
+| meme-3 | SC-09, SC-10 (numbers from `screen-token-audit.png`) | DIS-02 + SIM stamp + "fictional token" on image |
+| meme-5 | SC-18, SC-25 | DIS-02 + SIM stamp + "fictional token" on image |
+| meme-7 | SC-09, SC-10, SC-18, SC-21 (D4-P1 truth check) | DIS-02 + SIM stamp + "the token is fictional" on image |
 
 Everything else in this bank is general trench commentary with no product claim and no sourced statistic. Numbers inside `{slots}` are examples: replace them with the poster's own numbers.
 
-**Checked against the never-say list.** No item contains: a token, airdrop or points promise (MNC-02) · a profit promise, "100x", "print" or "guaranteed" (MNC-03) · traction or user numbers (MNC-05) · "detects", "predicts", "accurate" or "AI-powered" (MNC-06, MNC-07) · a speed claim (MNC-08) · a "first" or "only" claim (MNC-09) · a competitor, launchpad or terminal name or label, including "almost bonded" and "P1/P2/P3" (MNC-10, MNC-11) · an unbuilt feature such as share cards or a safety score (MNC-12) · a roadmap promise (MNC-13) · a real person or KOL (MNC-15) · a cashtag (MNC-16) · a learning-outcome promise (MNC-19) · a link.
+**Checked against the never-say list.** No item contains: a token, airdrop or points promise (MNC-02) · a profit promise, "100x", "print" or "guaranteed" (MNC-03) · traction or user numbers (MNC-05) · "detects", "predicts", "accurate" or "AI-powered" (MNC-06, MNC-07) · a speed claim (MNC-08) · a "first" or "only" claim (MNC-09) · a competitor, launchpad or terminal name or label, including "almost bonded" and "P1/P2/P3" (MNC-10, MNC-11) · an unbuilt feature such as share cards or a safety score (MNC-12) · a roadmap promise (MNC-13) · a real person or KOL (MNC-15) · a cashtag (MNC-16) · a learning-outcome promise (MNC-19) · a link · a verdict on a real coin or dev (R03 and R17 stay conditional) · a [TS] reply without a trigger question · a sim number that isn't on the capture it cites.

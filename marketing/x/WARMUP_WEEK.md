@@ -21,11 +21,11 @@
 | **Fri 23** | rug autopsy | 10:00 autopsy clip · 1:00 poll · 8:30 trailer seed | 20–30 | 20 (70) | Autopsy clip watch-through |
 | **Sat 24** | weekend in the trench | 10:30 insider · 2:00 paper bag diaries · 8:30 trailer still | 15–20 | 15 (85) | Shares on paper bag diaries |
 | **Sun 25** | the cast | 9:30 spot the rug #2 (reveal 12:30) · 2:00 bundler teaser · 8:30 monitor UI | 15–25 | 15 (100) | Quotes and "what is this" replies on the teaser |
-| **Mon 26** | eve of the drop | 9:00 risk gate UI · 12:00 ~73% stat · 3:00 dev sold · 8:30 "tomorrow" teaser | 25–40 | 20 (120) | Under the Hood clean going into launch |
+| **Mon 26** | eve of the drop | 9:00 risk gate UI · 12:00 ~73% stat · 3:00 dev status · 8:30 "tomorrow" teaser | 25–40 | 20 (120) | Under the Hood clean going into launch |
 
 **23 originals** over 7 days, plus self-replies (pinned FAQ, two reveals, two stat sources, one autopsy note). Following stays far under the ~200 ceiling. Follow counts for days 1–3 match the "first 50" plan in `PROFILE.md` §10.3.
 
-**Format mix:** 3 relatable trench memes · 3 "chip explained" cards (sniper, insider, dev sold) plus the bundler reveal · 2 sourced market stats · 1 poll (a second in the reserve bench) · 4 build-in-public UI peeks with real screenshots, plus 1 keyboard clip · 2 spot-the-rug puzzles · 1 rug autopsy clip · 1 micro-thread · larp jokes throughout · 4 escalating trailer teasers (seed text Fri → AI still Sat → teaser clip Sun → "tomorrow" Mon).
+**Format mix:** 3 relatable trench memes · 1 paper-loss diary · 3 "chip explained" cards (sniper, insider, dev status) plus the bundler reveal · 2 sourced market stats · 1 poll (a second in the reserve bench) · 4 build-in-public UI peeks with real screenshots (pinned post, full cost, Monitor, risk gate), plus 1 keyboard clip · 2 spot-the-rug puzzles · 1 rug autopsy clip · 1 micro-thread · larp jokes throughout · 4 escalating trailer teasers (seed text Fri → AI still Sat → teaser clip Sun → "tomorrow" Mon).
 
 ---
 
@@ -56,7 +56,7 @@
 | D1-P2 | 1:30 p.m. (17:30) · B | Pinned "what is this" + 2 FAQ self-replies | `screen-trenches` |
 | D1-P3 | 8:45 p.m. (00:45 Wed) · C | Relatable trench meme | none |
 
-> **Order note.** `PROFILE.md` §2 phase F posts PIN-A as the very first original. This calendar puts a native opener first and the pinned post 3 hours later. Anyone who taps through from the opener still finds a complete bio. To use the PROFILE.md order, swap the D1-P1 and D1-P2 times; nothing else changes. If setup runs late, post D1-P1 at 12:00 p.m. and D1-P2 at 3:00 p.m.
+> **Order note.** `PROFILE.md` §2 phase F allows either order: PIN-A as the very first original, or PIN-A at least 3 hours after this opener. This calendar uses the second: a native opener first, the pinned post 3 hours later. Anyone who taps through from the opener still finds a complete bio. To post PIN-A first instead, swap the D1-P1 and D1-P2 times; nothing else changes. If setup runs late, post D1-P1 at 12:00 p.m. and D1-P2 at 3:00 p.m.
 
 ### D1-P1 · 10:30 a.m. ET · the first tweet (pick ONE)
 
@@ -97,35 +97,35 @@ sim market · paper trading · nfa
 
 ### D1-P2 · 1:30 p.m. ET · pinned post + FAQ (verbatim from `PROFILE.md` §9)
 
-Post PIN-A, then FAQ-1 as a reply to it, then FAQ-2 as a reply to FAQ-1. Pin PIN-A (••• → Pin to your profile). If PROFILE.md changes, PROFILE.md wins.
+Post PIN-A, then FAQ-1 as a reply to it, then FAQ-2 as a reply to FAQ-1. Pin PIN-A (••• → Pin to your profile). Synced with `PROFILE.md` §9.2 and §9.4 on Oct 20. If PROFILE.md changes, PROFILE.md wins.
 
-**PIN-A** · image `screen-trenches` · **272 / 280**
+**PIN-A** · image `screen-trenches` · **276 / 280**
 
 ```text
-this is trenchscope: a memecoin trading terminal on a simulated market.
+we built a fake memecoin market so you can get rugged for free.
 
-launches, migrations, rugs. snipers, bundlers, insiders, the dev. all fake, all labelled.
+trenchscope is the terminal on top of it. snipers, bundlers, insiders, the dev: all on the card.
 
-paper-trade it. get rugged for free. hit the faucet.
+50 paper sol to start. lose it, hit the faucet, go again.
 
 no wallet. no token.
 
 sim market · paper trading · nfa
 ```
 
-> Alt: Trenchscope's Trenches board on a simulated market: three columns (new, near graduation, migrated) of fictional memecoin launches. Each card shows market cap, volume and colour-coded risk chips; one row is highlighted with the caption 'risk chips on every card'. A 'SIM · PAPER TRADING' stamp sits in the top-right corner. All tokens shown are fictional.
+> Alt: Trenchscope's Trenches board on a simulated market: three columns (new, near graduation, migrated) of fictional memecoin launches. Each card shows market cap, volume and colour-coded risk chips; one row is highlighted with the caption 'risk chips on every card'. A 'SIM · PAPER TRADING' stamp sits in the top-right corner and the footer reads 'Simulated market · paper trading'. All tokens shown are fictional.
 
-**FAQ-1** (reply to PIN-A) · **223 / 280**
+**FAQ-1** (reply to PIN-A) · **230 / 280**
 
 ```text
-faq, before anyone asks:
+before anyone asks "wen token":
 
 there is no trenchscope token. no airdrop, no presale, no points-to-token. anyone selling you one is scamming you.
 
 we never dm first and never ask for keys or a wallet. there's nothing to connect.
 ```
 
-**FAQ-2** (reply to FAQ-1) · **218 / 280**
+**FAQ-2** (reply to FAQ-1) · **230 / 280**
 
 ```text
 also:
@@ -133,10 +133,10 @@ also:
 all tokens, wallets and kols shown are fictional sim entities.
 not affiliated with any chain, launchpad or trading platform.
 
-no link yet. when there is one, it'll be in the pinned post's replies. never in a dm.
+no link yet. when there is one, it'll be in the bio and the pinned post's replies. never in a dm.
 ```
 
-### D1-P3 · 8:45 p.m. ET · lifecycle meme · **152 / 280**
+### D1-P3 · 8:45 p.m. ET · lifecycle meme · **179 / 280**
 
 ```text
 lifecycle of a trench coin:
@@ -144,7 +144,8 @@ lifecycle of a trench coin:
 min 1: "this one's different"
 min 4: "dev is based"
 min 6: dev sells
-min 7: "it was a social experiment"
+min 7: "devs do something"
+min 8: "it was a social experiment"
 hour 9: tumbleweed
 ```
 
@@ -166,23 +167,25 @@ hour 9: tumbleweed
 |---|---|---|---|
 | D2-P1 | 9:30 a.m. (13:30) · A | POV meme | none |
 | D2-P2 | 12:30 p.m. (16:30) · B | Spot the rug #1 (puzzle) | `d2-a` |
-| D2-P2r | ~3:30 p.m. (19:30) | Reveal, as a self-reply | `screen-token-audit` |
+| D2-P2r | ~3:30 p.m. (19:30) | Reveal, as a self-reply | `d2-a-reveal` |
 | D2-P3 | 8:30 p.m. (00:30 Thu) · C | Chip explained: sniper | `d2-b` |
 
-### D2-P1 · 9:30 a.m. ET · POV · **141 / 280**
+### D2-P1 · 9:30 a.m. ET · POV · **130 / 280**
 
 ```text
 pov: you found a coin 40 seconds after launch. so early.
 
-you're buyer #38. the first 30 bought in the launch block. they all share a funder.
+you're buyer #38.
+
+the first 30 bought in the launch block. same funder.
 ```
 
-### D2-P2 · 12:30 p.m. ET · spot the rug #1 · image `d2-a` · **196 / 280**
+### D2-P2 · 12:30 p.m. ET · spot the rug #1 · image `d2-a` · **208 / 280**
 
 ```text
 spot the rug #1
 
-two sim tokens. one got bundled at launch. we hid the bundler and insider chips.
+two sim tokens. one got bundled at launch. we covered the insider, sniper and bundler chips.
 
 everything else is on the card. A or B?
 
@@ -191,32 +194,31 @@ answer in a few hours.
 sim market · paper trading · nfa
 ```
 
-> Alt: Two simulated token holder panels side by side, labelled A and B, names blurred. A: 871 holders, top 10 15%, dev 1.1%, snipers 0%, fresh wallets 2.1%, bots 2.9%. B: 7 holders, top 10 49%, dev 17%, snipers 2.4%, fresh wallets 71%, bots 0%. The bundler and insider chips on both panels are covered by amber question marks. SIM · PAPER TRADING stamp.
+> Alt: Two simulated token holder panels side by side, labelled A and B, names hidden. Headline 'spot the rug #1', subtitle 'one was bundled at launch. A or B?'. A: 1.08K holders, top 10 15%, top 100 61%, dev 1.1%, fresh 2.2%, bots 2.9%; 51 smart, 33 KOL and 51 whale wallets. B: 13 holders, top 10 50%, top 100 51%, dev 17%, fresh 54%, bots 7.7%; no smart, KOL or whale wallets. On both panels the insider, sniper and bundler chips and rows are covered by amber question-mark blocks. Footer: 'fictional sim tokens · simulated audit'. SIM · PAPER TRADING stamp.
 
-### D2-P2r · ~3:30 p.m. ET · reveal (self-reply to D2-P2) · image `screen-token-audit` · **262 / 280**
+### D2-P2r · ~3:30 p.m. ET · reveal (self-reply to D2-P2) · image `d2-a-reveal` · **200 / 280**
 
 ```text
-it's B.
+it's B. bundlers 53%, insiders 30%.
 
-bundlers 49%, insiders 30%. the audit panel had it at 7 flags, high risk, before you'd ever click buy.
+but you didn't need the hidden chips. 13 holders, top 10 at 50%, 54% fresh wallets, dev still on 17%.
 
-tells you could already see: 71% fresh wallets, dev still holding 17%, 7 holders total.
-
-A had 871 holders and a dev at 1.1%. boring. boring is good.
+A: 1.08k holders, dev at 1.1%. boring. boring is underrated.
 ```
 
-> Alt: Trenchscope's audit panel for a simulated token, captioned '7 flags · high risk'. Red rows: dev holding 17%, insiders 30%, bundlers 49%, fresh wallets 71%, rug ratio 82%. Amber rows: top 10 holders 49%, smart money 0. Below, the holders panel repeats the chips. Footer: 'Simulated audit — reference only'. SIM · PAPER TRADING stamp.
+> Alt: The same two simulated holder panels with the hidden chips revealed. Headline 'it's B.', subtitle 'bundlers 53%. insiders 30%. the chips said it first.' B is outlined in amber and captioned 'bundled at launch': insiders 30%, snipers 0%, bundlers 53% (5 insider and 5 bundler wallets). A shows insiders, snipers and bundlers all at 0%. Footer: 'fictional sim tokens · simulated audit'. SIM · PAPER TRADING stamp.
 
-- Numbers match the existing captures (`marketing/screens/screen-token-audit.png` for B, `screen-token.png` for A). If `d2-a` is rebuilt from new captures, update the numbers here to match.
+- Numbers match `marketing/x/posts/d2-a.png` and `d2-a-reveal.png` (captured from `screens/week/holders-A.png` = A, `holders-B.png` = B). If either image is rebuilt from new captures, update the numbers here to match.
+- Don't use `screen-token-audit` for this reveal: it's a different token (18 holders, insiders 40%, bundlers 48%), so its numbers contradict the puzzle.
 
-### D2-P3 · 8:30 p.m. ET · chip explained: sniper · image `d2-b` · **242 / 280**
+### D2-P3 · 8:30 p.m. ET · chip explained: sniper · image `d2-b` · **233 / 280**
 
 ```text
 trench dictionary: sniper
 
-a wallet that buys within the first few blocks after launch. in our sim, that's blocks 1 to 3.
+a wallet that buys in the first few blocks after launch. in our sim: blocks 1 to 3.
 
-one or two is normal. more than 20 means the launch was a race and you weren't in it.
+a handful is normal. more than 20 means the launch was a race and you were never in it.
 
 sim market · paper trading · nfa
 ```
@@ -271,50 +273,48 @@ the graduation rate swings a lot by month, from under 1% to ~7% this year. and n
 
 Post natively as a thread. Post 1 stands on its own and carries `d3-b`.
 
-**1/** · image `d3-b` · **127 / 280**
+**1/** · image `d3-b` · **98 / 280**
 
 ```text
-the whole memecoin lifecycle in four words: launch, curve, migrate, pray.
+the memecoin lifecycle in four words: launch, curve, migrate, pray.
 
-what each one actually means, no jargon left behind:
+what each one actually means:
 ```
 
 > Alt: A dark card showing a coin's lifecycle as a progress bar moving through three labelled stages: NEW, NEAR GRAD, MIGRATED. The bar fills amber and turns green at 100%. Below it, a grey branch reads 'most: go quiet' and a red branch reads 'some: rug'. Headline: 'launch, curve, migrate, pray.'
 
-**2/** · **218 / 280**
+**2/** · **167 / 280**
 
 ```text
-launch: anyone can mint a coin in seconds on a launchpad. there's no pool yet, just a bonding curve.
+launch: anyone can mint a coin in seconds. no pool yet, just a bonding curve.
 
-the curve is a vending machine that raises the price every time someone buys and lowers it every time someone sells.
+the curve is a vending machine: every buy pushes the price up, every sell pulls it down.
 ```
 
-**3/** · **201 / 280**
+**3/** · **150 / 280**
 
 ```text
-near grad: the curve is almost full.
+curve: buyers fill it up. "near grad" means it's almost full.
 
-when it fills, the coin "graduates" (people also say "bonds"): its liquidity moves to a real pool on a dex. that move is the migration.
-
-most coins never get here.
+most coins never get close. that's not a rug. they just run out of buyers and go quiet.
 ```
 
-**4/** · **226 / 280**
+**4/** · **166 / 280**
 
 ```text
-not graduating isn't the same as a rug.
+migrate: when the curve fills, the coin graduates (people also say "bonds").
 
-most coins that never fill the curve aren't scams. they just run out of buyers and go quiet.
-
-a rug is when insiders pull the liquidity or dump their supply on whoever is still holding.
+its liquidity moves off the curve into a real pool on a dex. that move is the migration.
 ```
 
-**5/** · **157 / 280**
+**5/** · **224 / 280**
 
 ```text
-slow rug: the same thing in installments.
+pray: everything after.
 
-the dev or insiders bleed supply out over hours, so the chart looks like a "healthy dip" until it very much isn't.
+a rug is insiders pulling the liquidity or dumping their bags on whoever's still holding.
+
+a slow rug is the same thing in installments. the chart looks like a "healthy dip" until it very much isn't.
 ```
 
 **6/** · **211 / 280**
@@ -327,37 +327,37 @@ so you can watch the whole lifecycle, and get rugged by it, with fake money.
 sim market · paper trading · nfa
 ```
 
-- Claims: SC-04, SC-06, SC-07. No stats in the thread on purpose: the morning post carries the number and its source.
+- Claims: SC-04, SC-06, SC-07. No stats in the thread on purpose: the morning post carries the number and its source. Each post after 1/ opens with one of the four words, so the "pray" punchline pays off in 5/.
 
 ### D3-P3 · 3:00 p.m. ET · build-in-public: full cost before you click · image `screen-buy-preview` · **279 / 280**
 
 ```text
-small thing we're weirdly proud of: the full cost shows before you click buy.
+see your price impact before you click, not after you cry.
 
-you receive, min received, price impact, exec price, fees, route. impact warns above 3%, goes red above 10%.
+every buy previews receive, min received, impact, exec price, fees and route. amber above 3% impact, red above 10%.
 
-even the fees are fake. 0.8%, simulated, shown up front.
+even the fees are fake. simulated 0.8% platform fee, shown up front.
 
 sim market · paper trading · nfa
 ```
 
-> Alt: Trenchscope's buy panel on a simulated market with a 0.5 SOL paper buy selected. An amber-outlined quote box captioned 'full cost before you click' lists you receive, min received at 25% slippage, price impact 1.9%, execution price, fees of 0.006805 SOL and the route, a fictional launchpad's bonding curve. Footer: 'Paper trading on simulated markets · 0.8% platform fee'. SIM · PAPER TRADING stamp.
+> Alt: Trenchscope's buy panel on a simulated market with a 0.5 SOL paper buy selected. An amber-outlined quote box captioned 'full cost before you click' lists you receive, min received at 25% slippage, price impact 1.7%, execution price, fees of 0.006805 SOL and the route, a fictional launchpad's bonding curve. Footer: 'Paper trading on simulated markets · 0.8% platform fee'. SIM · PAPER TRADING stamp.
 
-- Claims: SC-11, SC-12 (always "simulated", never compared with anyone's fee). Re-render the image with the generated ticker blurred (see the asset list).
+- Claims: SC-11, SC-12 (always "simulated", never compared with anyone's fee). The Fees row is platform + network combined; the 0.8% is the platform part, which is why the post names it as a platform fee. The ticker in "You receive" / "Min received" is blurred in the re-render, but faintly legible: strengthen the blur before posting (see the asset list).
 
-### D3-P4 · 8:30 p.m. ET · keyboard flex clip (15 s) · video `d3-c` · **206 / 280**
+### D3-P4 · 8:30 p.m. ET · keyboard flex clip (15 s) · video `d3-c` · **193 / 280**
 
 ```text
 no mouse.
 
-2 jumps to near grad. j/k picks a coin. b quick-buys. enter opens it. s flips the panel to sell.
+2 jumps to near grad. j/k picks a coin. b quick-buys. enter opens it. s flips to sell.
 
-j/k through the trench. b to buy. that's the whole personality.
+turns out your mouse hand was the slowest bot in the trench.
 
 sim market · paper trading · nfa
 ```
 
-- Claims: SC-30. Say "hotkeys", never "full keyboard map" or "command palette". Don't open the hotkey help overlay on camera: its column label still reads "Almost".
+- Claims: SC-30. Say "hotkeys", never "full keyboard map" or "command palette". The joke is about the viewer's hand, not a speed claim: never add "fastest" or a latency number (MNC-08). The hotkey help overlay now reads "Near grad." (commit `f9cdb22`), so it's no longer a problem on camera, but the built clip doesn't need it.
 
 ### Day 3 engagement
 
@@ -373,20 +373,21 @@ sim market · paper trading · nfa
 
 | Slot | ET (UTC) | Format | Asset |
 |---|---|---|---|
-| D4-P1 | 10:00 a.m. (14:00) · A | Rug autopsy #1 clip (20 s) + context reply | `d4-a` |
+| D4-P1 | 10:00 a.m. (14:00) · A | Rug autopsy #1 clip (22.6 s) + context reply | `d4-a` |
 | D4-P2 | 1:00 p.m. (17:00) · B | Poll #1 (24 h) | none |
 | D4-P3 | 8:30 p.m. (00:30 Sat) · C | Trailer seed (curiosity) | none |
 
-### D4-P1 · 10:00 a.m. ET · rug autopsy #1 · video `d4-a` · **267 / 280**
+### D4-P1 · 10:00 a.m. ET · rug autopsy #1 · video `d4-a` · **222 / 280**
 
 ```text
-rug autopsy #1: one sim launch, start to finish.
+rug autopsy #1: one sim launch, replayed.
 
-bundlers in the launch block. snipers right behind. dev sitting on a fat bag. audit panel already red.
+bundler wallets: in at launch.
+snipers: in early, out early.
+the dev: sold.
+then the cliff.
 
-then: dev sell. bundler sell. cliff.
-
-every tell was on screen before the dump.
+coroner's note: audit says high risk, rug ratio 81%.
 
 sim market · paper trading · nfa
 ```
@@ -399,13 +400,14 @@ how often does this happen? in our sim, ~1 in 3 launches is scripted to rug, slo
 all tokens and wallets in the clip are fictional sim entities.
 ```
 
-- **Truth check:** pick a launch where the audit panel showed red bundler or insider rows **before** the dev sell. If the clip can't show that, cut the line "every tell was on screen before the dump."
-- Claims: SC-04, SC-09, SC-18, SIM-01. DIS-05 corner bug on screen the whole time.
+- **Truth check (done against the built clip, `x/posts/d4-a.mp4`):** the clip is a replay after the fact. Its audit frame was captured after the cliff (2 flags, High risk, rug ratio 81%, bundlers 9.7%), so the post says "replayed", files the audit as the coroner's note (after death), and never claims the panel was red **before** the dump. Don't add "every tell was on screen before the dump" unless the clip is re-recorded to show that. The post makes no claim about who sold first: in the Activity tabs the sniper sells land ~1 min before the dev and bundler sells.
+- **Blocker before posting:** the replayed token's ticker is **NPC**, which is also the ticker of a real memecoin, and it's readable in the clip (the Activity table's amount column is headed "NPC"). A "rug autopsy" of a real-looking NPC is exactly the collision ledger §7.6 and MNC-16 warn about. Blur that column header for the whole clip, or re-record on a token with a ticker that doesn't exist. Never name the ticker in the post or replies.
+- Claims: SC-04, SC-10, SC-18, SC-21, SC-25, SIM-01. DIS-05 corner bug on screen the whole time.
 
-### D4-P2 · 1:00 p.m. ET · poll #1 (24 h) · question **68 / 280**
+### D4-P2 · 1:00 p.m. ET · poll #1 (24 h) · question **45 / 280**
 
 ```text
-honest question for the trenches: what kills your trades most often?
+what kills your trades most often? be honest.
 ```
 
 | Option | Chars (max 25) |
@@ -417,24 +419,24 @@ honest question for the trenches: what kills your trades most often?
 
 - Reply to voters with a one-line mechanism for their pick, written fresh each time. The results feed a later post (week 2), not a product plug.
 
-### D4-P3 · 8:30 p.m. ET · trailer seed · **245 / 280**
+### D4-P3 · 8:30 p.m. ET · trailer seed · **276 / 280**
 
 ```text
-we're making a movie trailer for a trading terminal.
+we're making an ai movie trailer for a trading terminal.
 
-it has a war room. a periscope. a carpet that gets yanked out from under a table. a hooded bundler with no face.
+it's a nature doc shot like a war film. a whale the size of an airship. a periscope. six identical hooded guys who are definitely not the same guy.
 
-zero real numbers in it, because the terminal runs on fake money.
+zero real numbers in it. the terminal runs on fake money.
 
 next week.
 ```
 
-- **Truth check:** true while the trailer is in production. Don't say "made" until the master is locked.
-- If anyone asks: yes, the trailer is AI-generated, and no, the terminal has no AI (MNC-07). Say both, plainly.
+- **Truth check:** true while the trailer is in production. Don't say "made" until the master is locked. Every image named here is a shot in `marketing/video/SCRIPT.md` (shot 1 the whale, shot 2 the periscope, shot 5 the six-figure bundler). If any of them is cut from the edit, swap it for one that survived.
+- "ai" is in the first line on purpose, so nobody mistakes the trailer for filmed footage (MNC-23). If anyone asks: the trailer is AI-generated, and the terminal has no AI (MNC-07). Say both, plainly.
 
 ### Day 4 engagement
 
-- **Value replies: 20–30.** Targets: **Friday rug threads, on-chain sleuth breakdowns, MEV and sandwich posts** (categories 1, 5, 8). Angle: add the tell or the mechanism. If a thread asks "what does a bundled launch look like", the autopsy clip is a fair answer. Cap it at 2 product mentions all day.
+- **Value replies: 20–30.** Targets: **Friday rug threads, on-chain sleuth breakdowns, MEV and sandwich posts** (categories 1, 5, 8). Angle: add the tell or the mechanism. If a thread asks "what does a bundled launch look like", describe the tells in words and mention the autopsy clip is on the profile. Never re-upload the clip as a reply (duplicate media). Cap it at 2 product mentions all day.
 - **Follows: 20** (running total 70). From now on, lean toward people you met in replies (real mutuals beat cold follows).
 - **KPI: autopsy clip watch-through.** In Media Studio / post analytics, note the share of viewers who reach 50% playback. It's the baseline the trailer will be judged against.
 
@@ -537,47 +539,49 @@ sim market · paper trading · nfa
 
 > Alt: Two simulated token stat strips side by side, labelled A and B, names blurred. Both show similar trading volume and age. A shows far fewer unique traders (makers) than B. The 'wash trading' row of each audit panel is covered by an amber question mark. SIM · PAPER TRADING stamp.
 
-### D6-P1r · 12:30 p.m. ET · reveal (self-reply to D6-P1) · image `d6-b` · **245 / 280**
+### D6-P1r · 12:30 p.m. ET · reveal (self-reply to D6-P1) · image `d6-b` · **259 / 280**
 
 ```text
 it's A.
 
-similar volume to B, a fraction of the unique traders. that's the tell: a few wallets round-tripping in seconds to make a dead coin look busy.
+about the same volume as B, a fraction of the unique traders. that's the tell: a few wallets flipping back and forth inside a minute, over and over, to make a dead coin look alive.
 
-our audit flags wash trading when fast round-trips pile up, and there's a filter to hide it.
+our audit flags it as wash trading, and there's a filter to hide it.
 ```
 
 > Alt: The same two simulated tokens with the hidden rows revealed. A's audit row reads 'Wash trading: Yes — Much of the volume is fast round-trips', locked inside an amber scope reticle. B's reads 'Wash trading: No'. SIM · PAPER TRADING stamp.
 
-- **Asset rule for `d6-a` / `d6-b`:** A must be flagged "Wash trading: Yes", B must not, their volumes must be within about ±30% of each other, and A must have clearly fewer makers. Otherwise the text above isn't true. Claims: SC-28, SC-29.
+- **Asset rule for `d6-a` / `d6-b`:** A must be flagged "Wash trading: Yes", B must not, their volumes must be within about ±30% of each other, and A must have clearly fewer makers. Otherwise the text above isn't true. Facts: a round trip is an opposite-side trade by the same wallet within 60 s, and volume counts as wash from a wallet's 2nd round trip (`WASH_ROUNDTRIP_MS`, `WASH_MIN_ROUNDTRIPS` in `apps/server/src/analytics/tokens/track.ts`), hence "inside a minute, over and over". Claims: SC-28, SC-29.
 
-### D6-P2 · 2:00 p.m. ET · teaser clip #1: THE BUNDLER · video `d6-c` · **185 / 280**
+### D6-P2 · 2:00 p.m. ET · teaser clip #1: THE BUNDLER · video `d6-c` · **169 / 280**
 
 ```text
-every launch has one.
+every rug has one.
 
-bought in the launch block. funded by the dev. calls himself "early."
+one guy. six wallets. same block. calls himself "early."
 
 ai-generated teaser · fictional people and coins · the product is a paper-trading sim · nfa
 ```
 
 - Native upload, AI label on if offered. 11 s, so it clears X's 10-second video-quality gate. Post it once; never re-post the same clip.
+- The bundler line follows the app's definition ("bought in the same block as the token creation; likely linked to the dev", `WalletTags.tsx`) and the trailer's own subtitle for shot 5. Don't write "funded by the dev": that's the app's **insider** rule (SC-21), and D5-P1 just taught it.
 
-### D6-P3 · 8:30 p.m. ET · build-in-public: Monitor · image `screen-monitor` · **273 / 280**
+### D6-P3 · 8:30 p.m. ET · build-in-public: Monitor · image `screen-monitor` · **275 / 280**
 
 ```text
-the monitor tab: live trades from smart money, kols and wallets you follow, with a rug-risk filter.
+watching fake smart money ape in real time is a whole genre.
 
-top right, "hot by smart money": coins 2+ smart wallets bought in the last 30 min.
+the monitor: live smart money, kol and following trades, a rug-risk filter, and coins 2+ smart wallets bought in the last 30 min.
 
-every wallet in it is fictional. the sweating is real.
+every wallet is fictional. the sweating is real.
 
 sim market · paper trading · nfa
 ```
 
 > Alt: Trenchscope's Monitor page on a simulated market: a live table of trades by fictional smart-money wallets, with buy/sell, size and 'hide high rug risk' filters. On the right, a panel outlined in amber and captioned 'smart money piling in' lists 'Hot by smart money' tokens bought by 2+ smart wallets in 30 minutes. Footer reads 'Simulated market · paper trading'. SIM · PAPER TRADING stamp.
 
-- Claims: SC-24, SC-19. Never imply that following smart money makes money (MNC-04).
+- Claims: SC-24, SC-19. Never imply that following smart money makes money (MNC-04). DIS-11 is already in the pinned FAQ-2; if someone asks "is this real?", answer with it in fresh words.
+- **Before posting:** the built `x/posts/screen-monitor.png` shows every generated ticker unblurred, including FROGO, the ledger's own example of a collision with a real coin (§7.6). Re-render it with the token column and the "Hot by smart money" names blurred.
 
 ### Day 6 engagement
 
@@ -595,80 +599,86 @@ sim market · paper trading · nfa
 |---|---|---|---|
 | D7-P1 | 9:00 a.m. (13:00) · A | Build-in-public: risk gate | `screen-risk-gate` |
 | D7-P2 | 12:00 p.m. (16:00) · B | Sourced market stat (KS-02) + source reply | none |
-| D7-P3 | 3:00 p.m. (19:00) · B | Chip explained: dev sold (real UI) | `screen-dev-hover` |
+| D7-P3 | 3:00 p.m. (19:00) · B | Chip explained: dev status (real UI) | `screen-dev-hover` |
 | D7-P4 | 8:30 p.m. (00:30 Tue) · C | Teaser clip #2: "tomorrow" (11 s) | `d7-a` |
 
-### D7-P1 · 9:00 a.m. ET · build-in-public: risk gate · image `screen-risk-gate` · **273 / 280**
+### D7-P1 · 9:00 a.m. ET · build-in-public: risk gate · image `screen-risk-gate` · **272 / 280**
 
 ```text
 built a thing that asks "you sure?" before you ape a high-risk coin.
 
-it lists every reason the audit flagged, and "buy anyway" stays locked until you tick "i understand the risks."
+it lists every red flag from the audit, and "buy anyway" stays locked until you tick "i understand the risks."
 
 you'll tick it. but now you'll know exactly why it hurt.
 
 sim market · paper trading · nfa
 ```
 
-> Alt: Trenchscope's 'High-risk token' dialog on a simulated market, ticker blurred. It reads 'Our simulated audit flagged this token. Paper trades only — but trade it like it's real.' A red box headed 'Why this is risky' lists the flagged reasons. Below are an unticked checkbox, 'I understand the risks and want to buy', and a disabled 'Buy anyway' button. SIM · PAPER TRADING stamp.
+> Alt: Trenchscope's 'High-risk token' dialog on a simulated market, ticker blurred. It reads 'Our simulated audit flagged this token. Paper trades only — but trade it like it's real.' A red box headed 'Why this is risky' lists six reasons: high risk level with a rug ratio of 83%, top 10 holders 56%, dev holding 17%, insiders 30%, bundlers 35%, fresh wallets 33%. Below are an unticked checkbox, 'I understand the risks and want to buy', and a disabled 'Buy anyway' button, outlined in amber and captioned 'it asks first'. SIM · PAPER TRADING stamp.
 
-- Claims: SC-08 (`components/token/model.ts` `riskReasons`, `useTradeExecutor.tsx`). Never call it "protection" (MNC-17): there are no funds to protect.
+- Claims: SC-08 (`components/token/model.ts` `riskReasons` lists the high risk level plus every red audit row; `useTradeExecutor.tsx` keeps "Buy anyway" disabled until the box is ticked). This is the per-trade high-risk dialog, not the unbuilt "risk acknowledgement before the first trade" (MNC-12), so never describe it as an onboarding step. Never call it "protection" (MNC-17): there are no funds to protect.
+- **Before posting:** the ticker blur in `x/posts/screen-risk-gate.png` is too light ("ZORP" is still readable in the title and the Receive row). Strengthen it. It's also the same sim token as B in spot the rug #1, captured a few minutes apart, so the numbers differ (bundlers 35% here vs 53% there). If someone spots it, say exactly that.
 
-### D7-P2 · 12:00 p.m. ET · stat: ~73% of graduates down 60%+ in 20 min · **228 / 280**
+### D7-P2 · 12:00 p.m. ET · stat: ~73% of graduates down 60%+ in 20 min · **230 / 280**
 
 ```text
 made it off the curve? congrats.
 
-in one dataset from a major launchpad, ~73% of graduates were below 40% of their migration price within 20 minutes.
+in one dataset from a major launchpad, ~73% of graduates were down 60%+ from their migration price within 20 minutes.
 
 graduation isn't the finish line. it's where exit liquidity gets its diploma.
 ```
 
-**Source** (self-reply, posted right after) · **184 / 280**
+**Source** (self-reply, posted right after) · **179 / 280**
 
 ```text
-source: launchpad lifecycle data (secondary), one launchpad, sample window not published. approximate, so treat it as directional.
+source: launchpad lifecycle data (secondary): one launchpad, sample window not published. approximate, so treat it as directional.
 
-below 40% of the migration price = down 60% or more.
+"down 60%+" = below 40% of the migration price.
 ```
 
 - **Verify before posting (KS-02).** One secondary dataset on one launchpad. Keep the "~", "within 20 minutes" and "one dataset". Never extend it to "all memecoins". **If it can't be verified by 11:30 a.m., post reserve R3 (poll #2) instead.** Polls are 3 days apart, so that's within the cadence rule.
 
-### D7-P3 · 3:00 p.m. ET · chip explained: dev sold · image `screen-dev-hover` · **278 / 280**
+### D7-P3 · 3:00 p.m. ET · chip explained: dev status · image `screen-dev-hover` · **275 / 280**
 
 ```text
-trench dictionary: dev sold
+trench dictionary: dev status
 
-every coin in our sim shows the dev's status: holding, sold part, sold all or bought more. hover it for their record: coins launched vs migrated.
+every sim coin shows it: holding, sold part, sold all, bought more. hover for the dev's record.
 
-plot twist: "sold all" can be the calm one. no dev bag left to dump.
+this one: 11 launched, 0 migrated. cool cool cool.
+
+"sold all" means no dev bag left to dump. not that it's safe.
 
 sim market · paper trading · nfa
 ```
 
-> Alt: Trenchscope's token hover card on a simulated market, ticker blurred. The dev row shows the dev's wallet tag and status, and a line below reads 'N launched · M migrated' with the dev's real sim counts. An amber reticle frames the dev record. SIM · PAPER TRADING stamp.
+> Alt: Trenchscope's token hover card on a simulated market, token name blurred. The dev row shows a shortened wallet address and the status 'Holding', and the line below reads '11 launched · 0 migrated', outlined in amber and captioned 'the dev's record, on hover'. Below it, red audit rows: top 10 holders 53%, dev holding 22%, insiders 29%, bundlers 61%, rug ratio 89%. SIM · PAPER TRADING stamp.
 
-- Facts: dev statuses and hints from `components/discovery/TokenBadges.tsx` ("Sold all: the dev sold everything — no dev supply left to dump"). The dev record comes from `TokenHoverSummary.tsx`. Claims: SC-26.
+- Facts: dev statuses and hints from `components/discovery/TokenBadges.tsx` ("Sold all: the dev sold everything — no dev supply left to dump"). The dev record comes from `TokenHoverSummary.tsx`. "11 launched, 0 migrated" is read off the built `x/posts/screen-dev-hover.png`: if the image is re-captured, update the line. Claims: SC-26, SC-09.
+- Keep the last line as written. Never turn it into "sold all is the safe/calm one": that reads like a buy signal (advice), and every other wallet can still dump.
 
-### D7-P4 · 8:30 p.m. ET · teaser clip #2: "tomorrow" · video `d7-a` · **166 / 280**
+### D7-P4 · 8:30 p.m. ET · teaser clip #2: "tomorrow" · video `d7-a` · **172 / 280**
 
 ```text
 tomorrow, 10am et.
 
-we made a movie trailer for a fake trading terminal on a fake market. no regrets so far.
+we made a movie trailer for a trading terminal where all the money is fake. no regrets so far.
 
 ai-generated teaser · paper-trading sim · no token · nfa
 ```
 
-- **Truth check:** only say "we made" if the trailer master is locked by 6 p.m. ET. Otherwise use this text-only fallback (no video) · **192 / 280**:
+- **Truth check:** only say "we made" if the trailer master is locked by 6 p.m. ET. Otherwise use this text-only fallback (no video) · **188 / 280**:
 
 ```text
 tomorrow, 10am et.
 
-we're putting the last frames on a movie trailer for a fake trading terminal on a fake market. no regrets so far.
+we're putting the last frames on a movie trailer for a trading terminal where all the money is fake. no regrets so far.
 
-ai-generated trailer · paper-trading sim · no token · nfa
+ai trailer · paper-trading sim · no token · nfa
 ```
+
+- "a trading terminal where all the money is fake" replaces "a fake trading terminal": the terminal is real software, only the market and the money are simulated.
 
 - Native upload, AI label on. This is the last original before launch. Stay in the replies until about 10 p.m. ET, then stop posting until the trailer at 10:00 a.m.
 
@@ -691,23 +701,24 @@ ai-generated trailer · paper-trading sim · no token · nfa
 
 Use these when an asset isn't ready, a stat can't be verified or a slot needs a substitute. Each is written to be posted once. Keep the 2.5–3 h spacing and the one-poll-per-2–3-days rule.
 
-**R1 · wallet report card** · image `screen-wallet` · **277 / 280**
+**R1 · wallet report card** · image `screen-wallet` · **268 / 280**
 
 ```text
-every wallet in the sim gets a report card: pnl calendar, win rate, distribution, trading style, 0–100 copy score.
+every wallet in the sim gets a report card: pnl calendar, win rate, distribution, style, 0–100 copy score.
 
-this one scores 74, "good to copy." it's also fictional, and its history is a few hours old.
+this one scores 69: "copy with care." it's also fictional, with a few hours of sim history.
 
 study the habits, not the number.
 
 sim market · paper trading · nfa
 ```
 
-> Alt: A fictional wallet's report card in Trenchscope on a simulated market: realized and unrealized PnL, win rate, a daily PnL calendar, trading analysis and a return distribution. A copy-score gauge reading 74, 'Good to copy', is outlined in amber and captioned 'copy score, explained'. A large diagonal 'SIMULATED · PAPER TRADE' watermark crosses the image.
+> Alt: A fictional wallet's report card in Trenchscope on a simulated market: realized and unrealized PnL, win rate, a daily PnL calendar, trading analysis and a return distribution. A copy-score gauge reading 69, 'Copy with care', is outlined in amber and captioned 'copy score, explained'. A large diagonal 'SIMULATED · PAPER TRADE' watermark crosses the image.
 
-- Before use, blur the wallet's style-title chip in the image. It reads "Money Printer", and "print" is on the never-say list (MNC-03). Wallet stats only cover the sim's runtime, so never call it a track record (ledger §7.8).
+- Numbers match the built `x/posts/screen-wallet.png` (copy score 69, "Copy with care"). If it's re-captured, update the score and label here.
+- Before use, blur the wallet's style-title chip in the image. It reads "Money Printer", and "print" is on the never-say list (MNC-03); the built image still shows it. Wallet stats only cover the sim's runtime, so never call it a track record (ledger §7.8). The header's "Wallet age 4mo" is sim-generated, not a real history: crop or blur it, or the "few hours of sim history" line looks contradictory.
 
-**R2 · price impact, explained** (fallback for D3-P1) · **279 / 280**
+**R2 · price impact, explained** (fallback for D3-P1; if it runs, swap D3-P3 for R1 so Thursday doesn't carry two price-impact posts) · **279 / 280**
 
 ```text
 price impact, explained like you're about to ape:
@@ -734,19 +745,19 @@ if you could see one thing about a coin before you buy, what would it be?
 | `the dev's past coins` | 20 |
 | `smart money in it` | 17 |
 
-**R4 · the respawn button** (fallback for D5-P3) · **225 / 280**
+**R4 · the respawn button** (fallback for D5-P3) · **229 / 280**
 
 ```text
 one click: 50 sol, 15 bnb, 3 eth on base, 3 eth on ethereum.
 
-all paper, all on simulated chains. go lose it. the faucet refills once a minute per chain.
+all paper, all on simulated chains. go lose it. the faucet tops you up once a minute per chain.
 
 the trenches, with a respawn button.
 
 sim market · paper trading · nfa
 ```
 
-- Claims: SC-02, SC-03, SC-06.
+- Claims: SC-02, SC-03, SC-06. The faucet is a button with a 60-second cooldown per chain, not an automatic refill, hence "tops you up".
 
 ---
 
@@ -762,30 +773,31 @@ sim market · paper trading · nfa
 
 | Ref | Size | Status | Used in | Concept | Headline (on image) | Subtext (on image) |
 |---|---|---|---|---|---|---|
-| `screen-trenches` | 1600 × 900 | READY | D1-P2 (pinned) | Real Trenches board, three columns, one card's risk-chip row highlighted | `risk chips on every card` (callout) | SIM · PAPER TRADING bug; footer "Simulated market · paper trading" in frame |
-| `d2-a` | 1600 × 900 | NEW (from RAW `screens/screen-token.png` + `screens/screen-token-audit.png`) | D2-P2 | Spot the rug #1: two real holder-chip panels, A (HOMKNO, low risk) and B (the high-risk pick in `screens/picks.json`). Names and avatars blurred. Bundler and insider chips and rows masked with amber `??` blocks | `spot the rug #1` | `one was bundled at launch. A or B?` · SIM · PAPER TRADING bug |
-| `screen-token-audit` | 1080 × 1350 | READY | D2-P2r (reveal) | Real audit panel for B: 7 flags, high risk, rug ratio, red bundler / insider / fresh rows | `7 flags · high risk` (callout) | "Simulated audit — reference only" visible; SIM bug |
+| `screen-trenches` | 1600 × 900 | READY | D1-P2 (pinned) | Real Trenches board, three columns, one card's risk-chip row highlighted. Tickers are small but legible, and one card reads "NPC", a real memecoin's ticker: blur it (image owned by `PROFILE.md` §9.2) | `risk chips on every card` (callout) | SIM · PAPER TRADING bug; footer "Simulated market · paper trading" in frame |
+| `d2-a` | 1600 × 900 | READY (`x/posts/d2-a.png`, from `screens/week/holders-A.png` + `holders-B.png`) | D2-P2 | Spot the rug #1: two real holder-chip panels, A (HOMKNO, low risk) and B (ZORP, high risk). Names and avatars cropped out. Insider, sniper and bundler chips and rows masked with amber `??` blocks | `spot the rug #1` | `one was bundled at launch. A or B?` · footer `fictional sim tokens · simulated audit` · SIM · PAPER TRADING bug |
+| `d2-a-reveal` | 1600 × 900 | READY (`x/posts/d2-a-reveal.png`) | D2-P2r (reveal) | Same two panels, chips revealed; B outlined in amber with the tag `bundled at launch` (insiders 30%, bundlers 53%) | `it's B.` | `bundlers 53%. insiders 30%. the chips said it first.` · SIM bug |
+| `screen-token-audit` | 1080 × 1350 | READY | Spare (not the D2 reveal: it's a different token from `d2-a`, 18 holders, insiders 40%, bundlers 48%) | Real audit panel: 7 flags, high risk, rug ratio 81%, red dev / insider / bundler / fresh rows | `7 flags · high risk` (callout) | "Simulated audit — reference only" visible; SIM bug |
 | `d2-b` | 1080 × 1350 | NEW (cards.py) | D2-P3 | Trench dictionary card #1: one big red `SNIPER` chip (`#F87171`) plus a 3-step threshold scale | `sniper` | `bought within the first 3 blocks after launch. on a token: 0–4 green · 5–20 amber · 21+ red. in the sim.` |
 | `d3-a` | 1200 × 1200 | NEW (cards.py) | D3-P1 | 10 × 10 dot grid, 97 dim dots (`#2A303B`) and 3 amber. No product UI, no logo bigger than the corner mark | `~97 of 100 launches never leave the curve.` | `lately, on the biggest solana launchpad. most just go quiet. not graduating ≠ rugged.` Footer: `source: launchpad lifecycle data, oct 2026 (secondary) · approximate` |
 | `d3-b` | 1200 × 675 | NEW (cards.py) | D3-P2 post 1 | Lifecycle diagram: a curve-progress bar moving through NEW → NEAR GRAD → MIGRATED, amber fill turning green at 100%; a grey branch "most: go quiet" and a red branch "some: rug" | `launch, curve, migrate, pray.` | `the memecoin lifecycle · trench dictionary vol. 1` |
-| `screen-buy-preview` | 1200 × 1200 | READY, re-render | D3-P3 | Real buy panel: quote preview with receive, min received, impact, exec price, fees, route; footer "Paper trading on simulated markets · 0.8% platform fee" | `full cost before you click` (callout) | Re-render with the generated ticker in "You receive" / "Min received" blurred |
-| `d3-c` | 1920 × 1080, 15 s | NEW (screen recording) | D3-P4 | Keyboard-only run on `/sol/trenches`: `2` → `J` `J` → `B` (quick buy, fill toast) → `Enter` (token page) → `S` (sell panel). Key-press overlay bottom-left in Mono. No cursor. Don't open the hotkey help overlay | Burned-in caption at 0 s: `no mouse.` | SIM · PAPER TRADING bug all 15 s; end slate 1.5 s: `j/k through the trench. b to buy.` + mark |
-| `d4-a` | 1920 × 1080, 20 s | NEW (screen recording; the 6–10 s clips in `video/app-footage/` are too short) | D4-P1 | One sim launch from token page to cliff at 1 s candles: audit panel red (bundlers / insiders) → early sniper buys in Activity → "Dev sell" signal → "Bundler sell" → candles collapse. Real time, with jump cuts labelled by sim time (`+0:40`, `+3:10`). Any speed-up gets a visible `4× SPEED` label. Ticker blurred | `rug autopsy #1` (frame 0) | Burned-in beat captions: `bundlers: launch block` · `snipers: blocks 1–3` · `dev sells` · `bundlers sell` · `cliff`. SIM bug all 20 s |
+| `screen-buy-preview` | 1200 × 1200 | READY (re-rendered), strengthen blur | D3-P3 | Real buy panel: quote preview with receive, min received, impact, exec price, fees, route; footer "Paper trading on simulated markets · 0.8% platform fee" | `full cost before you click` (callout) | The ticker in "You receive" / "Min received" is blurred but still faintly legible: blur harder |
+| `d3-c` | 1920 × 1080, 15 s | READY (`x/posts/d3-c.mp4`) | D3-P4 | Keyboard-only run on `/sol/trenches`: `2` → `J` `J` → `B` (quick buy, fill toast) → `Enter` (token page) → `S` (sell panel). Key-press overlay bottom-left in Mono. No cursor. Board tickers are visible at small size | Burned-in caption at 0 s: `no mouse.`; beat captions `2 · jump to near grad.` · `j/k · pick a coin` · `b · quick buy (paper)` · `enter · open it` · `s · flip to sell` | SIM · PAPER TRADING bug for all 13.5 s of footage; end slate 1.5 s: `j/k through the trench. b to buy.` + `simulated market · paper trading · no token · nfa` + mark |
+| `d4-a` | 1920 × 1080, 22.6 s | READY (`x/posts/d4-a.mp4`), **blur needed** | D4-P1 | One sim launch, replayed after the cliff, on 1 s candles: audit panel (2 flags, high risk, rug ratio 81%) → Bundler, Sniper and Dev filters in Activity → the cliff. 21 s of footage + 1.6 s end slate. **The token's ticker "NPC" (a real memecoin's ticker) is readable in the Activity column header: blur it or re-record** | `rug autopsy #1` (frame 0, kicker `ONE SIM LAUNCH, REPLAYED`) | Burned-in beat captions: `audit: high risk. rug ratio 81%.` · `bundler wallets: in at launch. out first.` · `snipers: in early. out early.` · `the dev: sold.` · `the cliff. 1s candles.` End slate: `read the chips before the chart.` + `fictional sim token · simulated market · paper trading · nfa`. SIM bug all 21 s of footage. **Re-caption "out first"**: the sniper sells land ~1 min before the bundler sells, and the bundler sells land with the dev's (suggest `in at launch. out with the dev.`) |
 | `d5-a` | 1080 × 1350 | NEW (cards.py) | D5-P1 | Trench dictionary card #2: pink `INSIDER` chip (`#F472B6`) and the three tagging rules as a short list | `insider` | `funded by the dev · funded by the dev's funder · 3+ wallets, same funder, first 10 min. how the sim tags it.` |
 | `d5-b` | 1080 × 1350 | NEW (cards.py, from a REAL paper trade) | D5-P2 | Paper-loss card from the operator's actual sim trade: hero loss % in red Mono, entry MC, exit MC, time held, `DEV SOLD` chip. Wide diagonal watermark band over the hero number | `paper bag diaries #1` | `the dev agreed it looked ready. to sell.` · watermark `SIMULATED · PAPER TRADE` (≥6% of image height, can't be cropped out) |
 | `d5-c` | 1600 × 900 | NEW (AI still, K6 "The Rug") | D5-P3 | Banquet hall, ornate carpet yanked from under a long table, blank unbranded discs flying, one amber spotlight, letterbox bars. Same seed/reference as the trailer's K6 shot | none (image only) | Small corner label in Mono: `AI-GENERATED STILL · FICTIONAL` + the mark |
 | `d6-a` | 1600 × 900 | NEW (captures) | D6-P1 | Spot the rug #2: two real token stat strips (volume, age, TXs, makers) side by side as A and B, names blurred; each one's "Wash trading" audit row masked with `??`. A = flagged wash trading, B = clean, volumes within ±30% | `spot the rug #2: fake volume` | `same volume. one is mostly the same few wallets. A or B?` · SIM bug |
 | `d6-b` | 1600 × 900 | NEW (captures) | D6-P1r | Same frame, rows revealed. A's row "Wash trading: Yes — Much of the volume is fast round-trips" inside an amber reticle; B's reads "No" | `it's A.` | `few makers, fast round-trips. flagged.` · SIM bug |
-| `d6-c` | 1920 × 1080, 11 s | NEW (AI clip, K2 "The War Room") | D6-P2 | Hooded, faceless silhouettes leaning over a glowing amber radar table in a rain-dripping bunker, slow push-in. Cards: 0.0 s `THE BUNDLER.` (frame 0 = thumbnail) · 2.5 s `BOUGHT IN THE LAUNCH BLOCK.` · 5.0 s `FUNDED BY THE DEV.` · 7.5 s `CALLS HIMSELF "EARLY."` · 9.0–11.0 s end slate | `THE BUNDLER.` | End slate: mark + `TRENCHSCOPE` + `AI-GENERATED · DRAMATIZED · PAPER-TRADING SIM` |
-| `screen-monitor` | 1600 × 900 | READY | D6-P3 | Real Monitor page: live smart-money trades, filters, "Hot by smart money" panel | `smart money piling in` (callout) | SIM bug; footer "Simulated market · paper trading" in frame |
-| `screen-risk-gate` | 1200 × 1200 | NEW (capture) | D7-P1 | Real "High-risk token" dialog: description line, "Why this is risky" list, unticked checkbox, disabled "Buy anyway". Ticker in the title blurred | `it asks first` (callout) | SIM bug |
-| `screen-dev-hover` | 1080 × 1350 | NEW (capture) | D7-P3 | Real token hover summary on the Trenches board: dev row with status, and the `N launched · M migrated` line. Ideally a dev with many launches and 0 migrations | `the dev's record, on hover` (callout) | SIM bug |
+| `d6-c` | 1920 × 1080, 11 s | NEW (AI clip, trailer shot 5 "The Bundler", per `video/SCRIPT.md`; K2 War Room is now the trailer's Insider) | D6-P2 | Six identical hooded figures in a perfect row on a trench parapet, backs to camera, yellow rims, cloaks moving in unison, slow push-in. Use a different take or framing from the trailer's shot 5 so the teaser is a unique cut. Cards: 0.0 s `THE BUNDLER.` (frame 0 = thumbnail) · 2.5 s `ONE GUY. SIX WALLETS.` · 5.0 s `SAME BLOCK.` · 7.5 s `CALLS HIMSELF "EARLY."` · 9.0–11.0 s end slate | `THE BUNDLER.` | End slate: mark + `TRENCHSCOPE` + `AI-GENERATED · DRAMATIZED · PAPER-TRADING SIM` |
+| `screen-monitor` | 1600 × 900 | READY, **re-render** | D6-P3 | Real Monitor page: live smart-money trades, filters, "Hot by smart money" panel. Every ticker is unblurred, including FROGO (ledger §7.6's collision example): blur the token column and the panel's names | `smart money piling in` (callout) | SIM bug; footer "Simulated market · paper trading" in frame |
+| `screen-risk-gate` | 1200 × 1200 | READY (`x/posts/screen-risk-gate.png`), strengthen blur | D7-P1 | Real "High-risk token" dialog: description line, "Why this is risky" list (6 reasons), unticked checkbox, disabled "Buy anyway". The ticker blur in the title and the Receive row is too light ("ZORP" is readable) | `it asks first` (callout) | SIM bug |
+| `screen-dev-hover` | 1080 × 1350 | READY (`x/posts/screen-dev-hover.png`) | D7-P3 | Real token hover summary on the Trenches board: dev row with status "Holding" and the line `11 launched · 0 migrated`, plus red audit rows | `the dev's record, on hover` (callout) | SIM bug |
 | `d7-a` | 1920 × 1080, 11 s | NEW (AI clip, K1 "The Periscope") | D7-P4 | Brass periscope rising over a parapet, lens reflecting amber flares, slow crane up. Cards: 0.0 s `EVERYONE IN THE TRENCHES IS LARPING.` · 3.0 s `WE JUST ADMIT IT.` · 5.5 s beat of black · 6.5 s `TUESDAY · 10AM ET` (amber) · 9.0–11.0 s end slate | `EVERYONE IN THE TRENCHES IS LARPING.` | End slate: mark + `TRENCHSCOPE` + `AI-GENERATED · DRAMATIZED · PAPER-TRADING SIM` |
-| `screen-wallet` | 1600 × 900 | READY, edit | R1 (reserve) | Real wallet report card with copy score 74 and a SIMULATED · PAPER TRADE watermark | `copy score, explained` (callout) | Blur the "Money Printer" style chip before use |
+| `screen-wallet` | 1600 × 900 | READY, edit | R1 (reserve) | Real wallet report card with copy score 69 ("Copy with care") and a SIMULATED · PAPER TRADE watermark | `copy score, explained` (callout) | Blur the "Money Printer" style chip and the "Wallet age 4mo" field before use |
 
 **Video specs (all clips).** MP4, H.264, AAC (or silent), 30 fps, 8–12 Mbps, 1920 × 1080. Longer than 10 s (X's video-quality gate) and far under the 140 s non-Premium cap. Frame 0 designed as the thumbnail, text on screen by 0.3 s, captions burned in (autoplay is muted). Teasers are unique cuts, posted once, never re-posted. App footage keeps the `SIM · PAPER TRADING` bug on screen the whole time.
 
-**Production order (by deadline):** `d2-a`, `d2-b` (Wed) → `d3-a`, `d3-b`, `d3-c`, `screen-buy-preview` re-render (Thu) → `d4-a` (Fri) → `d5-a`, `d5-b`, `d5-c` (Sat) → `d6-a`, `d6-b`, `d6-c` (Sun) → `screen-risk-gate`, `screen-dev-hover`, `d7-a` (Mon). The AI assets (`d5-c`, `d6-c`, `d7-a`) come out of the trailer pipeline, so lock their seeds and references with the trailer shots K6, K2 and K1.
+**Production order (by deadline):** done: `d2-a`, `d2-a-reveal`, `d3-c`, `d4-a`, `screen-buy-preview`, `screen-risk-gate`, `screen-dev-hover`. Still to make or fix: `d2-b` (Wed) → `d3-a`, `d3-b`, stronger blur on `screen-buy-preview` (Thu) → `d4-a` NPC blur and "out first" re-caption (Fri) → `d5-a`, `d5-b`, `d5-c` (Sat) → `d6-a`, `d6-b`, `d6-c`, `screen-monitor` ticker blur (Sun) → stronger blur on `screen-risk-gate`, `d7-a` (Mon). `screen-wallet` edits only if R1 runs. The AI assets (`d5-c`, `d6-c`, `d7-a`) come out of the trailer pipeline, so lock their seeds and references with the trailer shots K6 (shot 11), shot 5 (the Bundler) and K1 (shot 2).
 
 ---
 

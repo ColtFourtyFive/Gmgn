@@ -1,0 +1,44 @@
+{
+ "trailer-habitat": {
+  "seconds": 14,
+  "beats": []
+ },
+ "gateToken": "GOLDE",
+ "trailer-gate": {
+  "seconds": 9,
+  "beats": [
+   {
+    "t": 0.502,
+    "label": "max"
+   },
+   {
+    "t": 1.566,
+    "label": "buy"
+   },
+   {
+    "t": 3.625,
+    "label": "dialog"
+   },
+   {
+    "t": 4.67,
+    "label": "tick"
+   },
+   {
+    "t": 5.969,
+    "label": "click"
+   },
+   {
+    "t": 6.447,
+    "label": "toast"
+   }
+  ]
+ },
+ "rugToken": {
+  "symbol": "GLITCH",
+  "title": "Dev sold 74%"
+ },
+ "trailer-rug": {
+  "seconds": 10,
+  "beats": []
+ }
+}

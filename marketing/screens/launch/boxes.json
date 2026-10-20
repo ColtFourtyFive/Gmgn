@@ -1,0 +1,57 @@
+{
+ "signin": {
+  "size": [
+   384,
+   430
+  ]
+ },
+ "audit-holders": {
+  "token": "MEOWLO",
+  "audit": [
+   340,
+   308
+  ],
+  "bundlersRow": [
+   13,
+   167,
+   314,
+   28
+  ],
+  "table": [
+   1540,
+   443
+  ],
+  "fundedHeader": [
+   1300.4,
+   80,
+   142.8,
+   32
+  ]
+ },
+ "auto": {
+  "token": "MEOWLO",
+  "size": [
+   340,
+   976
+  ]
+ },
+ "mev": {
+  "token": "UQUO",
+  "toast": "Bought UQUO28.73M UQUO for 2 SOL @ $0.0₄1292 · 504ms · MEV −0.1015 SOL",
+  "toastBox": [
+   1564,
+   56,
+   340,
+   74
+  ],
+  "tries": 1
+ },
+ "fate": {
+  "token": "MPUN",
+  "address": "JpYfRa5ipMvuzrJi6ZFYiwh1ykMLG4gBnMETigcrUpit",
+  "frames": 315,
+  "elapsed": 677.679,
+  "outcome": "rugged",
+  "ageAtStart": 163
+ }
+}
