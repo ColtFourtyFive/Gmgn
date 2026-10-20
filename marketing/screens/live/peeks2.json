@@ -1,0 +1,96 @@
+{
+ "funding": {
+  "token": "UNDE",
+  "address": "WXf92Swd2yBRaoUAr563AHusfUvTG6uh7qwwqKc8Vpit",
+  "funder": "NRhuvjrUfcgv2d82RGzKzq4J9MnWuaSxk3GTaPX8AGHA",
+  "shared": 4,
+  "strip": [
+   1564,
+   772,
+   340,
+   236
+  ],
+  "table": [
+   16,
+   734,
+   1540,
+   302
+  ],
+  "fundedBy": [
+   1316,
+   814,
+   143,
+   32
+  ]
+ },
+ "exits": {
+  "token": "TOA",
+  "address": "vC463RcDJrusQizWcTFNLkgrDZ8dfcmU2oT2jniPkpit",
+  "form": [
+   1564,
+   64,
+   340,
+   976
+  ],
+  "dev": [
+   1595,
+   618,
+   109,
+   26
+  ],
+  "strategy": [
+   1575,
+   273,
+   318,
+   467
+  ],
+  "toast": [
+   1575,
+   175,
+   318,
+   787
+  ],
+  "toastText": "Bought 1.29M TOA for 0.5 SOL @ $0.047294 · · 5 exit orders armed\n\n×"
+ },
+ "monitor": {
+  "hot": [
+   1517,
+   127,
+   314,
+   20
+  ]
+ },
+ "keys": {
+  "seconds": 15,
+  "beats": [
+   {
+    "t": 1.301,
+    "label": "2"
+   },
+   {
+    "t": 2.635,
+    "label": "j"
+   },
+   {
+    "t": 3.3,
+    "label": "j"
+   },
+   {
+    "t": 4.46,
+    "label": "b"
+   },
+   {
+    "t": 6.53,
+    "label": "enter"
+   },
+   {
+    "t": 9.297,
+    "label": "s"
+   },
+   {
+    "t": 11.252,
+    "label": "/"
+   }
+  ]
+ }
+}

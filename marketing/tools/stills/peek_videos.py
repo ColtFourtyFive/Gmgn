@@ -1,7 +1,8 @@
-"""Product-peek videos (WARMUP_WEEK §9.2): peek-board, peek-chains and peek-bundle-check, from capture-mode
-recordings and stills (capture_videos.mjs), with captions, the DEMO corner label and an end slate.
+"""Product-peek videos (WARMUP_WEEK §9.2): peek-board, peek-chains, peek-bundle-check (capture_videos.mjs) and
+peek-keys (capture_peeks2.mjs), from capture-mode recordings and stills, with captions, the DEMO corner label and an
+end slate.
 
-Usage: python3 peek_videos.py scratch_dir [peek-board peek-chains peek-bundle-check]
+Usage: python3 peek_videos.py scratch_dir [peek-board peek-chains peek-bundle-check peek-keys]
 """
 import json
 import os
@@ -161,6 +162,36 @@ def bundle():
     cut("peek-bundle-check", segs, ovs, total, au)
 
 
+def keycap(key, label):
+    return page('<div style="position:absolute;left:56px;bottom:64px;display:flex;align-items:center;gap:18px;background:rgba(10,12,16,.9);'
+                'border:1px solid #222731;border-radius:14px;padding:14px 22px 14px 14px">'
+                f'<div class="mono" style="min-width:64px;height:64px;padding:0 16px;display:flex;align-items:center;justify-content:center;'
+                f'border:2px solid #FFB547;border-bottom-width:6px;border-radius:10px;color:#FFB547;font-weight:700;font-size:34px">{key}</div>'
+                f'<div style="font-weight:700;font-size:40px;letter-spacing:-.02em">{rich(label)}</div></div>')
+
+
+def keys():
+    # Beats from capture_peeks2.mjs (screens/live/peeks2.json); the board is driven from the keyboard only.
+    b = json.load(open(f"{LIVE}/peeks2.json"))["keys"]["beats"]
+    t = [x["t"] for x in b]                       # 2, j, j, b, enter, s, /
+    end = t[6] + 0.55                              # cut before the search results appear
+    caps = [("2", "near grad", t[0], t[1]), ("j / k", "pick a coin", t[1], t[3]), ("b", "*quick buy*", t[3], t[4]),
+            ("enter", "open it", t[4], t[5]), ("s", "flip to sell", t[5], t[6]), ("/", "search", t[6], end)]
+    pages = {"demo": demo(), "hook": hook("no *mouse.*", "KEYBOARD ONLY"),
+             "slate-keys": slate("j/k through the trench. *b* to buy. */* to search.", "UI shown with demo data · high risk · nfa")}
+    for i, (k, lab, _, _) in enumerate(caps):
+        pages[f"k{i}"] = keycap(k, lab)
+    render(pages)
+    total = end + 2.2
+    # Crop the status bar (bottom 30 px) and keep 16:9.
+    segs = [{"src": f"{APP}/live-keys.mp4", "start": 0.0, "end": round(end, 3), "crop": [27, 0, 1866, 1050]},
+            {"src": f"{S}/slate-keys.png", "still": True, "dur": 2.2}]
+    ovs = [("hook", 0, min(1.25, t[0]), 0), ("demo", 0, end, 0)] + [(f"k{i}", a, bb, 0.06) for i, (_, _, a, bb) in enumerate(caps)]
+    au = f"{S}/keys.wav"
+    bed(au, total, 8.0)
+    cut("peek-keys", segs, ovs, total, au)
+
+
 if __name__ == "__main__":
-    for n in (sys.argv[2:] or ["peek-board", "peek-chains", "peek-bundle-check"]):
-        {"peek-board": board, "peek-chains": chains, "peek-bundle-check": bundle}[n]()
+    for n in (sys.argv[2:] or ["peek-board", "peek-chains", "peek-bundle-check", "peek-keys"]):
+        {"peek-board": board, "peek-chains": chains, "peek-bundle-check": bundle, "peek-keys": keys}[n]()
