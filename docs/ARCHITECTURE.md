@@ -74,7 +74,8 @@ with **paper trading**.
   the remaining liquidity into a constant-product AMM pool with burned LP.
 - Launchpads, DEXes and chain parameters live in `packages/shared/src/chains.ts`.
 - Agents: retail, bots, snipers, smart money, KOLs (with calls), whales, sandwich bots, serial devs,
-  bundlers and insiders funded by devs, fresh wallets, exchange funders. Each launch draws a hidden
+  bundlers and insiders funded by devs, fresh wallets, exchange funders, address poisoners (dust from
+  look-alikes of the exchange wallets). Each launch draws a hidden
   fate (dud, rug, slow rug, pump & dump, runner, moon); user launches are adopted by the market with
   a fate drawn from observable launch quality and are never rugged on the user's behalf.
 - Congestion rises with throughput and periodic launch rushes; it scales fee suggestions and makes

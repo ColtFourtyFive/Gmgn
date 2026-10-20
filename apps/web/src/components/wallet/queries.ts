@@ -1,5 +1,5 @@
 // React-query keys and hooks for wallet analytics (profile, holdings,
-// activity, created tokens, calls, leaderboard). Profiles share the
+// activity, created tokens, calls, risk check, leaderboard). Profiles share the
 // ['wallet-profile', chain, address] key with the account pages' previews.
 
 import { useQuery } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ export const walletKeys = {
   activity: (chain: ChainId, address: string, type: ActivityType) => ['wallet-activity', chain, address, type] as const,
   created: (chain: ChainId, address: string) => ['wallet-created', chain, address] as const,
   calls: (chain: ChainId, address: string) => ['wallet-calls', chain, address] as const,
+  risk: (chain: ChainId, address: string) => ['wallet-risk', chain, address] as const,
   leaderboard: (chain: ChainId, tag: LeaderboardTag, period: LeaderboardPeriod, sort: LeaderboardSort, order: SortOrder) =>
     ['leaderboard', chain, tag, period, sort, order] as const,
 };
@@ -84,6 +85,18 @@ export function useWalletCalls(chain: ChainId, address: string, enabled = true) 
     queryKey: walletKeys.calls(chain, address),
     queryFn: () => api.walletCalls(chain, address, 200),
     enabled,
+    staleTime: 15_000,
+    refetchInterval: enabled ? 30_000 : false,
+    retry: retryUnlessMissing,
+  });
+}
+
+/** The wallet's risk check flags; refreshed every 30s while mounted. */
+export function useWalletRisk(chain: ChainId, address: string, enabled = true) {
+  return useQuery({
+    queryKey: walletKeys.risk(chain, address),
+    queryFn: () => api.walletRisk(chain, address),
+    enabled: enabled && !!address,
     staleTime: 15_000,
     refetchInterval: enabled ? 30_000 : false,
     retry: retryUnlessMissing,

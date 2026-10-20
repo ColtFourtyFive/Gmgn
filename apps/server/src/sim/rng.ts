@@ -151,6 +151,19 @@ export function evmAddress(rng: Rng, suffix = ''): string {
   return chars.join('');
 }
 
+/**
+ * An address that reads like `target` at a glance: same first and last `keep`
+ * characters (after "0x" on EVM), random in between (address poisoning).
+ */
+export function lookalikeAddress(rng: Rng, target: string, keep = 4): string {
+  const evm = target.startsWith('0x');
+  const body = evm ? target.slice(2) : target;
+  const alphabet = evm ? HEX : B58;
+  const chars = new Array<string>(body.length);
+  for (let i = 0; i < body.length; i++) chars[i] = i < keep || i >= body.length - keep ? body[i] : alphabet[Math.floor(rng.next() * alphabet.length)];
+  return (evm ? '0x' : '') + chars.join('');
+}
+
 export function txHash(rng: Rng, style: 'base58' | 'evm'): string {
   if (style === 'evm') {
     const chars = new Array<string>(65);

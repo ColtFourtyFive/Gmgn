@@ -19,7 +19,8 @@ export type Role =
   | 'funder' //     exchange hot wallet: funds new wallets, receives cash-outs
   | 'serialDev' //  long-lived launcher with a hidden reputation
   | 'freshDev' //   single-use launcher wallet
-  | 'crew'; //      bundler / insider wallet controlled by a dev
+  | 'crew' //       bundler / insider wallet controlled by a dev
+  | 'phisher'; //   address-poisoning sender (behaviors/phishing.ts)
 
 /** Per-agent scratch state (wallet.memory) owned by the market simulator. */
 export interface AgentMemory {
@@ -35,6 +36,8 @@ export interface AgentMemory {
   dumper?: boolean;
   /** Tokens with a pending informed-exit check for this wallet. */
   watching?: Set<string>;
+  /** Phishers: the address this one imitates. */
+  mimics?: string;
 }
 
 export function memOf(w: WalletState): AgentMemory {

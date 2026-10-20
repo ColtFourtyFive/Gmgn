@@ -56,6 +56,7 @@ current `low` tier can fail to land.
 | GET | `/api/:chain/wallets/:address/activity` | `type?` = `all\|buy\|sell`, `limit?`, `before?`, `beforeId?` | `FeedItem[]` (with `positionEvent`; paging: see below) |
 | GET | `/api/:chain/wallets/:address/created-tokens` | `limit?` (default 100, max 500) | `DevToken[]` newest first: tokens the wallet launched that still exist |
 | GET | `/api/:chain/wallets/:address/calls` | `limit?` (default 50, max 200) | `WalletCalls` |
+| GET | `/api/:chain/wallets/:address/risk` | | `WalletRiskReport` (risk check, see below) |
 | GET | `/api/:chain/leaderboard` | `tag?` = `smart\|kol\|sniper\|whale\|all`, `period?` (`1d\|7d\|30d`), `sort?` = `pnl\|winRate\|volume\|tokens\|pnlRate`, `order?` = `desc\|asc` (default `desc`), `limit?` | `LeaderboardRow[]` |
 | GET | `/api/:chain/feed` | `kind` = `smart\|kol\|follow\|all` (default `all`), `limit?` | `FeedItem[]` newest first, with `positionEvent` (`follow` 🔒) |
 | GET | `/api/:chain/signals` | `kind?` (`SignalKind`), `limit?` | `Signal[]` newest first |
@@ -106,6 +107,34 @@ locally; REST responses (search included) include them when a token is presented
   `avgMaxMultiple` (mean over the last 30d, 0 without calls). Stats cover the caller's last 200 calls and
   still count calls on tokens the simulator deleted (those are left out of `calls`). `/callouts` reads the
   chain's last 1000 calls: `kol` keeps callers currently tagged `kol`, `hits` keeps calls that hit.
+
+### Wallet risk check
+
+`WalletRiskReport` (`/wallets/:address/risk`, wallet-side analytics `risk.ts`) flags what a viewer should know before
+following or copying a wallet, from observable data only. `flags` come in a fixed order, each with `level`
+(`ok` / `warn` / `bad`, or `unknown` when there is nothing to judge: never shown as a pass), a display `value`,
+the `count` behind it, `rate` (its share of the sample, null when none applies), the `definition` clients show
+in a tooltip, and up to 5 `addresses`. `level` is `high` with any `bad` flag, `medium` with any `warn`, else `low`.
+
+- `phishing` (address poisoning): native transfers under $0.01 received from an address whose first and last 4
+  characters (after `0x`, case-insensitive, on EVM) match a wallet it really transacted with: its funder or one
+  of its last 6 non-dust transfer partners (either direction). `warn` from 1, `bad` at 5+ or from 2+ distinct
+  look-alikes; `addresses` = the look-alike senders (clients never offer them for copying). The last 50 dust
+  transfers per wallet are kept. `unknown` in live mode (native transfers are not indexed there yet).
+- `wash`: tokens in the wallet's recent trades (activity ring: 100, 1000 for accounts) bought and sold back within
+  60s at least twice (the token page's wash-volume rule). `warn` from 1 token, `bad` at 3+ tokens making 30%+
+  of the tokens sampled.
+- `flagged_funder`: the wallet's first funder launched tokens classed as rugged (`DevToken.rugged`). `warn` at 1,
+  `bad` at 2+; `addresses` = the funder; `unknown` without a funding link.
+- `new_large`: first funded < 24h ago and already put $2K+ (fee-inclusive buys, all time) into tokens; `bad` at
+  $10K+; `unknown` when the wallet's age is unknown (live wallets seen only through their trades).
+- `serial_rugger`: its own launches classed as rugged, `warn` at 1, `bad` at 3+.
+- `honeypot`: tokens traded whose contract blocks selling; `bad` above 10% of tokens traded.
+- `fast_trades`: share of its last 100 round trips (first buy to first sell of a token) closed within 5s;
+  `warn` above 10%, `bad` above 30%.
+
+In the simulator, address poisoners spray dust (0.6 campaigns per minute on Solana, scaled per chain, 3-12
+wallets each) from one look-alike per exchange hot wallet to wallets that wallet funded.
 
 ### Safety score
 

@@ -4,7 +4,8 @@
 //   - steps each active token: fair-value path + momentum -> hype -> order flow
 //   - runs scheduled agent actions (snipes, informed exits, KOL calls, migrations)
 //   - plays fate scripts (rugs, coordinated dumps, slow dev sells)
-//   - ambient upkeep: native prices, narrative rotation, watchers, wallet funding
+//   - ambient upkeep: native prices, narrative rotation, watchers, wallet funding,
+//     address-poisoning dust sprays
 //   - housekeeping: dormancy, pruning, CTOs, boosts, rare revivals
 // All randomness comes from world.rng and all time from world.now, so a seed
 // reproduces the same market.
@@ -16,6 +17,7 @@ import type { TokenState, WalletState, World } from './world';
 import { NARRATIVES, ctoSocials } from './names';
 import { addBump, evalPath, hasUpside, isBadFate, isGoodFate, planCrash, planMigrated, planRevival, simOf, type TokenSim } from './behaviors/fate';
 import { Launcher } from './behaviors/launch';
+import { Poisoner } from './behaviors/phishing';
 import { CHAIN_SCALE, Roster, memOf, type Role } from './behaviors/roster';
 import { Scheduler, type Action, type SchedulerState } from './behaviors/scheduler';
 import { CHECKED_ROLES, Desk, buySizeUsd, checkIntervalMs, informedExit, retailSellFraction } from './behaviors/trader';
@@ -45,6 +47,8 @@ const MAX_CALLS = 4;
  * token are held to about this share of the token's liquidity per minute.
  */
 const EXIT_BUDGET = 0.04;
+/** Address-poisoning campaigns per minute on a sol-scale chain (each dusts 3-12 wallets). */
+const PHISH_CAMPAIGNS_PER_MIN = 0.6;
 
 type Stage = 'early' | 'curve' | 'migrated';
 
@@ -111,6 +115,7 @@ export class MarketSim implements MarketSource {
   private readonly desk: Desk;
   private readonly scheduler = new Scheduler();
   private readonly launcher: Launcher;
+  private readonly poisoner: Poisoner;
   /** Non-dormant tokens per chain (runtime index, rebuilt on restore). */
   private active = {} as Record<ChainId, TokenState[]>;
   private chains = {} as Record<ChainId, ChainState>;
@@ -130,6 +135,7 @@ export class MarketSim implements MarketSource {
       narrativeWeights: (chain) => this.chains[chain].heat.map(Math.exp),
       hotToken: (chain) => this.hottest(chain),
     });
+    this.poisoner = new Poisoner(this.world, this.roster);
     CHAIN_IDS.forEach((c, i) => {
       this.active[c] = [];
       this.chains[c] = { cyclePhase: i * 1.7, cyclePeriodMs: (50 + 10 * i) * MIN, heat: NARRATIVES.map(() => 0), congestion: newCongestionModel(0) };
@@ -709,6 +715,7 @@ export class MarketSim implements MarketSource {
       }
       for (let i = rng.poisson((1.5 * scale * dt) / 60); i > 0; i--) this.roster.spawnFresh(chain);
       this.roster.maintain(chain, rng.poisson(10 * scale * (dt / 5)));
+      this.poisoner.step(chain, dtMs, PHISH_CAMPAIGNS_PER_MIN * scale);
     }
   }
 

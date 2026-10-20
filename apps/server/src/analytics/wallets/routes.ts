@@ -1,5 +1,5 @@
 // Wallet-side REST routes (docs/API.md): wallet profile / holdings / activity /
-// created tokens / calls, leaderboard, Monitor feed, signals and call-outs.
+// created tokens / calls / risk check, leaderboard, Monitor feed, signals and call-outs.
 // Inputs are zod-validated; unknown wallets (or a wallet on another chain) are 404.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -98,6 +98,8 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
     const w = wallet(req);
     return ctx.analytics.walletCalls(w, parse(LimitQuery, req.query).limit);
   });
+
+  app.get('/api/:chain/wallets/:address/risk', async (req) => ctx.analytics.walletRisk(wallet(req)));
 
   app.get('/api/:chain/leaderboard', async (req) => {
     const { chain } = parse(ChainParams, req.params);

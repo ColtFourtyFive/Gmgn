@@ -52,6 +52,7 @@ import type {
   WalletCalls,
   WalletPeriod,
   WalletProfile,
+  WalletRiskReport,
   WatchlistGroup,
   WatchlistItem,
   WatchlistResponse,
@@ -169,6 +170,7 @@ export const api = {
     get<FeedItem[]>(`/${chain}/wallets/${address}/activity`, q),
   walletCreatedTokens: (chain: ChainId, address: string, limit?: number) => get<DevToken[]>(`/${chain}/wallets/${address}/created-tokens`, { limit }),
   walletCalls: (chain: ChainId, address: string, limit?: number) => get<WalletCalls>(`/${chain}/wallets/${address}/calls`, { limit }),
+  walletRisk: (chain: ChainId, address: string) => get<WalletRiskReport>(`/${chain}/wallets/${address}/risk`),
   leaderboard: (chain: ChainId, q: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number } = {}) =>
     get<LeaderboardRow[]>(`/${chain}/leaderboard`, q),
   feed: (chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit?: number) => get<FeedItem[]>(`/${chain}/feed`, { kind, limit }),

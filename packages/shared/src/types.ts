@@ -541,6 +541,38 @@ export interface WalletProfile {
   lastActiveAt: number;
 }
 
+/** GET /api/:chain/wallets/:address/risk flags (observable data only; definitions in docs/API.md). */
+export type WalletRiskKey = 'phishing' | 'wash' | 'flagged_funder' | 'new_large' | 'serial_rugger' | 'honeypot' | 'fast_trades';
+
+/** ok = nothing found, warn = amber, bad = red, unknown = no data to judge (never shown as ok). */
+export type WalletRiskFlagLevel = 'ok' | 'warn' | 'bad' | 'unknown';
+
+export interface WalletRiskFlag {
+  key: WalletRiskKey;
+  label: string;
+  level: WalletRiskFlagLevel;
+  /** Display value, e.g. "14 dust transfers from 2 look-alikes", "3 of 12 tokens". */
+  value: string;
+  /** Count behind the flag (transfers, tokens, launches, USD for new_large). */
+  count: number;
+  /** Share of the sample it was measured on (0..1), null when none applies. */
+  rate: number | null;
+  /** What the flag means and how it is measured (tooltip copy). */
+  definition: string;
+  /** Addresses involved (look-alike senders, the flagged funder), at most 5. */
+  addresses?: string[];
+}
+
+export interface WalletRiskReport {
+  chain: ChainId;
+  address: string;
+  /** high = any red flag, medium = any amber flag, else low. */
+  level: RiskLevel;
+  /** Fixed order: phishing, wash, flagged_funder, new_large, serial_rugger, honeypot, fast_trades. */
+  flags: WalletRiskFlag[];
+  updatedAt: number;
+}
+
 export interface LeaderboardRow {
   chain: ChainId;
   address: string;

@@ -32,6 +32,7 @@ import type {
   WalletCalls,
   WalletPeriod,
   WalletProfile,
+  WalletRiskReport,
   WalletTag,
   WalletTransfer,
   WatchlistItem,
@@ -138,6 +139,8 @@ export interface AnalyticsApi {
   createdTokens(w: WalletState, limit?: number): DevToken[];
   /** The wallet's kol_call signals with hit rates. */
   walletCalls(w: WalletState, limit?: number): WalletCalls;
+  /** Risk check flags (address poisoning, wash trading, flagged funder, ...). */
+  walletRisk(w: WalletState): WalletRiskReport;
   leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): LeaderboardRow[];
   feed(chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit: number, viewer: Viewer): FeedItem[];
   signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[];

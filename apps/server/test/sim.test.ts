@@ -4,6 +4,7 @@
 import { deserialize, serialize } from 'node:v8';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { CHAIN_IDS } from '@trenchscope/shared';
+import { looksAlike } from '../src/analytics/wallets/risk';
 import type { AppContext } from '../src/context';
 import { simOf } from '../src/sim/behaviors/fate';
 import { memOf } from '../src/sim/behaviors/roster';
@@ -193,6 +194,27 @@ describe('market simulator', () => {
     const fresh = sim.world.walletsOf('sol', 'fresh').map((a) => sim.world.wallets.get(a)!);
     expect(fresh.length).toBeGreaterThan(50);
     for (const w of fresh) expect(memOf(sim.world.wallets.get(w.fundedBy!)!).role).toBe('funder');
+  });
+
+  it('runs address-poisoning sprays: dust from look-alikes of the exchange wallet that funded each victim', () => {
+    const s = makeSim('phish-test');
+    const dust: { from: WalletState; to: WalletState; usd: number }[] = [];
+    s.world.on('nativeTransfer', (from, to, amount) => {
+      if (from.archetype === 'phisher') dust.push({ from, to, usd: amount * s.world.nativeUsd(to.chain) });
+    });
+    s.engine.warmup(20 * 60_000, 1000, END_AT);
+    const sol = dust.filter((d) => d.to.chain === 'sol');
+    expect(sol.length).toBeGreaterThan(10);
+    for (const d of dust) {
+      const mimics = memOf(d.from).mimics!;
+      expect(looksAlike(d.from.address, mimics)).toBe(true);
+      expect(memOf(s.world.wallets.get(mimics)!).role).toBe('funder');
+      expect(d.to.fundedBy).toBe(mimics);
+      expect(d.usd).toBeLessThan(0.01);
+    }
+    // one look-alike per imitated wallet
+    const phishers = s.world.walletsOf('sol', 'phisher').map((a) => s.world.wallets.get(a)!);
+    expect(new Set(phishers.map((p) => memOf(p).mimics)).size).toBe(phishers.length);
   });
 
   it('gives tokens original identities across narratives, with some copycats', () => {
