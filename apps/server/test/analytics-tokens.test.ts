@@ -609,7 +609,7 @@ describe('summary, stats and security', () => {
 
   it('bounds memory: forgets deleted migrations and drops caches of long-idle tokens', () => {
     const chain: ChainId = 'bsc';
-    const internals = fx.ta as unknown as { caches: Map<string, unknown>; migrated: Record<ChainId, string[]> };
+    const internals = (fx.ta as unknown as { core: { caches: Map<string, unknown>; migrated: Record<ChainId, string[]> } }).core;
     const { t: gone } = tokenWithBuyers(fx, chain, 'DEL', 2);
     const { t: kept } = tokenWithBuyers(fx, chain, 'KEP', 2);
     fx.world.migrate(gone);
