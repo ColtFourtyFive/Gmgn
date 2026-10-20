@@ -32,7 +32,7 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     dataDir: process.env.DATA_DIR ?? '.data',
     seed: process.env.SIM_SEED ?? 'trenchscope',
     warmupMinutes: Number(process.env.WARMUP_MINUTES ?? 90),
-    snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 60000),
+    snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 900000),
     webDist: process.env.WEB_DIST ?? null,
     trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true',
     accountCreationsPerIpPer10Min: Number(process.env.ACCOUNT_CREATIONS_PER_IP ?? 30),

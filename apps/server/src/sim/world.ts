@@ -265,6 +265,8 @@ export interface WorldSnapshot {
 }
 
 const TRADE_RING = 1500;
+/** Trades per token kept in snapshots. */
+const SNAPSHOT_TRADES = 100;
 const BUCKET_MINUTES = 24 * 60 + 5;
 const CANDLE_LIMITS: Record<Resolution, number> = {
   '1s': 1800,
@@ -998,7 +1000,13 @@ export class World extends EventEmitter {
       tradeTotal: this.tradeTotal,
       rng: this.rng.getState(),
       chains: this.chains,
-      tokens: [...this.tokens.values()].map((t) => ({ ...t, cache: {} })),
+      // Compact: recent trades and coarse candles are enough to resume; 1s candles rebuild in minutes.
+      tokens: [...this.tokens.values()].map((t) => ({
+        ...t,
+        cache: {},
+        trades: t.trades.length > SNAPSHOT_TRADES ? t.trades.slice(-SNAPSHOT_TRADES) : t.trades,
+        candles: { ...t.candles, '1s': [] },
+      })),
       wallets: [...this.wallets.values()],
       tokensByChain: this.tokensByChain,
     };

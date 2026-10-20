@@ -22,6 +22,9 @@ import {
 } from './metrics';
 import { Ring } from './ring';
 
+/** Activity rows persisted per simulated wallet in snapshots. */
+const PERSISTED_SIM_ACTIVITY = 10;
+
 /** Per-token aggregate inside a bucket: realized PnL and buy cost (USD). */
 export interface TokenAgg {
   r: number;
@@ -338,7 +341,8 @@ export class WalletTrack {
       days: this.days,
       tokens: this.tokens,
       cw: this.cw.toArray(),
-      act: this.act.toArray(),
+      // Simulated wallets persist only recent activity; user wallets (bigger rings) keep it all.
+      act: this.act.cap > 100 ? this.act.toArray() : this.act.toArray().slice(-PERSISTED_SIM_ACTIVITY),
       actCap: this.act.cap,
       snipes: this.snipes,
       boughtTokens: this.boughtTokens,
