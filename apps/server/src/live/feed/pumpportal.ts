@@ -258,6 +258,10 @@ export class PumpPortalClient {
     ws.on('pong', () => {
       if (this.ws === ws) this.lastHeardAt = this.now();
     });
+    // PumpPortal pings its clients too ('ws' answers them): a ping is a sign of life as well.
+    ws.on('ping', () => {
+      if (this.ws === ws) this.lastHeardAt = this.now();
+    });
     ws.on('error', (err) => {
       // 'close' follows; only note it (the URL may carry the key: never log it).
       if (this.ws === ws && !this.open) this.log.warn(`[pumpportal] connection failed: ${redact(err.message, this.opts.apiKey)}`);

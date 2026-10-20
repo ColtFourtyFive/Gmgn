@@ -268,6 +268,21 @@ describe('PumpPortal client', () => {
     expect(c.connected).toBe(true);
   });
 
+  it('counts the server pinging it as a sign of life (PumpPortal pings its clients)', async () => {
+    const feed = await fakeFeed({ autoPong: false });
+    const { c } = client(feed.url, { pingEveryMs: 30, staleMs: 150 });
+    c.start();
+    await until(() => feed.sockets.length === 1 && c.connected);
+    const pinger = setInterval(() => feed.sockets[0]?.ping(), 40);
+    try {
+      await new Promise((r) => setTimeout(r, 450));
+      expect(feed.sockets).toHaveLength(1);
+      expect(c.diag.connects).toBe(1);
+    } finally {
+      clearInterval(pinger);
+    }
+  });
+
   it('sends the API key in the socket URL only', async () => {
     const feed = await fakeFeed();
     const { c } = client(feed.url, { apiKey: 'k3y/with+chars' });
