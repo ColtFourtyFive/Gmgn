@@ -21,7 +21,7 @@ Counts are X-weighted (`—` and `·` count as 1). Everything is ≤ 280.
 | Location | `the trenches` |
 | Website | Leave blank until real trading works (`LAUNCH_DAY.md` §1.1), then add the real URL (own domain, no shortener) |
 | Avatar | `marketing/x/profile/avatar.png` |
-| Header | `marketing/x/profile/header-alt.png` ("see who's really buying." + `SOL · BASE · BSC · ETH · ROBINHOOD CHAIN` + the wallet-tag chips). **Re-render it with `marketing/tools/profile.py` before uploading** (0 credits): the built file's subline reads `every wallet tagged before you buy · self-custody`, the same overclaim as BIO-2. New subline: `snipers, bundlers, insiders, the dev: tagged · self-custody` (`PROFILE.md` §7, `BRAND_GUIDE.md` §14.4). If the re-render can't happen first, leave X's default header up until it does |
+| Header | `marketing/x/profile/header-alt.png` ("see who's really buying." + `SOL · BASE · BSC · ETH · ROBINHOOD CHAIN` + the wallet-tag chips). **READY**: already re-rendered with `marketing/tools/profile.py` with the subline `snipers, bundlers, insiders, the dev: tagged · self-custody` (the old "every wallet tagged" overclaim is gone). Alternative: `header-main.png` (the AI header art with the lockup) |
 | Professional category | Software / technology. Avoid finance categories until you've checked what X requires of financial-service accounts. |
 | Chain names | Name the chains as supported chains only. No Robinhood, Coinbase, Binance or Ethereum Foundation logos, colours or wording that implies a partnership. |
 

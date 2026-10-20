@@ -6,11 +6,15 @@
 //   bill   -> launch-7: a Market buy sized so price impact turns red, the full quote
 //   surv   -> launch-9: a copy-trade task, a migration sniper task (both created through the app's API), Signals, Monitor
 //   strip  -> launch-17: a holder strip with the Bundlers and Insiders chips red
+//   keys2  -> launch-8: keyboard only, a different sequence from peek-keys: / , paste an address, Enter, B, S, back to
+//             the board (browser Back), 3, J, K. Recorded at scale 1 (LAUNCH_DSF=1) for frame rate
 // Each token is new to the kit (addresses used by earlier captures are skipped). Buys are paper buys in the simulator.
 // Page shots go to screens/live/l-<part>*.png, boxes (CSS px) to screens/live/launch2.json.
-// Usage: node capture_launch2.mjs scratch_dir [audit,risk,exits,bill,surv,strip]
+// Usage: [LAUNCH_DSF=1] node capture_launch2.mjs scratch_dir [audit,risk,exits,bill,surv,strip,keys2]
 import { createRequire } from 'module';
 import fs from 'fs';
+import path from 'path';
+import { execFileSync } from 'child_process';
 
 const require = createRequire('/home/user/Gmgn/apps/web/package.json');
 const { chromium } = require('@playwright/test');
@@ -25,6 +29,8 @@ const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, 'utf
 const save = () => fs.writeFileSync(metaPath, JSON.stringify(meta, null, 1));
 const api = async (p) => (await fetch(BASE + p)).json();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const DSF = Number(process.env.LAUNCH_DSF || 2);
+const TMP = process.argv[2];
 const BLUR = 'a.link.font-semibold[title],span.truncate.text-muted[title],h1.text-lg.font-bold,h1.text-lg.font-bold + *{filter:blur(6px)!important}';
 
 // Tokens already in other assets.
@@ -35,7 +41,7 @@ for (const f of ['boxes.json', 'videos.json', 'trailer-v4.json', 'trailer-v4m.js
 }
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--force-device-scale-factor=2', '--window-size=1920,1080'] });
+  args: [`--force-device-scale-factor=${DSF}`, '--window-size=1920,1080'] });
 const ctx = await browser.newContext({ viewport: null, colorScheme: 'dark' });
 await ctx.addInitScript({ path: `${TOOLS}/capture-mode.js` });
 await ctx.addInitScript({ path: `${TOOLS}/blur-tickers.js` });
@@ -194,6 +200,73 @@ if (want('strip')) {
   save();
   await shot('l-strip');
   console.log('strip', t.symbol);
+}
+
+async function record(name, seconds, actions) {
+  const dir = path.join(TMP, name);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const cdp = await ctx.newCDPSession(page);
+  const frames = [];
+  cdp.on('Page.screencastFrame', async (f) => {
+    frames.push({ data: f.data, t: f.metadata.timestamp });
+    await cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {});
+  });
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 92, maxWidth: 1920, maxHeight: 1080, everyNthFrame: 1 });
+  const start = Date.now();
+  const beats = [];
+  const mark = (label, extra) => beats.push({ t: (Date.now() - start) / 1000, label, ...(extra || {}) });
+  await actions(mark);
+  const left = seconds * 1000 - (Date.now() - start);
+  if (left > 0) await sleep(left);
+  await cdp.send('Page.stopScreencast');
+  await sleep(200);
+  const list = frames.map((f, i) => {
+    const file = path.join(dir, `f${String(i).padStart(5, '0')}.jpg`);
+    fs.writeFileSync(file, Buffer.from(f.data, 'base64'));
+    const next = i + 1 < frames.length ? frames[i + 1].t : frames[0].t + seconds;
+    return `file '${file}'\nduration ${Math.max(0.001, next - f.t).toFixed(4)}`;
+  });
+  list.push(`file '${path.join(dir, `f${String(frames.length - 1).padStart(5, '0')}.jpg`)}'`);
+  fs.writeFileSync(path.join(dir, 'list.txt'), list.join('\n'));
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'list.txt'),
+    '-vf', 'fps=30,scale=1920:1080:flags=lanczos,format=yuv420p', '-t', String(seconds), '-c:v', 'libx264', '-crf', '16', '-preset', 'slow',
+    `/home/user/Gmgn/marketing/video/app-footage/live-${name}.mp4`]);
+  meta[name] = { seconds, beats };
+  save();
+  console.log('clip', name, frames.length, 'frames', JSON.stringify(beats.map((b) => [b.label, +b.t.toFixed(2)])));
+}
+
+if (want('keys2')) {
+  const t = await pick((x) => x.status === 'curve' && x.holderCount >= 20 && (s(x).rugRatio ?? 1) < 0.5);
+  await page.goto(`${BASE}/sol/trenches`, { waitUntil: 'networkidle' });
+  await page.mouse.move(1919, 1079);
+  await page.waitForTimeout(3000);
+  await record('keys2', 16, async (mark) => {
+    const key = async (k, label, wait) => { mark(label); await page.keyboard.press(k); await sleep(wait); };
+    await sleep(1200);
+    await key('/', '/', 700);
+    mark('paste');
+    await page.keyboard.insertText(t.address);
+    await sleep(1500);
+    await key('Enter', 'enter', 2400);
+    await page.evaluate(() => document.activeElement?.blur());
+    await key('b', 'b', 1400);
+    await page.evaluate(() => document.activeElement?.blur());
+    await key('s', 's', 1500);
+    await page.evaluate(() => document.activeElement?.blur());
+    // Browser Back (no in-app hotkey returns to the board; headless Chromium ignores Alt+Left).
+    mark('back');
+    await page.goBack();
+    await page.mouse.move(1919, 1079);
+    await sleep(1700);
+    await key('3', '3', 1100);
+    await key('j', 'j', 700);
+    await key('j', 'j', 700);
+    await key('k', 'k', 900);
+  });
+  meta.keys2.token = { symbol: t.symbol, address: t.address };
+  save();
 }
 
 await browser.close();

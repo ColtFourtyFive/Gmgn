@@ -880,3 +880,52 @@ About **28 credits** are left; about **3 are pre-approved**, and the plan spends
 | OPT-V2 | Native 9:16 minimum set (shots 1, 5, 11, 13; includes OPT-V1) | §12.4 | ~38 (≈ 28.5 more than OPT-V1) | over budget on its own |
 
 **Reading it:** everything except OPT-V2 comes to about **27–31 credits**, which is more than the ~26 left. OPT-V2 alone is more than the whole balance. None of these is needed to post the warm-up or launch. If the owner wants a pick: OPT-V1 (the 9:16 thumbnail) is the biggest single win, then OPT-1. `x/WARMUP_WEEK.md` §9.4, `x/LAUNCH_DAY.md` §10 and `brand/BRAND_GUIDE.md` §11.6 point here.
+
+---
+
+## 20. As built (v4, both cuts)
+
+What was actually rendered, where it differs from the plan above, and how to rebuild it. Everything here is reproducible from the repo.
+
+### 20.1 Files
+
+| File | What |
+|---|---|
+| `video/trenchscope-trailer-16x9.mp4` (+ `.srt`, `-poster.jpg`) | `launch-1`, 36.6 s, 1920 × 1080, 30 fps, H.264 + AAC. Mix at -14.0 LUFS, -1.9 dBFS peak |
+| `video/trenchscope-trailer-9x16.mp4` (+ `.srt`, `-poster.jpg`) | `launch-2`, same timeline and mix, 1080 × 1920 |
+| `video/audio/trailer-v4-mix.wav`, `trailer-v4v-mix.wav` | The two mixes (only the UI-click times differ) |
+| `tools/trailer/capture_v4.mjs`, `capture_v4m.mjs` | The desktop and phone app takes (screens/live/trailer-v4*.json hold the beats) |
+| `tools/trailer/ovl_v4.py`, `edit_v4.py`, `edit_v4v.py`, `mix_v4.py` | Overlays, the 16:9 and 9:16 edits, the shared mix |
+
+Rebuild: `python3 tools/trailer/ovl_v4.py video/overlays/trailer-v4 <scratch>`, then `python3 tools/trailer/edit_v4.py <scratch>` and `python3 tools/trailer/edit_v4v.py <scratch>`.
+
+### 20.2 Timeline as cut (both cuts)
+
+| t (s) | Shot | Source |
+|---|---|---|
+| 0.0 | whale (hook, reticle, Whale chip) | `c01` 0.4–2.8 |
+| 2.4 | periscope ("so we built a scope.") | `c02` 0.8–2.6 |
+| 4.2 | five fronts ("one habitat. five chains.") | `n1-five-fronts` 2.0–3.8 (new keyframe + clip) |
+| 6.0 | the board ("one terminal.") | capture-mode board take |
+| 7.2–15.6 | sniper, bundler, insider, dev species cards | `c04`, `c05`, `c06`, `c07` |
+| 15.6 | receipts: the audit card, then the holder chips | DPR-3 stills of one demo token |
+| 18.6 | "so naturally, you…" | card, silence |
+| 19.8 | Auto buy with "Sell when dev sells 100%", the High-risk prompt, tick, Buy anyway, fill ("1 exit order") | take A |
+| 24.0 | "nature is not kind to late buyers." | `c11` |
+| 25.8 | DEV SELL.: the dev dumps, the chart collapses | take B, real speed |
+| 26.9 | "Dev-sell exit filled" toast ("your exit fired right after.") | take B still |
+| 27.9 | the exit walk | `n2-the-exit` 0.0–1.2 (new keyframe + clip) |
+| 29.1 | "or. look before you ape." | `c13` |
+| 31.2–36.6 | end card (lockup, tagline, chains, AI · DEMO · RISK · CHAINS lines) | `x/posts/trailer-endcard-*.png` |
+
+VO (v4 take, faster-whisper word times in `video/audio/vo-take-v4.words.txt`): 0.15, 2.95, 4.50 / 5.45, 20.00, 24.05, 29.20 / 29.90, 32.00 / 32.70. Music: the vidIQ score, windows 0.5–19.1 s, 48.0–53.1 s and 55.0–60.4 s, silence for the card and the empty desk, room tone, a riser into 24.0 and a synthesized sub boom on "Buy anyway". Sidechain duck under the voice.
+
+### 20.3 Honesty notes on the app shots
+
+- Demo data, capture mode, DEMO label on every app frame; every demo ticker blurred (`tools/blur-tickers.js` on later captures, region blurs on the trailer takes).
+- The buy is a paper buy in the local simulator. The dev-sell exit in take B **filled after the dev's dump at a loss** (bought 0.5 SOL, the exit sold for ~0.17 SOL on desktop, ~0.11 on the phone take). The copy says only "your exit fired right after" and the note "dev-sell exit · reacts after the dev sells": true to the frame, and the loss is why the next line is "or. look before you ape."
+- The exits ran with 80% sell slippage. At the default 25% the first take's exit **failed** ("slippage exceeded") in the dump. That is a real product behaviour worth a doc line or a default change (owner item).
+
+### 20.4 The 9:16 cut, as built
+
+Re-captured natively on the app's phone layout (432 × 768 CSS at a forced device scale of 2.5, so the screencast is a sharp 1080 × 1920; not 390 × 844 at 2.77 as §12.1 planned). Layout: captions in a 420 px top band, AI shots in a 4:5 window cropped around each clip's subject, app shots in a rounded screen at 0.70 scale with amber tap rings, the AI or DEMO label in the bottom band. Same timeline and voice as 16:9, so one SRT serves both.

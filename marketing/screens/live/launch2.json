@@ -113,5 +113,54 @@
    340,
    236
   ]
+ },
+ "keys2": {
+  "seconds": 16,
+  "beats": [
+   {
+    "t": 1.2,
+    "label": "/"
+   },
+   {
+    "t": 1.959,
+    "label": "paste"
+   },
+   {
+    "t": 3.564,
+    "label": "enter"
+   },
+   {
+    "t": 6.147,
+    "label": "b"
+   },
+   {
+    "t": 7.56,
+    "label": "s"
+   },
+   {
+    "t": 9.134,
+    "label": "back"
+   },
+   {
+    "t": 11.463,
+    "label": "3"
+   },
+   {
+    "t": 12.7,
+    "label": "j"
+   },
+   {
+    "t": 13.494,
+    "label": "j"
+   },
+   {
+    "t": 14.237,
+    "label": "k"
+   }
+  ],
+  "token": {
+   "symbol": "UCUP",
+   "address": "2Z6qiSz4Dx3gM7UayxJjhFDWpuGj2dUzNDStpt8bonk"
+  }
  }
 }
