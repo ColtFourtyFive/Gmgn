@@ -35,7 +35,9 @@ def run(edit):
             chain = chain.rstrip(",") + f",split={len(blurs) + 1}" + "".join(f"[b{i}_{k}]" for k in range(len(blurs) + 1)) + ";"
             base = f"[b{i}_0]"
             for k, (bx, by, bw, bh) in enumerate(blurs, start=1):
-                chain += f"[b{i}_{k}]crop={bw}:{bh}:{bx}:{by},boxblur=luma_radius=10:luma_power=3:chroma_radius=5:chroma_power=3[bb{i}_{k}];"
+                # boxblur caps the radius at half the plane size (chroma planes are half size in yuv420p).
+                lr, cr = min(10, min(bw, bh) // 2), min(5, min(bw, bh) // 4)
+                chain += f"[b{i}_{k}]crop={bw}:{bh}:{bx}:{by},boxblur=luma_radius={lr}:luma_power=3:chroma_radius={cr}:chroma_power=3[bb{i}_{k}];"
             for k, (bx, by, bw, bh) in enumerate(blurs, start=1):
                 out = f"[bo{i}_{k}]"
                 chain += f"{base}[bb{i}_{k}]overlay={bx}:{by}{out};"

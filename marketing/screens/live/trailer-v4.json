@@ -1,0 +1,194 @@
+{
+ "token": {
+  "symbol": "DONUT",
+  "address": "2uNzrPMd7LNUmhwxNg6EcT6JxrFMdLQKTEUZWdDwfLC",
+  "security": {
+   "renouncedMint": true,
+   "renouncedFreeze": true,
+   "isOpenSource": null,
+   "isRenounced": null,
+   "isHoneypot": null,
+   "buyTax": 0,
+   "sellTax": 0,
+   "lpBurnedRate": null,
+   "top10HolderRate": 0.510008772957433,
+   "top100HolderRate": 0.5111357829325597,
+   "devHoldRate": 0.22667909429038346,
+   "devStatus": "hold",
+   "insiderHoldRate": 0.2628466106533568,
+   "sniperHoldRate": 0.019317033694859195,
+   "sniperCount": 4,
+   "bundlerRate": 0.24628388292307454,
+   "ratTraderRate": 0.4196142306948496,
+   "freshWalletRate": 0.6666666666666666,
+   "botDegenRate": 0.08333333333333333,
+   "isWashTrading": false,
+   "rugRatio": 0.8416,
+   "riskLevel": "high",
+   "checks": [
+    {
+     "key": "mint",
+     "label": "Mint authority",
+     "value": "Renounced",
+     "level": "good"
+    },
+    {
+     "key": "freeze",
+     "label": "Freeze authority",
+     "value": "Renounced",
+     "level": "good"
+    },
+    {
+     "key": "tax",
+     "label": "Buy / sell tax",
+     "value": "0% / 0%",
+     "level": "good"
+    },
+    {
+     "key": "lp",
+     "label": "LP burned",
+     "value": "On curve",
+     "level": "info"
+    },
+    {
+     "key": "top10",
+     "label": "Top 10 holders",
+     "value": "51%",
+     "level": "bad",
+     "hint": "Top 100 hold 51%"
+    },
+    {
+     "key": "dev",
+     "label": "Dev holding",
+     "value": "23%",
+     "level": "bad",
+     "hint": "Dev can dump a large bag"
+    },
+    {
+     "key": "insiders",
+     "label": "Insiders",
+     "value": "26%",
+     "level": "bad",
+     "hint": "Wallets funded by or linked to the dev"
+    },
+    {
+     "key": "snipers",
+     "label": "Snipers",
+     "value": "4 (1.9%)",
+     "level": "good"
+    },
+    {
+     "key": "bundlers",
+     "label": "Bundlers",
+     "value": "25%",
+     "level": "warn",
+     "hint": "Share of volume from launch-block bundles"
+    },
+    {
+     "key": "fresh",
+     "label": "Fresh wallets",
+     "value": "67%",
+     "level": "bad",
+     "hint": "Share of holders that are brand-new wallets"
+    },
+    {
+     "key": "bots",
+     "label": "Bot degens",
+     "value": "8.3%",
+     "level": "good"
+    },
+    {
+     "key": "wash",
+     "label": "Wash trading",
+     "value": "No",
+     "level": "good"
+    },
+    {
+     "key": "smart",
+     "label": "Smart money",
+     "value": "0",
+     "level": "warn"
+    },
+    {
+     "key": "rug",
+     "label": "Rug ratio",
+     "value": "84%",
+     "level": "bad",
+     "hint": "Composite rug likelihood from holder, dev and contract signals"
+    }
+   ]
+  }
+ },
+ "auditText": "Audit\n7 flags\nHigh risk\nRug ratio\n84.2%\nTop 10 holders\n51%\nDev holding\n23%\nInsiders\n26%\nFresh wallets\n67%\nRug ratio\n84%\nBundlers\n25%\nSmart money\n0\n\nAudit — reference only.\n\nAll 14",
+ "autoForm": {
+  "t": 3.087,
+  "form": [
+   1564,
+   64,
+   340,
+   976
+  ]
+ },
+ "buyClick": {
+  "t": 3.629
+ },
+ "dialog": {
+  "t": 4.693,
+  "box": [
+   768,
+   130,
+   384,
+   473
+  ],
+  "title": [
+   785,
+   145,
+   316,
+   20
+  ],
+  "exitRow": [
+   796,
+   444,
+   328,
+   22
+  ]
+ },
+ "tick": {
+  "t": 7.349
+ },
+ "buyAnyway": {
+  "t": 8.328
+ },
+ "fillToast": {
+  "t": 10.07,
+  "box": [
+   1605,
+   67,
+   256,
+   52
+  ]
+ },
+ "takeA": {
+  "start": 1792531838.001021
+ },
+ "exitToast": {
+  "outcome": "filled",
+  "at": 1792532002.077,
+  "box": [
+   1605,
+   67,
+   256,
+   18
+  ]
+ },
+ "devSell": [
+  {
+   "title": "Dev sold all",
+   "createdAt": 1792532001223
+  }
+ ],
+ "takeB": {
+  "start": 1792531977.058173,
+  "end": 1792532006.049933
+ }
+}
