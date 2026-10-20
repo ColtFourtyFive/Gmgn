@@ -71,14 +71,15 @@ const FEED_TAGS: WalletTag[] = ['smart', 'kol', 'whale', 'sniper'];
  *
  * Calibrated against the simulator with the real 30s ticker (hysteresis
  * included; hidden archetypes used only for scoring, see the evaluation test)
- * over 3 seeds x 90m plus a 180m run. Smart wallets make only ~3-7 entries in
- * 90 minutes, so the rule needs few entries but a high hit rate. On one frozen
- * simulator build, 90m sol: precision 0.90-0.93, recall 0.77-0.96, 6-11 of 1,500
- * retail tagged (180m: 0.94 / 0.97, 3 retail); bsc recall 0.52-0.80, base
- * 0.55-0.63, eth 0-0.37 (eth smart wallets make 1-2 entries per 90m). The
- * previous calibration (>= 6 entries, hit rate >= 40%, z >= 2.33, PnL >= $500,
- * keep while win >= 40% and PnL >= 0) scored 90m sol precision 0.73-0.83, recall
- * 0.57-0.88 with 19-26 retail tagged on the same build. PnL/win-rate-only rules
+ * over 3 seeds x 90m plus a 180m run, on two simulator builds. Smart wallets
+ * make only ~3-7 entries in 90 minutes, so the rule needs few entries but a high
+ * hit rate. 90m sol: precision 0.90-0.93 / 0.80-0.96, recall 0.77-0.96 /
+ * 0.58-0.79, retail tagged 6-11 / 4-23 of 1,500 (180m: 0.94-0.95 / 0.93-0.97);
+ * bsc recall 0.05-0.81, base 0.45-0.70, eth 0-0.37 (eth smart wallets make 1-2
+ * entries per 90m). The previous calibration (>= 6 entries, hit rate >= 40%,
+ * z >= 2.33, PnL >= $500, keep while win >= 40% and PnL >= 0) scored 90m sol
+ * precision 0.73-0.83 / 0.76-0.88, recall 0.57-0.88 / 0.59-0.72 with 19-26 /
+ * 11-25 retail tagged on the same builds. PnL/win-rate-only rules
  * (e.g. realized >= $1.5k, win >= 55%, >= 8 tokens) peaked around P 0.66 /
  * R 0.38 on sol because lucky top-decile retail out-earns many smart wallets
  * over short windows, and they decayed further under hysteresis.
@@ -103,8 +104,6 @@ export const SMART_RULE = {
   keepWinRate: 0.5,
   /** Share of minTotalPnl an existing tag must keep. */
   keepPnlShare: 0.5,
-  /** How long an existing tag survives on the keep test alone after the wallet last passed the grant test (ms). */
-  keepGraceMs: Number.POSITIVE_INFINITY,
 };
 export const SNIPER_MIN_SNIPES = 5;
 /**
@@ -207,8 +206,6 @@ export class WalletAnalytics {
   private seq = 0;
   private classifyRuns = 0;
   private entries = new EntryWatch();
-  /** Last classification time each wallet passed the smart grant test (for the hysteresis grace period). */
-  private smartOkAt = new Map<string, number>();
   /** Current bot trade-rate threshold per chain (trades/day equivalent). */
   readonly botRate: Record<ChainId, number> = { sol: BOT_MIN_TRADES_PER_DAY, bsc: BOT_MIN_TRADES_PER_DAY, base: BOT_MIN_TRADES_PER_DAY, eth: BOT_MIN_TRADES_PER_DAY };
   /** Chain base rate of entries that run 2x (median over active wallets, 7d). */
@@ -429,17 +426,10 @@ export class WalletAnalytics {
         const keepGate = was && hitRate >= R.keepHitRate && z >= R.keepHitZ;
         if (grantGate || keepGate) {
           const s = periodStats(world, w, tr, '7d', now).stats;
-          if (grantGate && s.winRate >= R.minWinRate && s.totalPnlUsd >= R.minTotalPnl[w.chain]) {
-            out.add('smart');
-            this.smartOkAt.set(w.address, now);
-          } else if (keepGate && s.winRate >= R.keepWinRate && s.totalPnlUsd >= R.keepPnlShare * R.minTotalPnl[w.chain]) {
-            // Hysteresis: an existing tag survives on the looser keep test, but only for a
-            // grace period after the wallet last passed the grant test (tags set elsewhere
-            // or restored without a record start their grace now).
-            let okAt = this.smartOkAt.get(w.address);
-            if (okAt === undefined) this.smartOkAt.set(w.address, (okAt = now));
-            if (now - okAt < R.keepGraceMs) out.add('smart');
-          }
+          const grant = grantGate && s.winRate >= R.minWinRate && s.totalPnlUsd >= R.minTotalPnl[w.chain];
+          // Hysteresis: an existing tag survives on the looser keep test.
+          const keep = keepGate && s.winRate >= R.keepWinRate && s.totalPnlUsd >= R.keepPnlShare * R.minTotalPnl[w.chain];
+          if (grant || keep) out.add('smart');
         }
       }
     }
@@ -461,7 +451,6 @@ export class WalletAnalytics {
     }
     this.entries.prune(now - 8 * DAY_MS, (tok) => world.tokens.has(tok));
     this.signalEngine.prune();
-    for (const a of this.smartOkAt.keys()) if (!world.wallets.get(a)?.tags.has('smart')) this.smartOkAt.delete(a);
   }
 
   // -------------------------------------------------------------------------
