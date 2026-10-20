@@ -5,10 +5,13 @@ import { deserialize, serialize } from 'node:v8';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   CHAIN_IDS,
+  EARLY_BUYERS_LIMIT,
   STAT_WINDOWS,
   launchpadsFor,
   type ChainId,
+  type EarlyBuyersResponse,
   type Position,
+  type SafetyScore,
   type TokenFilters,
   type TokenSummary,
   type Trade,
@@ -26,7 +29,7 @@ import {
   parseTrenchesFiltersParam,
 } from '../src/analytics/filters';
 import { tokenAnalyticsFor, type TokenAnalytics } from '../src/analytics/tokens';
-import { RUG_WEIGHTS, rugRatio, rugSignals, type RugInputs } from '../src/analytics/tokens/security';
+import { RUG_WEIGHTS, rugRatio, rugSignals, safetyScore, type RugInputs, type SafetyInputs } from '../src/analytics/tokens/security';
 import { computeWindows, computeWindowsCached, multiWindowStats, priceChangeAt, repriceWindows, type WindowsBase } from '../src/analytics/tokens/stats';
 import type { TokenFate, TokenState, WalletState, World } from '../src/sim/world';
 
@@ -1055,6 +1058,282 @@ describe('REST routes', () => {
     expect(r.status).toBe(200);
     expect(r.body.address).toBe(t.creator);
     expect(r.body.tokens[0].address).toBe(t.address);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Safety score
+// ---------------------------------------------------------------------------
+
+describe('safety score', () => {
+  type Sec = SafetyInputs['security'];
+  const clean = (patch: Partial<Sec> = {}): Sec => ({
+    renouncedMint: true,
+    renouncedFreeze: true,
+    isOpenSource: null,
+    isRenounced: null,
+    isHoneypot: null,
+    buyTax: 0,
+    sellTax: 0,
+    lpBurnedRate: null,
+    top10HolderRate: 0.15,
+    top100HolderRate: 0.3,
+    devHoldRate: 0.01,
+    devStatus: 'hold',
+    insiderHoldRate: 0,
+    sniperHoldRate: 0.02,
+    sniperCount: 1,
+    bundlerRate: 0,
+    ratTraderRate: 0,
+    freshWalletRate: 0.1,
+    botDegenRate: 0.2,
+    isWashTrading: false,
+    rugRatio: 0.05,
+    riskLevel: 'low',
+    ...patch,
+  });
+  const evm = (patch: Partial<Sec> = {}): Sec => clean({ renouncedMint: null, renouncedFreeze: null, isHoneypot: false, isOpenSource: true, isRenounced: true, ...patch });
+  const score = (security: Sec, chain: ChainId = 'sol', holderCount = 50) => safetyScore({ chain, security, holderCount });
+  const keys = (s: SafetyScore) => s.reasons.map((r) => r.key);
+  const impactSum = (s: SafetyScore) => s.reasons.reduce((a, r) => a + r.impact, 0);
+
+  it('scores a clean token 100 with full coverage and nothing to explain', () => {
+    expect(score(clean())).toEqual({ score: 100, band: 'safe', coverage: 1, reasons: [] });
+    expect(score(evm(), 'bsc')).toEqual({ score: 100, band: 'safe', coverage: 1, reasons: [] });
+    // deterministic: same inputs, same output
+    expect(score(clean({ top10HolderRate: 0.4 }))).toEqual(score(clean({ top10HolderRate: 0.4 })));
+  });
+
+  it('weights holder deductions 0.4375 (worst tier per field) and lists the 6 largest reasons', () => {
+    const s = score(clean({ top10HolderRate: 0.35, devHoldRate: 0.06, bundlerRate: 0.2, sniperHoldRate: 0.1, insiderHoldRate: 0.02, botDegenRate: 0.6, freshWalletRate: 0.6 }));
+    // 14 + 20 + 10 + 6 + 5 + 6 + 8 = 69 points x 0.4375
+    expect(s.score).toBe(Math.round(100 - 69 * 0.4375));
+    expect(s.band).toBe('safe');
+    expect(keys(s)).toEqual(['dev', 'top10', 'bundlers', 'fresh', 'bots', 'snipers']);
+    expect(s.reasons[0]).toEqual({ key: 'dev', label: 'Dev holds 6.0%', impact: 8.8, level: 'bad' });
+    expect(s.reasons[1]).toMatchObject({ key: 'top10', impact: 6.1, level: 'warn' });
+    // a field over its top tier takes only that tier
+    expect(score(clean({ top10HolderRate: 0.9 })).score).toBe(Math.round(100 - 25 * 0.4375));
+    const washed = score(clean({ isWashTrading: true }));
+    expect(washed.reasons).toEqual([{ key: 'wash', label: 'Wash trading', impact: 4.4, level: 'bad' }]);
+  });
+
+  it('weights contract deductions 0.5625 and explains the whole gap to 100', () => {
+    const taxed = score(evm({ buyTax: 0.12, isRenounced: false }), 'bsc');
+    expect(taxed.score).toBe(Math.round(100 - 33 * 0.5625));
+    expect(keys(taxed)).toEqual(['tax', 'renounced']);
+    expect(impactSum(taxed)).toBeCloseTo(33 * 0.5625, 1);
+    expect(score(evm({ isOpenSource: false }), 'bsc')).toMatchObject({ score: Math.round(100 - 15 * 0.5625), reasons: [{ key: 'open_source', level: 'bad' }] });
+    // migrated with LP not burned: a deduction everywhere, plus a 79 cap on EVM
+    expect(score(clean({ lpBurnedRate: 0.5 })).score).toBe(Math.round(100 - 12 * 0.5625));
+    const lp = score(evm({ lpBurnedRate: 0.5 }), 'bsc');
+    expect(lp).toMatchObject({ score: 79, band: 'safe', reasons: [{ key: 'lp', impact: 21, level: 'bad' }] });
+    expect(score(evm({ lpBurnedRate: 1 }), 'bsc').score).toBe(100);
+  });
+
+  it('applies the hard gates: honeypot is 0, an active SOL mint or freeze authority caps at 25 (danger)', () => {
+    expect(score(evm({ isHoneypot: true }), 'bsc')).toEqual({ score: 0, band: 'danger', coverage: 1, reasons: [{ key: 'honeypot', label: 'Honeypot: sells are blocked', impact: 100, level: 'bad' }] });
+    const mint = score(clean({ renouncedMint: false }));
+    expect(mint).toMatchObject({ score: 25, band: 'danger', reasons: [{ key: 'mint', impact: 75, level: 'bad' }] });
+    const both = score(clean({ renouncedMint: false, renouncedFreeze: false }));
+    expect(both.score).toBe(25);
+    expect(both.band).toBe('danger');
+    // the binding cap's points join its own reason: 25 x 0.5625 + (100 - 45 x 0.5625 - 25), then 20 x 0.5625
+    expect(both.reasons.map((r) => [r.key, r.impact])).toEqual([
+      ['mint', 63.8],
+      ['freeze', 11.3],
+    ]);
+  });
+
+  it('caps by rug risk and unknown contract data, and bands by score', () => {
+    expect(score(clean({ rugRatio: 0.35 }))).toMatchObject({ score: 79, band: 'safe', reasons: [{ key: 'rug', impact: 21 }] });
+    expect(score(clean({ rugRatio: 0.6 }))).toMatchObject({ score: 59, band: 'caution', reasons: [{ key: 'rug', label: 'Rug risk 60%', impact: 41 }] });
+    const unverified = score(evm({ isHoneypot: null, isOpenSource: null }), 'bsc');
+    expect(unverified).toMatchObject({ score: 79, band: 'safe', reasons: [{ key: 'unverified', impact: 21 }] });
+    expect(unverified.coverage).toBe(Math.round((11 / 13) * 100) / 100);
+    const bad = score(clean({ top10HolderRate: 0.6, devHoldRate: 0.2, bundlerRate: 0.5, sniperHoldRate: 0.3, insiderHoldRate: 0.2, botDegenRate: 0.8, buyTax: 0.2, lpBurnedRate: 0.1 }));
+    expect(bad.score).toBeLessThan(40);
+    expect(bad.band).toBe('danger');
+    expect(bad.reasons).toHaveLength(6);
+    expect(bad.reasons.map((r) => r.impact)).toEqual([...bad.reasons.map((r) => r.impact)].sort((a, b) => b - a));
+  });
+
+  it('reads unknown while most checks lack data (nobody holds the token yet)', () => {
+    const s = score(clean(), 'sol', 0);
+    expect(s.coverage).toBe(Math.round((5 / 12) * 100) / 100);
+    expect(s.band).toBe('unknown');
+    // a hard gate still says danger
+    expect(score(clean({ renouncedMint: false }), 'sol', 0).band).toBe('danger');
+  });
+
+  it('ships on every security read (summaries, lists, detail)', async () => {
+    const fx = await setup();
+    try {
+      const { t } = tokenWithBuyers(fx, 'sol', 'SFE', 4);
+      const safety = fx.ta.summary(t).security.safety!;
+      expect(safety).toMatchObject({ band: 'safe', coverage: 1 });
+      expect(safety.score).toBeGreaterThanOrEqual(70);
+      const minted = token(fx, 'sol', wallet(fx, 'sol'), sym('SFE'), { security: { renouncedMint: false } });
+      buy(fx, wallet(fx, 'sol'), minted, 0.5);
+      tick(fx);
+      expect(fx.ta.summary(minted).security.safety).toMatchObject({ score: 25, band: 'danger' });
+      const listed = fx.ta.trenches({ chain: 'sol', filters: { new: { keyword: minted.symbol } } }).new[0];
+      expect(listed.security.safety?.score).toBe(25);
+    } finally {
+      await fx.built.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Early buyers
+// ---------------------------------------------------------------------------
+
+describe('early buyers', () => {
+  let fx: Fx;
+  beforeAll(async () => {
+    fx = await setup();
+  });
+  afterAll(() => fx.built.close());
+
+  it(`tracks the first ${EARLY_BUYERS_LIMIT} distinct buyers at trade time and reports their bags now`, () => {
+    const dev = wallet(fx, 'sol');
+    const t = token(fx, 'sol', dev, sym('EBY'));
+    buy(fx, dev, t, 1);
+    tick(fx, 20_000);
+    const buyers = Array.from({ length: EARLY_BUYERS_LIMIT + 5 }, () => wallet(fx, 'sol'));
+    for (const w of buyers) buy(fx, w, t, 0.05);
+    // repeat buys, round trips and re-entries never add a rank
+    buy(fx, buyers[0], t, 0.05);
+    const [, seller, dumper, adder, flipper] = buyers;
+    sell(fx, seller, t, bal(seller, t) / 2);
+    sell(fx, dumper, t, bal(dumper, t));
+    buy(fx, adder, t, 0.2);
+    sell(fx, flipper, t, bal(flipper, t));
+    buy(fx, flipper, t, 0.01);
+    tick(fx);
+
+    const { buyers: rows, summary } = fx.ta.earlyBuyers(t, { accountId: null });
+    expect(rows).toHaveLength(EARLY_BUYERS_LIMIT);
+    expect(rows.map((r) => r.rank)).toEqual(Array.from({ length: EARLY_BUYERS_LIMIT }, (_, i) => i + 1));
+    expect(rows.map((r) => r.wallet)).toEqual([dev, ...buyers.slice(0, EARLY_BUYERS_LIMIT - 1)].map((w) => w.address));
+    expect(rows[0].walletTags).toContain('dev');
+    const row = (w: WalletState) => rows.find((r) => r.wallet === w.address)!;
+    expect(row(buyers[0]).status).toBe('added');
+    expect(row(seller).status).toBe('sold_part');
+    expect(row(dumper).status).toBe('sold_all');
+    expect(row(adder).status).toBe('added');
+    expect(row(flipper).status).toBe('sold_part'); // back in, with less than its first buy
+    expect(row(buyers[10]).status).toBe('holding');
+
+    const p = seller.positions.get(t.address)!;
+    const price = fx.world.priceUsd(t);
+    expect(row(seller)).toMatchObject({
+      firstBuyAt: p.firstBuyAt,
+      block: fx.world.blockAt('sol', p.firstBuyAt!),
+      boughtUsd: p.boughtUsd,
+      boughtTokens: p.boughtTokens,
+      balance: p.balance,
+      holdRate: p.balance / t.totalSupply,
+      realizedPnlUsd: p.realizedPnlUsd,
+    });
+    expect(row(seller).unrealizedPnlUsd).toBeCloseTo(p.balance * price - p.costBasisUsd, 9);
+    expect(row(dumper).unrealizedPnlUsd).toBe(0);
+
+    expect(summary.soldAll).toBe(1);
+    expect(summary.soldPart).toBe(2);
+    expect(summary.added).toBe(2);
+    expect(summary.holding + summary.soldPart + summary.soldAll + summary.added).toBe(EARLY_BUYERS_LIMIT);
+    expect(summary.holdRateTotal).toBeCloseTo(rows.reduce((a, r) => a + r.balance, 0) / t.totalSupply, 12);
+  });
+
+  it('serves GET /early-buyers (404 for unknown tokens or the wrong chain)', async () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'EBR', 3);
+    const get = (url: string) => fx.built.app.inject({ method: 'GET', url });
+    const res = await get(`/api/sol/tokens/${t.address}/early-buyers`);
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as EarlyBuyersResponse;
+    expect(body.buyers.map((b) => b.wallet)).toEqual(buyers.map((w) => w.address));
+    expect(body.summary).toMatchObject({ holding: 3, soldPart: 0, soldAll: 0, added: 0 });
+    expect((await get(`/api/bsc/tokens/${t.address}/early-buyers`)).statusCode).toBe(404);
+    expect((await get('/api/sol/tokens/nope/early-buyers')).statusCode).toBe(404);
+  });
+
+  it('rebuilds the list from the world for tracks saved before early buyers were tracked', async () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'EBS', 4);
+    sell(fx, buyers[1], t, bal(buyers[1], t) / 3);
+    tick(fx);
+    const before = fx.ta.earlyBuyers(t, { accountId: null });
+    const snap = deserialize(serialize(fx.ta.serialize())) as { tracks: { address: string; earlyBuyers?: string[]; earlyTokens?: number[] }[] };
+    for (const s of snap.tracks) {
+      delete s.earlyBuyers;
+      delete s.earlyTokens;
+    }
+    const fx2 = await setup();
+    try {
+      fx2.ctx.world.tokens.set(t.address, t);
+      for (const w of buyers) fx2.ctx.world.wallets.set(w.address, w);
+      fx2.ctx.world.now = fx.world.now;
+      fx2.ta.restore(snap);
+      const after = fx2.ta.earlyBuyers(t, { accountId: null });
+      expect(after.buyers.map((b) => [b.wallet, b.status])).toEqual(before.buyers.map((b) => [b.wallet, b.status]));
+      expect(after.summary).toEqual(before.summary);
+    } finally {
+      await fx2.built.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exclusion filters (blacklists)
+// ---------------------------------------------------------------------------
+
+describe('exclusion filters', () => {
+  let fx: Fx;
+  beforeAll(async () => {
+    fx = await setup();
+  });
+  afterAll(() => fx.built.close());
+
+  it('hides excluded token addresses and creators in every list (REST GET and POST, any address case on EVM)', async () => {
+    const keep = tokenWithBuyers(fx, 'bsc', 'XKP', 2).t;
+    const hidden = tokenWithBuyers(fx, 'bsc', 'XHD', 2).t;
+    const devTok = tokenWithBuyers(fx, 'bsc', 'XDV', 2).t;
+    const s = fx.ta.summary(hidden);
+    expect(matchTokenFilters(s, { excludeAddresses: [hidden.address] }, '24h', fx.world.now)).toBe(false);
+    expect(matchTokenFilters(s, { excludeCreators: [hidden.creator] }, '24h', fx.world.now)).toBe(false);
+    expect(matchTokenFilters(s, { excludeAddresses: [keep.address], excludeCreators: [keep.creator] }, '24h', fx.world.now)).toBe(true);
+
+    const filters: TokenFilters = { keyword: 'X', excludeAddresses: [hidden.address.toUpperCase().replace('0X', '0x')], excludeCreators: [devTok.creator.toUpperCase()] };
+    const listed = (tokens: TokenSummary[]) => tokens.map((x) => x.address).filter((a) => [keep, hidden, devTok].some((t) => t.address === a));
+    const enc = encodeURIComponent(JSON.stringify(filters));
+    let res = await fx.built.app.inject({ method: 'GET', url: `/api/bsc/trending?window=24h&filters=${enc}` });
+    expect(res.statusCode).toBe(200);
+    expect(listed(res.json().tokens)).toEqual([keep.address]);
+    res = await fx.built.app.inject({ method: 'GET', url: `/api/bsc/trenches?filters=${encodeURIComponent(JSON.stringify({ new: filters }))}` });
+    expect(listed(res.json().new)).toEqual([keep.address]);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/bsc/trending', payload: { window: '24h', filters } });
+    expect(listed(res.json().tokens)).toEqual([keep.address]);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/bsc/trenches', payload: { filters: { new: filters }, limit: 100 } });
+    expect(listed(res.json().new)).toEqual([keep.address]);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/bsc/new-pairs', payload: { filters } });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('accepts a whole blacklist (500 + 500 addresses) and refuses longer lists', async () => {
+    const t = tokenWithBuyers(fx, 'sol', 'XBL', 2).t;
+    const filler = (n: number) => Array.from({ length: n }, (_, i) => `Fi11er${i}`);
+    const full: TokenFilters = { keyword: t.symbol, excludeAddresses: [...filler(499), t.address], excludeCreators: filler(500) };
+    const enc = encodeURIComponent(JSON.stringify(full));
+    let res = await fx.built.app.inject({ method: 'GET', url: `/api/sol/trending?filters=${enc}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokens).toEqual([]);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/sol/trending', payload: { filters: { ...full, excludeAddresses: [] } } });
+    expect(res.json().tokens.map((x: TokenSummary) => x.address)).toEqual([t.address]);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/sol/trending', payload: { filters: { excludeAddresses: filler(501) } } });
+    expect(res.statusCode).toBe(400);
+    res = await fx.built.app.inject({ method: 'POST', url: '/api/sol/trenches', payload: { filters: { new: { excludeCreators: [''] } } } });
+    expect(res.statusCode).toBe(400);
   });
 });
 

@@ -1,5 +1,6 @@
 // New Pairs: tokens that just graduated to a DEX pool, newest pool first,
-// streamed from `newpairs:<chain>` (every 2s) with the shared filters.
+// streamed from `newpairs:<chain>` (every 2s) with the shared filters (the
+// viewer's blacklist merged in).
 
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,18 +13,21 @@ import {
   hasFilters,
   LiveStatus,
   QuickBuyAmount,
+  SafetyCell,
   SecuritySummary,
   TagCount,
   TokenCell,
+  useBlacklistFilter,
   useLiveSnapshot,
   useQuickBuyAmount,
   useStableItems,
   useStoredFilters,
   useViewerTags,
+  withExclusions,
 } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
-import { Badge, Button, DataTable, EmptyState, ErrorState, SegmentedControl, type Column } from '@/components/ui';
+import { Button, DataTable, EmptyState, ErrorState, SegmentedControl, type Column } from '@/components/ui';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useDisplaySettings } from '@/hooks/useSettings';
@@ -33,7 +37,6 @@ import clsx from 'clsx';
 
 const LIMIT = 100;
 const tokenKey = (t: TokenSummary) => t.address;
-const RISK_TONE = { low: 'up', medium: 'warn', high: 'down' } as const;
 
 export default function NewPairsPage() {
   const chain = useChain();
@@ -185,17 +188,13 @@ function newPairColumns({ win, thresholds, buyAmount, devTags, mobile }: ColumnD
       render: (t) => <SecuritySummary token={t} top10Threshold={thresholds.top10} />,
     },
     {
-      key: 'risk',
-      header: 'Risk',
-      title: 'Rug risk (composite)',
+      key: 'safety',
+      header: 'Safety',
+      title: 'Safety score 0-100 (hover for the reasons) and rug risk',
       sortable: true,
       align: 'center',
-      sortValue: (t) => t.security.rugRatio,
-      render: (t) => (
-        <Badge tone={RISK_TONE[t.security.riskLevel]} title={`Rug probability ${formatPercent(t.security.rugRatio, { sign: false, digits: 0 })}`}>
-          {formatPercent(t.security.rugRatio, { sign: false, digits: 0 })}
-        </Badge>
-      ),
+      sortValue: (t) => t.security.safety?.score,
+      render: (t) => <SafetyCell token={t} />,
     },
     {
       key: 'buy',
@@ -216,7 +215,8 @@ function NewPairs({ chain }: { chain: ChainId }) {
   const win = STAT_WINDOWS.includes(rawWin) ? rawWin : '1h';
   const [filters, setFilters] = useStoredFilters(`ts.newpairs.filters.${chain}`);
 
-  const params = useMemo(() => ({ filters: hasFilters(filters) ? filters : undefined, limit: LIMIT }), [filters]);
+  const { exclusions, isHidden } = useBlacklistFilter(chain);
+  const params = useMemo(() => ({ filters: withExclusions(hasFilters(filters) ? filters : undefined, exclusions), limit: LIMIT }), [filters, exclusions]);
   const snap = useLiveSnapshot<TokenSummary[]>({
     channel: `newpairs:${chain}`,
     type: 'newpairs',
@@ -226,7 +226,9 @@ function NewPairs({ chain }: { chain: ChainId }) {
   });
 
   const columns = useMemo(() => newPairColumns({ win, thresholds: display.riskThresholds, buyAmount, devTags, mobile }), [win, display.riskThresholds, buyAmount, devTags, mobile]);
-  const rows = useStableItems(snap.data, tokenKey);
+  // Hidden tokens leave at once, before the next push applies the new exclusions.
+  const visible = useMemo(() => snap.data?.filter((t) => !isHidden(t)), [snap.data, isHidden]);
+  const rows = useStableItems(visible, tokenKey);
   const filtered = hasFilters(filters);
 
   return (
@@ -247,7 +249,7 @@ function NewPairs({ chain }: { chain: ChainId }) {
         <SegmentedControl value={win} onChange={setWin} items={STAT_WINDOWS.map((w) => ({ value: w, label: w }))} aria-label="Stats window" />
         <FilterToolbar chain={chain} filters={filters} onChange={setFilters} title="New pair filters" window="24h" hide={['progress']} />
         <span className="ml-auto hidden text-xs text-muted sm:inline">
-          {snap.data ? `${snap.data.length} pools` : ''}
+          {rows ? `${rows.length} pools` : ''}
         </span>
       </div>
       <div className={clsx('panel flex min-h-0 flex-1 flex-col overflow-hidden transition-opacity', snap.stale && 'opacity-60')}>

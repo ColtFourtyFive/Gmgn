@@ -22,10 +22,10 @@ export interface TopCallersPanelProps {
   className?: string;
 }
 
-/** Callers ranked by hit rate over the loaded calls (2+ calls each). */
+/** Callers ranked by hit rate over the chain's latest calls (2+ calls each; see useCallerRanking). */
 export const TopCallersPanel = memo(function TopCallersPanel({ chain, callers, directory, loading, limit = 12, className }: TopCallersPanelProps) {
   return (
-    <Panel title="Top callers" subtitle="Hit rate over the calls listed (2+ calls)" icon={<Trophy size={14} />} padded={false} className={className} bodyClassName="min-h-0 overflow-y-auto">
+    <Panel title="Top callers" subtitle="Hit rate over the latest calls (2+ calls)" icon={<Trophy size={14} />} padded={false} className={className} bodyClassName="min-h-0 overflow-y-auto">
       {loading ? (
         <ul className="flex flex-col gap-3 p-3" aria-busy>
           {Array.from({ length: 6 }, (_, i) => (
@@ -36,7 +36,7 @@ export const TopCallersPanel = memo(function TopCallersPanel({ chain, callers, d
           ))}
         </ul>
       ) : callers.length === 0 ? (
-        <EmptyState compact icon={<Trophy size={16} />} title="No repeat callers yet" description="Callers show up here once they have two calls in the list." />
+        <EmptyState compact icon={<Trophy size={16} />} title="No repeat callers yet" description="Callers show up here once they have made two calls." />
       ) : (
         <ol aria-label="Top callers">
           {callers.slice(0, limit).map((c, i) => {

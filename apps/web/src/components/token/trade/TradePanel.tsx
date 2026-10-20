@@ -1,5 +1,6 @@
 // Trade panel: Buy / Sell, order type (Market | Limit | Auto), execution
-// preset with inline editor, then the form of the selected order type.
+// preset with inline editor (and a congestion hint when its priority fee is
+// below the suggestion), then the form of the selected order type.
 
 import { useEffect, useRef, useState } from 'react';
 import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type PresetId, type TokenDetail, type TokenPositionRow, type UserSettings } from '@trenchscope/shared';
@@ -17,6 +18,7 @@ import { feeReserve, maxBuyAmount } from '../model';
 import { useChartUnit } from '../queries';
 import { useTokenUi, type TradeMode, type TradeSide } from '../store';
 import { AutoForm } from './AutoForm';
+import { CongestionHint } from './CongestionHint';
 import { LimitForm } from './LimitForm';
 import { MarketForm } from './MarketForm';
 import { PresetBar, savePreset } from './PresetBar';
@@ -149,6 +151,7 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
         <Tabs size="sm" value={mode} onChange={setMode} items={MODE_ITEMS} aria-label="Order type" className="border-b-0" />
         {preset && <PresetBar chain={chain} side={side} presetId={presetId} onPresetChange={onPresetChange} preset={preset} />}
       </div>
+      {preset && <CongestionHint chain={chain} side={side} presetId={presetId} preset={preset} />}
       <div className="p-2.5">
         {mode === 'market' && <MarketForm {...formProps} />}
         {mode === 'limit' && <LimitForm {...formProps} defaultTrigger={unit} />}

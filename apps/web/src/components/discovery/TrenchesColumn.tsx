@@ -70,6 +70,8 @@ export interface TrenchesColumnProps {
   /** Reports the rendered order (for j/k navigation). */
   onDisplayed?: (column: Column, tokens: TokenSummary[]) => void;
   devTags: (address: string) => WalletTag[];
+  /** Blacklisted tokens, dropped even from a paused column. */
+  isHidden: (t: TokenSummary) => boolean;
   /** Hide the title (mobile: the tabs show it). */
   hideTitle?: boolean;
   className?: string;
@@ -99,6 +101,7 @@ export const TrenchesColumn = memo(function TrenchesColumn({
   focused,
   onDisplayed,
   devTags,
+  isHidden,
   hideTitle,
   className,
 }: TrenchesColumnProps) {
@@ -116,8 +119,10 @@ export const TrenchesColumn = memo(function TrenchesColumn({
   const lastSeen = useRef(new Map<string, TokenSummary>());
   const displayedRef = useRef<TokenSummary[]>([]);
   const [frozen, setFrozen] = useState<string[] | null>(null);
+  // Nothing to hold still before the first snapshot: freezing then would pin an empty column.
+  const hasData = tokens !== null;
 
-  const freeze = () => setFrozen((f) => f ?? displayedRef.current.map((t) => t.address));
+  const freeze = () => setFrozen((f) => f ?? (hasData ? displayedRef.current.map((t) => t.address) : null));
   useEffect(() => {
     if (!paused) setFrozen(null);
   }, [paused]);
@@ -141,10 +146,10 @@ export const TrenchesColumn = memo(function TrenchesColumn({
     const out: TokenSummary[] = [];
     for (const a of frozen) {
       const t = byAddress.get(a) ?? lastSeen.current.get(a);
-      if (t) out.push(t);
+      if (t && !isHidden(t)) out.push(t);
     }
     return out;
-  }, [frozen, sorted, byAddress]);
+  }, [frozen, sorted, byAddress, isHidden]);
 
   const buffered = useMemo(() => {
     if (!frozen) return 0;
@@ -159,10 +164,10 @@ export const TrenchesColumn = memo(function TrenchesColumn({
     onDisplayed?.(column, displayed);
   }, [displayed, frozen, byAddress, sorted, column, onDisplayed]);
 
-  // Freeze when paused by keyboard selection, and re-freeze after a sort/filter reset.
+  // Freeze when paused by keyboard selection, and re-freeze after a sort/filter reset or the first snapshot.
   useEffect(() => {
-    if (paused && !frozen && !awaitingData) setFrozen(displayedRef.current.map((t) => t.address));
-  }, [paused, frozen, awaitingData]);
+    if (paused && !frozen && !awaitingData && hasData) setFrozen(displayedRef.current.map((t) => t.address));
+  }, [paused, frozen, awaitingData, hasData]);
 
   // New arrivals animate in, but not the first batch.
   const ready = useRef(false);

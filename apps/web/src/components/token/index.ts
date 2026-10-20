@@ -1,6 +1,7 @@
 // Token page building blocks. Import from '@/components/token'.
 
 export { DevPanel } from './DevPanel';
+export { EarlyBuyers } from './EarlyBuyers';
 export { TokenFeed, TokenFeedContext, useLiveTrades, useTokenFeed } from './feed';
 export { HolderStrip } from './HolderStrip';
 export { MobileTradeBar, TokenNotFound, TokenPageSkeleton } from './PageStates';

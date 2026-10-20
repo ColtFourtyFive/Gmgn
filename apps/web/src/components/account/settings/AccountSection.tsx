@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CHAIN_IDS, CHAINS } from '@trenchscope/shared';
-import { Gift, LogOut, UserPlus, UserRound, Wallet } from 'lucide-react';
+import { Compass, Gift, LogOut, UserPlus, UserRound, Wallet } from 'lucide-react';
 import { AddressLink, Age, ChainIcon, Native, WalletAvatar } from '@/components/common';
 import { Badge, Button, CopyButton, Panel } from '@/components/ui';
 import { routes } from '@/lib/chain';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
+import { startTour } from '@/store/tour';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { DetailRow, Note } from '../FormBits';
 
-/** Profile facts, paper wallets, referral shortcut and sign-out. */
+/** Profile facts, paper wallets, referral shortcut, the onboarding tour and sign-out. */
 export function AccountSection() {
   const account = useSession((s) => s.account);
   const [confirmOut, setConfirmOut] = useState(false);
@@ -71,7 +72,10 @@ export function AccountSection() {
             </DetailRow>
             {account.referredBy && <DetailRow label="Referred by">{account.referredBy}</DetailRow>}
           </dl>
-          <div className="flex justify-end border-t border-line pt-3">
+          <div className="flex justify-between gap-2 border-t border-line pt-3">
+            <Button variant="outline" size="sm" icon={<Compass size={13} />} onClick={startTour}>
+              Take the tour
+            </Button>
             <Button variant="danger" size="sm" icon={<LogOut size={13} />} onClick={() => setConfirmOut(true)}>
               Log out
             </Button>

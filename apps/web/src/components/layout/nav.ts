@@ -50,7 +50,13 @@ export function activeSection(pathname: string): string | null {
 /** Token page of a pathname: "/sol/token/AbC" -> { chain: 'sol', address: 'AbC' }, else null. */
 export function tokenRoute(pathname: string): { chain: ChainId; address: string } | null {
   const [chain, section, address] = pathname.split('/').filter(Boolean);
-  return isChainId(chain) && section === 'token' && address ? { chain, address: decodeURIComponent(address) } : null;
+  if (!isChainId(chain) || section !== 'token' || !address) return null;
+  try {
+    return { chain, address: decodeURIComponent(address) };
+  } catch {
+    // A malformed escape is no address (the page shows its not-found state).
+    return null;
+  }
 }
 
 /**

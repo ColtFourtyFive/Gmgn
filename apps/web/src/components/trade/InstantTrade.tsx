@@ -5,12 +5,14 @@
 //                    chain's active presets
 //   DockPositions    the viewer's open positions on a chain with value, PnL
 //                    and one-click 50 / 100% sells
-// Both read the portfolio summary under ['portfolio'], so fills refresh them.
+// Both read the portfolio summary under ['portfolio'], so fills refresh them;
+// only the main wallet's rows count (a launch's bundle wallets only sell
+// alongside it, see API.md "Portfolio").
 
 import { memo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CHAINS, formatNative, formatPercent, type ChainId, type TokenDetail, type TokenPositionRow, type TradePreset } from '@trenchscope/shared';
+import { CHAINS, formatNative, formatPercent, type ChainId, type PortfolioSummary, type TokenDetail, type TokenPositionRow, type TradePreset } from '@trenchscope/shared';
 import { ArrowUpRight, LogIn, ShieldCheck, Wallet, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { accountKeys } from '@/components/account/queries';
@@ -24,12 +26,15 @@ import { useChannel, useConnectionState } from '@/lib/ws';
 import { useSession } from '@/store/session';
 import { quickOrderKey, quickOrderLabel, useQuickTrade, type QuickOrder } from './useQuickTrade';
 
-/** The viewer's open positions on a chain (same cache as the Portfolio page). */
-function usePortfolio(chain: ChainId) {
+const mainWalletRows = (s: PortfolioSummary) => s.positions.filter((p) => p.walletRole !== 'bundle');
+
+/** The viewer's open main-wallet positions on a chain (same cache as the Portfolio page). */
+function usePositions(chain: ChainId) {
   const signedIn = useSession((s) => !!s.token);
   return useQuery({
     queryKey: accountKeys.portfolio(chain),
     queryFn: () => api.portfolio(chain),
+    select: mainWalletRows,
     enabled: signedIn,
     refetchInterval: 5_000,
   });
@@ -157,7 +162,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
   useChannel(onPage ? null : `token:${chain}:${address}`, null, (type, data) => {
     if (type === 'token') qc.setQueryData(tokenKeys.detail(chain, address), data as TokenDetail);
   });
-  const portfolio = usePortfolio(chain);
+  const positions = usePositions(chain);
   const t = detail.data;
   const trade = useQuickTrade(chain, t?.address ?? address, t?.symbol ?? '');
 
@@ -183,7 +188,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
     );
   }
 
-  const position = portfolio.data?.positions.find((p) => p.token === t.address) ?? null;
+  const position = positions.data?.find((p) => p.token === t.address) ?? null;
   return (
     <div className="flex flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
@@ -207,7 +212,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
 
       {signedIn ? (
         <>
-          <PositionLine position={position} loading={portfolio.isPending} symbol={t.symbol} />
+          <PositionLine position={position} loading={positions.isPending} symbol={t.symbol} />
           <section aria-label="Quick buy" className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2">
               <h4 className="table-head">Buy</h4>
@@ -279,7 +284,7 @@ const PositionRow = memo(function PositionRow({ row }: { row: TokenPositionRow }
 /** The viewer's open positions on `chain`, most valuable first. */
 export function DockPositions({ chain }: { chain: ChainId }) {
   const signedIn = useSession((s) => !!s.token);
-  const q = usePortfolio(chain);
+  const q = usePositions(chain);
   if (!signedIn) {
     return (
       <div className="p-3">
@@ -301,7 +306,7 @@ export function DockPositions({ chain }: { chain: ChainId }) {
       </ul>
     );
   }
-  const rows = q.data.positions;
+  const rows = q.data;
   if (rows.length === 0) {
     return <EmptyState compact icon={<Wallet size={16} />} title={`No open positions on ${CHAINS[chain].name}`} description="Buy a token and it shows up here with one-click sells." />;
   }

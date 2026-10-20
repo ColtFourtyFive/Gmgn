@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { isChainId, type ChainId, type UserSettings } from '@trenchscope/shared';
-import { Monitor, Save, Settings, SlidersHorizontal, UserRound } from 'lucide-react';
+import { EyeOff, Monitor, Save, Settings, SlidersHorizontal, UserRound } from 'lucide-react';
 import { AccountGate, useSignedIn } from '@/components/account';
 import { AccountSection } from '@/components/account/settings/AccountSection';
+import { BlacklistSection } from '@/components/account/settings/BlacklistSection';
 import { DisplaySettingsForm } from '@/components/account/settings/DisplaySettingsForm';
 import { dirtyChains, sameSettings, savable, validateSettings } from '@/components/account/settings/model';
 import { TradingSettings } from '@/components/account/settings/TradingSettings';
@@ -15,8 +16,8 @@ import { errorMessage } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 
-type Section = 'trading' | 'display' | 'account';
-const SECTIONS: Section[] = ['trading', 'display', 'account'];
+type Section = 'trading' | 'display' | 'blacklist' | 'account';
+const SECTIONS: Section[] = ['trading', 'display', 'blacklist', 'account'];
 
 export default function SettingsPage() {
   const signedIn = useSignedIn();
@@ -60,7 +61,7 @@ function SettingsLoader() {
 }
 
 function Header({ actions }: { actions?: ReactNode }) {
-  return <PageHeader title="Settings" subtitle="Trading presets, display preferences and your account" icon={<Settings size={16} />} actions={actions} />;
+  return <PageHeader title="Settings" subtitle="Trading presets, display preferences, blacklist and your account" icon={<Settings size={16} />} actions={actions} />;
 }
 
 function SettingsEditor({ saved }: { saved: UserSettings }) {
@@ -147,6 +148,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
         items={[
           { value: 'trading', label: <span className="inline-flex items-center gap-1.5">Trading{changedChains.size > 0 && dot}</span>, icon: <SlidersHorizontal size={13} /> },
           { value: 'display', label: <span className="inline-flex items-center gap-1.5">Display{displayDirty && dot}</span>, icon: <Monitor size={13} /> },
+          { value: 'blacklist', label: 'Blacklist', icon: <EyeOff size={13} /> },
           { value: 'account', label: 'Account', icon: <UserRound size={13} /> },
         ]}
       />
@@ -162,6 +164,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
           />
         )}
         {section === 'display' && <DisplaySettingsForm value={draft.display} onChange={(display) => setDraft((d) => ({ ...d, display }))} errors={errors} />}
+        {section === 'blacklist' && <BlacklistSection />}
         {section === 'account' && <AccountSection />}
       </div>
 

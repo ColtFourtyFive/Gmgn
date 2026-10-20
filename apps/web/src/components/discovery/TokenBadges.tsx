@@ -7,6 +7,7 @@ import { Boxes, Code, Copy, Crosshair, Crown, Flame, Rocket, ShieldAlert, Sprout
 import clsx from 'clsx';
 import { RiskChip, WALLET_TAG_META } from '@/components/common';
 import { Tooltip } from '@/components/ui';
+import { SafetyChip } from './Safety';
 
 /** Fresh-wallet share above which the Fresh chip turns red (no user setting exists for it). */
 export const FRESH_THRESHOLD = 0.3;
@@ -83,7 +84,7 @@ function pct(v: number): string {
  */
 const ICON_ONLY = '[&>.opacity-80]:sr-only';
 
-/** Top10 / Dev / Insiders / Snipers / Bundlers / Fresh chips, red past the viewer's thresholds. */
+/** Safety score, then Top10 / Dev / Insiders / Snipers / Bundlers / Fresh chips, red past the viewer's thresholds. */
 export const RiskChips = memo(function RiskChips({
   token,
   thresholds,
@@ -100,6 +101,7 @@ export const RiskChips = memo(function RiskChips({
   const chip = iconOnly ? ICON_ONLY : undefined;
   return (
     <span className={clsx('flex flex-wrap items-center gap-x-0.5 gap-y-1 sm:gap-1', className)}>
+      <SafetyChip safety={s.safety} compact />
       <RiskChip label="Top 10" className={chip} value={s.top10HolderRate} threshold={thresholds.top10} icon={<Crown size={10} aria-hidden />} hint={`Top 10 holders own this share of supply. Red above ${pct(thresholds.top10)}.`} />
       <DevChip status={s.devStatus} holdRate={s.devHoldRate} threshold={thresholds.dev} className={chip} />
       <RiskChip label="Insiders" className={chip} value={s.insiderHoldRate} threshold={thresholds.insiders} icon={<VenetianMask size={10} aria-hidden />} hint={`Insiders (dev-linked wallets) hold this share. Red above ${pct(thresholds.insiders)}.`} />

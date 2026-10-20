@@ -4,4 +4,13 @@
 export { CALL_GRID, CallHeader, CallRow, type CallRowProps } from './CallFeed';
 export { TopCallersPanel, type TopCallersPanelProps } from './TopCallersPanel';
 export { aggregateCallers, callerOf, type CallerStats } from './callerStats';
-export { CALLOUTS_LIMIT, useCallerDirectory, useCallouts, type CallerDirectory, type CallerInfo, type LiveCallouts } from './useCallouts';
+export {
+  CALLOUTS_LIMIT,
+  useCallerDirectory,
+  useCallerRanking,
+  useCallouts,
+  type CallerDirectory,
+  type CallerInfo,
+  type CallerRanking,
+  type LiveCallouts,
+} from './useCallouts';

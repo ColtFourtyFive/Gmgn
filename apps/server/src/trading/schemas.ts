@@ -230,7 +230,31 @@ const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
 /** Stacked combining marks ("Zalgo" text spilling over neighbouring rows); real scripts need at most three. */
 const STACKED_MARKS = /\p{M}{4,}/u;
 const visible = (s: string) => !INVISIBLE.test(s) && !STACKED_MARKS.test(s);
-const tickerOf = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/** Cyrillic, Greek and small-capital letters drawn like Latin ones (letters from Unicode's confusables). */
+const LOOKALIKES: [string, string][] = [
+  ['АВСЕНІЈКМОРЅТХУҮӀԚԜѴ', 'ABCEHIJKMOPSTXYYIQWV'],
+  ['аеорсухіјѕһԁԛԝӏүѵ', 'aeopcyxijshdqwlyv'],
+  ['ΑΒΕΖΗΙΚΜΝΟΡΤΥΧϹͿ', 'ABEZHIKMNOPTYXCJ'],
+  ['αικνορυχϲϳ', 'aikvopuxcj'],
+  ['ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘʀꜱᴛᴜᴠᴡʏᴢ', 'ABCDEFGHIJKLMNOPRSTUVWYZ'],
+];
+const LATIN_OF = new Map(LOOKALIKES.flatMap(([from, to]) => [...from].map((c, i): [string, string] => [c, to[i]])));
+const LOOKALIKE = new RegExp(`[${[...LATIN_OF.keys()].join('')}]`, 'gu');
+
+/**
+ * The Latin text a string reads as: compatibility forms (full-width, math alphanumerics,
+ * ligatures) decomposed, accents dropped, Cyrillic / Greek look-alikes swapped for Latin.
+ */
+export function foldConfusables(s: string): string {
+  return s
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(LOOKALIKE, (c) => LATIN_OF.get(c)!);
+}
+
+/** A name or symbol that reads as a reserved ticker once folded, ignoring case, spaces and punctuation ("Ｓ.О.Ｌ" = SOL). */
+export const isReservedTicker = (s: string) => RESERVED_TICKERS.has(foldConfusables(s).toUpperCase().replace(/[^A-Z0-9]/g, ''));
 
 /** An https link (on one of `hosts` when given), canonicalized; blank means "none". */
 function socialLink(hosts: string[] | null) {
@@ -261,13 +285,14 @@ export const launchSchema = z
       .min(1, 'name is required')
       .max(LAUNCH_LIMITS.nameMaxLength)
       .refine(visible, 'name contains control, invisible or stacked characters')
-      .refine((s) => !RESERVED_TICKERS.has(tickerOf(s)), 'this name is reserved'),
+      .refine((s) => !isReservedTicker(s), 'this name is reserved'),
     symbol: z
       .string()
       .trim()
       .transform((s) => s.replace(/^\$/, '').toUpperCase())
-      .pipe(z.string().regex(new RegExp(`^[A-Z0-9]{1,${LAUNCH_LIMITS.symbolMaxLength}}$`), `must be 1-${LAUNCH_LIMITS.symbolMaxLength} letters or digits`))
-      .refine((s) => !RESERVED_TICKERS.has(s), 'this ticker is reserved'),
+      // before the A-Z0-9 rule, so a look-alike of a reserved ticker is refused as reserved
+      .refine((s) => !isReservedTicker(s), 'this ticker is reserved')
+      .pipe(z.string().regex(new RegExp(`^[A-Z0-9]{1,${LAUNCH_LIMITS.symbolMaxLength}}$`), `must be 1-${LAUNCH_LIMITS.symbolMaxLength} letters or digits`)),
     description: z
       .string()
       .trim()

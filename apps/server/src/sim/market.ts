@@ -674,7 +674,7 @@ export class MarketSim {
 
     for (const chain of CHAIN_IDS) {
       const scale = CHAIN_SCALE[chain];
-      world.chains[chain].congestion = stepCongestion(this.chains[chain].congestion, rng, dt, this.stats[chain].trades);
+      world.chains[chain].congestion = stepCongestion(this.chains[chain].congestion, rng, dt, this.stats[chain].trades, this.ctx.engine.warming);
       const heat = this.chains[chain].heat;
       for (let i = 0; i < heat.length; i++) heat[i] += (-heat[i] * dt) / 2400 + 0.0173 * Math.sqrt(dt) * rng.normal();
       for (const t of this.active[chain]) {

@@ -13,3 +13,5 @@ export { ORDER_KIND_LABEL, OrderAmount, OrderKindCell, OrderResult, OrderStatusB
 export { TokenPreview, WalletPreview } from './previews';
 export { accountKeys, useTokenMeta, useWalletProfile, type ChainScope } from './queries';
 export { TagInput, type TagInputProps } from './TagInput';
+export { useWatchItem, useWatchlist, useWatchlistActions, watchKey, type WatchRef } from './watchlist';
+export { GroupDot, NoteField, WatchStar } from './watchlist/WatchGroups';

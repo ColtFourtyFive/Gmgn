@@ -1,14 +1,16 @@
 // Wallet page "Calls" tab: the wallet's public calls (kol_call signals) with
 // 7D / 30D hit rates (a hit reached 2x the market cap at the call), the mean
-// best multiple and how each call played out.
+// best multiple and how each call played out: a sortable table, stacked rows
+// on phones (no sideways scrolling).
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatInt, type Signal } from '@trenchscope/shared';
 import { MessageSquareQuote } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Pct, StatTile, TokenLink, Usd } from '@/components/common';
-import { Badge, DataTable, EmptyState, ErrorState, type Column } from '@/components/ui';
+import { Badge, DataTable, EmptyState, ErrorState, Skeleton, type Column } from '@/components/ui';
+import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { routes } from '@/lib/chain';
 import { Multiple } from './Multiple';
 import { useWalletCalls } from './queries';
@@ -39,18 +41,78 @@ const callColumns: Column<Signal>[] = [
     render: (s) => <Multiple value={s.maxMultiple} />,
   },
   { key: 'now', header: 'Now', align: 'right', sortable: true, sortValue: nowMultiple, render: (s) => <Multiple value={nowMultiple(s)} /> },
-  {
-    key: 'result',
-    header: 'Result',
-    align: 'right',
-    hideBelow: 'sm',
-    render: (s) => (s.maxMultiple >= CALL_HIT_MULTIPLE ? <Badge tone="up">Hit 2x+</Badge> : <span className="text-xs text-faint">Open</span>),
-  },
+  { key: 'result', header: 'Result', align: 'right', render: (s) => <CallResult call={s} /> },
 ];
+
+function CallResult({ call }: { call: Signal }) {
+  return call.maxMultiple >= CALL_HIT_MULTIPLE ? <Badge tone="up">Hit 2x+</Badge> : <span className="text-xs text-faint">Open</span>;
+}
+
+function CallFigure({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col leading-tight">
+      <dt className="text-2xs text-faint">{label}</dt>
+      <dd className="truncate text-xs">{children}</dd>
+    </div>
+  );
+}
+
+/** Phone row: the token and result, then the table's figures in a 4-up grid. */
+const CallItem = memo(function CallItem({ call: s }: { call: Signal }) {
+  return (
+    <li className="flex flex-col gap-1.5 border-b border-line/60 px-3 py-2 last:border-b-0">
+      <span className="flex min-w-0 items-center justify-between gap-2">
+        <TokenLink token={s.token} size={26} showName className="min-w-0" />
+        <CallResult call={s} />
+      </span>
+      <dl className="grid grid-cols-4 gap-2">
+        <CallFigure label="Called">
+          <Age ts={s.createdAt} suffix=" ago" className="text-muted" />
+        </CallFigure>
+        <CallFigure label="MC at call">
+          <Usd value={s.marketCapAtTrigger} />
+        </CallFigure>
+        <CallFigure label="Max since">
+          <Multiple value={s.maxMultiple} />
+        </CallFigure>
+        <CallFigure label="Now">
+          <Multiple value={nowMultiple(s)} />
+        </CallFigure>
+      </dl>
+    </li>
+  );
+});
+
+const EMPTY = <EmptyState compact icon={<MessageSquareQuote size={16} />} title="No calls yet" description="Public calls this wallet makes show up here with how they played out." />;
+
+/** Phones: the calls newest first, stacked. */
+function CallList({ calls, loading }: { calls: Signal[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <ul aria-busy className="flex flex-col">
+        {Array.from({ length: 5 }, (_, i) => (
+          <li key={i} className="flex flex-col gap-2 border-b border-line/60 px-3 py-2.5">
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-6 w-full" />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (calls.length === 0) return EMPTY;
+  return (
+    <ul aria-label="Calls by this wallet, newest first" className="flex flex-col">
+      {calls.map((s) => (
+        <CallItem key={s.id} call={s} />
+      ))}
+    </ul>
+  );
+}
 
 /** The wallet's calls, newest first, with hit rates. */
 export const CallsTab = memo(function CallsTab({ chain, address }: WalletTableProps) {
   const navigate = useNavigate();
+  const stacked = !useBreakpoint('sm');
   const q = useWalletCalls(chain, address);
   const d = q.data;
   const hits = useMemo(() => d?.calls.filter((s) => s.maxMultiple >= CALL_HIT_MULTIPLE).length ?? 0, [d]);
@@ -65,18 +127,22 @@ export const CallsTab = memo(function CallsTab({ chain, address }: WalletTablePr
           <StatTile label="Calls" value={formatInt(d.calls.length)} sub={`${formatInt(hits)} hit 2x+`} />
         </div>
       )}
-      <DataTable
-        aria-label="Calls by this wallet"
-        columns={callColumns}
-        rows={d?.calls ?? []}
-        rowKey={(s) => s.id}
-        loading={q.isLoading}
-        defaultSort={{ key: 'called', dir: 'desc' }}
-        minWidth={620}
-        maxHeight={560}
-        onRowClick={(s) => navigate(routes.token(s.chain, s.token.address))}
-        empty={<EmptyState compact icon={<MessageSquareQuote size={16} />} title="No calls yet" description="Public calls this wallet makes show up here with how they played out." />}
-      />
+      {stacked ? (
+        <CallList calls={d?.calls ?? []} loading={q.isLoading} />
+      ) : (
+        <DataTable
+          aria-label="Calls by this wallet"
+          columns={callColumns}
+          rows={d?.calls ?? []}
+          rowKey={(s) => s.id}
+          loading={q.isLoading}
+          defaultSort={{ key: 'called', dir: 'desc' }}
+          minWidth={620}
+          maxHeight={560}
+          onRowClick={(s) => navigate(routes.token(s.chain, s.token.address))}
+          empty={EMPTY}
+        />
+      )}
     </div>
   );
 });

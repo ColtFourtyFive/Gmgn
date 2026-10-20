@@ -5,6 +5,7 @@ import type { PortfolioSummary } from '@trenchscope/shared';
 import { Activity, ChartLine, History, ListChecks, Wallet } from 'lucide-react';
 import { AccountGate, ChainFilter, EquityChart, accountKeys, parseScope, useSignedIn, type ChainScope } from '@/components/account';
 import { ActivityTable } from '@/components/account/portfolio/ActivityTable';
+import { mergeBundleRows } from '@/components/account/portfolio/bundles';
 import { OrdersTable } from '@/components/account/portfolio/OrdersTable';
 import { PositionsTable } from '@/components/account/portfolio/PositionsTable';
 import { WalletsStrip } from '@/components/account/portfolio/WalletsStrip';
@@ -91,8 +92,9 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
   });
 
   const data = summary.data;
+  const positions = useMemo(() => mergeBundleRows(data?.positions ?? []), [data]);
   const tabs = [
-    { value: 'positions' as const, label: 'Positions', icon: <Wallet size={13} />, count: data?.positions.length },
+    { value: 'positions' as const, label: 'Positions', icon: <Wallet size={13} />, count: data ? positions.length : undefined },
     { value: 'open' as const, label: 'Open orders', icon: <ListChecks size={13} />, count: open.data?.length },
     { value: 'history' as const, label: 'Order history', icon: <History size={13} /> },
     { value: 'activity' as const, label: 'Activity', icon: <Activity size={13} /> },
@@ -106,7 +108,7 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
         </Panel>
       ) : (
         <div className="grid gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <Overview summary={data} refreshing={summary.isPlaceholderData} />
+          <Overview summary={data} positions={positions.length} refreshing={summary.isPlaceholderData} />
           <EquityPanel summary={data} />
         </div>
       )}
@@ -120,7 +122,7 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
             (summary.isError && !data ? (
               <ErrorState compact error={summary.error} onRetry={() => void summary.refetch()} retrying={summary.isFetching} />
             ) : (
-              <PositionsTable rows={data?.positions ?? []} loading={summary.isLoading} showChain={showChain} />
+              <PositionsTable rows={positions} loading={summary.isLoading} showChain={showChain} />
             ))}
           {tab === 'open' &&
             (open.isError ? (
@@ -146,7 +148,8 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
   );
 }
 
-function Overview({ summary, refreshing }: { summary: PortfolioSummary | undefined; refreshing: boolean }) {
+/** `positions`: open positions counted per token (a launch and its bundle wallets are one). */
+function Overview({ summary, positions, refreshing }: { summary: PortfolioSummary | undefined; positions: number; refreshing: boolean }) {
   if (!summary) {
     return (
       <Panel title="Overview" icon={<Wallet size={14} />}>
@@ -182,9 +185,9 @@ function Overview({ summary, refreshing }: { summary: PortfolioSummary | undefin
               <Usd value={s.holdingsValueUsd} />
             </FlashValue>
           }
-          sub={`${s.positions.length} open position${s.positions.length === 1 ? '' : 's'}`}
+          sub={`${positions} open position${positions === 1 ? '' : 's'}`}
         />
-        <StatTile label="Win rate" hint="Tokens traded with positive total PnL" value={<Pct value={s.winRate} sign={false} colored={false} digits={1} />} />
+        <StatTile label="Win rate" hint="Tokens traded with positive total PnL (a launch and its bundle wallets count once)" value={<Pct value={s.winRate} sign={false} colored={false} digits={1} />} />
         <StatTile label="Realized PnL" value={<Usd value={s.realizedPnlUsd} colored signed />} />
         <StatTile
           label="Unrealized PnL"

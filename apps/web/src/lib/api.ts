@@ -5,6 +5,8 @@ import type {
   AlertRule,
   AppNotification,
   AuthResponse,
+  Blacklist,
+  BlacklistKind,
   CalloutFilter,
   CandleResponse,
   ChainId,
@@ -12,6 +14,7 @@ import type {
   CreateOrderRequest,
   DevInfo,
   DevToken,
+  EarlyBuyersResponse,
   FeedItem,
   FollowedWallet,
   LaunchConfig,
@@ -47,7 +50,9 @@ import type {
   WalletCalls,
   WalletPeriod,
   WalletProfile,
+  WatchlistGroup,
   WatchlistItem,
+  WatchlistResponse,
 } from '@trenchscope/shared';
 
 export class ApiError extends Error {
@@ -119,19 +124,19 @@ const get = <T>(path: string, query?: Query, signal?: AbortSignal) => request<T>
 const post = <T>(path: string, body?: unknown) => request<T>('POST', path, { body: body ?? {} });
 const put = <T>(path: string, body: unknown) => request<T>('PUT', path, { body });
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, { body });
-const del = <T>(path: string) => request<T>('DELETE', path);
+const del = <T>(path: string, query?: Query) => request<T>('DELETE', path, { query });
 
 export const api = {
   // meta
   meta: () => get<MetaResponse>('/meta'),
   search: (q: string, chain?: ChainId, signal?: AbortSignal) => get<SearchResult>('/search', { q, chain }, signal),
 
-  // market
+  // market (lists use the POST twins: merged blacklists can outgrow a URL)
   trenches: (chain: ChainId, filters?: Partial<Record<TrenchesColumn, TokenFilters>>, limit?: number) =>
-    get<TrenchesSnapshot>(`/${chain}/trenches`, { filters, limit }),
+    post<TrenchesSnapshot>(`/${chain}/trenches`, { filters, limit }),
   trending: (chain: ChainId, q: { window: StatWindow; sort?: TrendingSort; order?: 'asc' | 'desc'; filters?: TokenFilters; limit?: number }) =>
-    get<TrendingSnapshot>(`/${chain}/trending`, q),
-  newPairs: (chain: ChainId, filters?: TokenFilters, limit?: number) => get<TokenSummary[]>(`/${chain}/new-pairs`, { filters, limit }),
+    post<TrendingSnapshot>(`/${chain}/trending`, q),
+  newPairs: (chain: ChainId, filters?: TokenFilters, limit?: number) => post<TokenSummary[]>(`/${chain}/new-pairs`, { filters, limit }),
   token: (chain: ChainId, address: string) => get<TokenDetail>(`/${chain}/tokens/${address}`),
   candles: (chain: ChainId, address: string, resolution: Resolution, limit?: number) =>
     get<CandleResponse>(`/${chain}/tokens/${address}/candles`, { resolution, limit }),
@@ -140,6 +145,7 @@ export const api = {
   holders: (chain: ChainId, address: string, q: { tag?: string; limit?: number } = {}) => get<Position[]>(`/${chain}/tokens/${address}/holders`, q),
   topTraders: (chain: ChainId, address: string, q: { tag?: string; sort?: string; order?: 'asc' | 'desc'; limit?: number } = {}) =>
     get<Position[]>(`/${chain}/tokens/${address}/top-traders`, q),
+  earlyBuyers: (chain: ChainId, address: string) => get<EarlyBuyersResponse>(`/${chain}/tokens/${address}/early-buyers`),
   dev: (chain: ChainId, address: string) => get<DevInfo>(`/${chain}/tokens/${address}/dev`),
   wallet: (chain: ChainId, address: string) => get<WalletProfile>(`/${chain}/wallets/${address}`),
   walletHoldings: (chain: ChainId, address: string, q: { includeClosed?: boolean; sort?: string } = {}) =>
@@ -169,9 +175,16 @@ export const api = {
   updateFollow: (chain: ChainId, address: string, body: { remark?: string; group?: string; notify?: boolean }) =>
     patch<FollowedWallet>(`/follows/${chain}/${address}`, body),
   unfollow: (chain: ChainId, address: string) => del<{ ok: true }>(`/follows/${chain}/${address}`),
-  watchlist: () => get<{ items: WatchlistItem[]; tokens: TokenSummary[] }>('/watchlist'),
-  addWatch: (chain: ChainId, address: string) => post<WatchlistItem>('/watchlist', { chain, address }),
+  watchlist: () => get<WatchlistResponse>('/watchlist'),
+  addWatch: (chain: ChainId, address: string, body: WatchItemPatch = {}) => post<WatchlistItem>('/watchlist', { chain, address, ...body }),
+  updateWatch: (chain: ChainId, address: string, body: WatchItemPatch) => patch<WatchlistItem>(`/watchlist/${chain}/${address}`, body),
   removeWatch: (chain: ChainId, address: string) => del<{ ok: true }>(`/watchlist/${chain}/${address}`),
+  createWatchGroup: (body: { name: string; color?: string }) => post<WatchlistGroup>('/watchlist/groups', body),
+  updateWatchGroup: (id: string, body: { name?: string; color?: string | null; order?: number }) => patch<WatchlistGroup>(`/watchlist/groups/${id}`, body),
+  deleteWatchGroup: (id: string) => del<{ ok: true }>(`/watchlist/groups/${id}`),
+  blacklist: () => get<Blacklist>('/blacklist'),
+  addBlacklist: (body: { kind: BlacklistKind; chain?: ChainId; value: string }) => post<Blacklist>('/blacklist', body),
+  removeBlacklist: (kind: BlacklistKind, value: string, chain?: ChainId) => del<Blacklist>(`/blacklist/${kind}/${encodeURIComponent(value)}`, { chain }),
   notifications: (limit?: number) => get<AppNotification[]>('/notifications', { limit }),
   markRead: (ids?: string[]) => post<{ ok: true }>('/notifications/read', { ids }),
   rewards: () => get<RewardsSummary>('/rewards'),
@@ -201,5 +214,11 @@ export const api = {
   launchConfig: () => get<LaunchConfig>('/launch/config'),
   launch: (body: LaunchRequest) => post<LaunchResponse>('/launch', body),
 };
+
+/** Watchlist item fields set on add or PATCH (an empty list / blank note removes them). */
+export interface WatchItemPatch {
+  groupIds?: string[];
+  note?: string;
+}
 
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? (T[K] extends unknown[] ? T[K] : DeepPartial<T[K]>) : T[K] };

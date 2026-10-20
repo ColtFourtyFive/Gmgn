@@ -8,7 +8,7 @@ import clsx from 'clsx';
 import { Age, Native, TokenLink, Usd } from '@/components/common';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { Badge, Tooltip } from '@/components/ui';
-import { Multiple, WalletCell } from '@/components/wallet';
+import { Multiple, PositionEventBadge, WalletCell } from '@/components/wallet';
 import type { RiskVerdict } from './risk';
 
 export const FEED_GRID = 'md:grid md:grid-cols-[52px_minmax(150px,1.2fr)_minmax(104px,0.7fr)_minmax(96px,0.7fr)_minmax(150px,1.2fr)_minmax(150px,1fr)_68px] md:items-center md:gap-x-3';
@@ -36,16 +36,7 @@ function SideBadges({ item }: { item: FeedItem }) {
       <Badge tone={buy ? 'up' : 'down'} className="font-semibold">
         {buy ? 'Buy' : 'Sell'}
       </Badge>
-      {item.isFirstBuy && (
-        <Badge tone="info" title="First buy of this token">
-          1st buy
-        </Badge>
-      )}
-      {item.isClose && (
-        <Badge tone="warn" title="Sold the whole position">
-          Closed
-        </Badge>
-      )}
+      <PositionEventBadge item={item} />
     </span>
   );
 }

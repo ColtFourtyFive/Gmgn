@@ -49,7 +49,8 @@ function useAuthQueryReset(): void {
   useEffect(() => {
     if (prev.current === token) return;
     prev.current = token;
-    for (const queryKey of [['notifications'], ...TRADING_QUERY_KEYS]) qc.removeQueries({ queryKey: [...queryKey] });
+    // Blacklist and watchlist are per-account too: a different account must not briefly inherit them.
+    for (const queryKey of [['notifications'], ['blacklist'], ['watchlist'], ...TRADING_QUERY_KEYS]) qc.removeQueries({ queryKey: [...queryKey] });
     void qc.invalidateQueries();
   }, [token, qc]);
 }

@@ -1,13 +1,14 @@
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TokenPositionRow } from '@trenchscope/shared';
-import { Wallet } from 'lucide-react';
-import { Age, ChainIcon, Compact, FlashValue, Pct, Price, TokenLink, Usd } from '@/components/common';
+import { Boxes, Wallet } from 'lucide-react';
+import { AddressLink, Age, ChainIcon, Compact, FlashValue, Pct, Price, TokenLink, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
-import { DataTable, EmptyState, Skeleton, type Column } from '@/components/ui';
+import { DataTable, EmptyState, Popover, Skeleton, type Column } from '@/components/ui';
 import { serverNow, useIsMobile } from '@/hooks';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { routes } from '@/lib/chain';
+import type { PortfolioRow } from './bundles';
 import { SellButtons } from './SellButtons';
 
 const keyOf = (r: TokenPositionRow) => `${r.chain}:${r.token}`;
@@ -17,22 +18,71 @@ function ShareRow({ row, size }: { row: TokenPositionRow; size?: 'xs' | 'sm' }) 
   return <SharePnlButton size={size} getData={() => shareDataFromPosition(row, row.tokenInfo, null, serverNow())} />;
 }
 
+/** "+3 bundles" chip; click (or tap) for each bundle wallet's bag (included in the row's figures). */
+function BundlesChip({ row }: { row: PortfolioRow }) {
+  if (row.bundles.length === 0) return null;
+  const n = row.bundles.length;
+  return (
+    <Popover
+      placement="bottom-start"
+      aria-label={`${row.tokenInfo.symbol} bundle wallets`}
+      className="p-3"
+      trigger={
+        <button type="button" className="chip shrink-0 bg-bundler/15 text-bundler hover:bg-bundler/25">
+          <Boxes size={10} aria-hidden />
+          {row.walletRole === 'bundle' ? `${n} bundle${n === 1 ? '' : 's'}` : `+${n} bundle${n === 1 ? '' : 's'}`}
+        </button>
+      }
+    >
+      {/* Portaled, but React bubbles its clicks to the row that opened it. */}
+      <div className="flex w-[280px] max-w-[calc(100vw-48px)] flex-col gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+        <p className="text-muted">
+          {row.walletRole === 'bundle'
+            ? 'Bundle wallets of your launch. Your launch wallet holds none, so they can’t be sold from here.'
+            : 'Bundle wallets of your launch, included in this row. Selling here sells the same share of each.'}
+        </p>
+        <ul className="flex flex-col divide-y divide-line">
+          {row.bundles.map((b) => (
+            <li key={b.wallet} className="flex items-center gap-2 py-1">
+              <AddressLink chain={b.chain} address={b.wallet} copy={false} className="min-w-0 flex-1" />
+              <Usd value={b.valueUsd} className="text-fg" />
+              <Usd value={b.totalPnlUsd} colored signed className="w-16 text-right" />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Popover>
+  );
+}
+
+/** Quick sells (and share) for rows the launch wallet holds; bundle-only rows have nothing to sell from here. */
+function RowSell({ row, size, className }: { row: PortfolioRow; size?: 'xs' | 'sm'; className?: string }) {
+  if (row.walletRole === 'bundle') return <span className="text-xs text-faint">Bundles only</span>;
+  return (
+    <>
+      <SellButtons row={row} size={size} className={className} />
+      <ShareRow row={row} size={size} />
+    </>
+  );
+}
+
 export interface PositionsTableProps {
-  rows: TokenPositionRow[];
+  /** One row per token (bundle wallets merged in, see bundles.ts). */
+  rows: PortfolioRow[];
   loading: boolean;
   /** Show the chain mark next to each token (multi-chain view). */
   showChain: boolean;
   empty?: ReactNode;
 }
 
-/** Open positions: desktop table with quick-sell buttons, stacked cards on phones. */
+/** Open positions: desktop table with quick-sell buttons, stacked cards on phones; launches show their bundle wallets. */
 export function PositionsTable({ rows, loading, showChain, empty }: PositionsTableProps) {
   const navigate = useNavigate();
   const mobile = useIsMobile();
   const { compactRows } = useDisplaySettings();
   const emptyState = empty ?? <EmptyState icon={<Wallet size={18} />} title="No open positions" description="Buy a token from Trenches or Trending and it shows up here." />;
 
-  const columns = useMemo<Column<TokenPositionRow>[]>(
+  const columns = useMemo<Column<PortfolioRow>[]>(
     () => [
       {
         key: 'token',
@@ -45,6 +95,7 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
           <span className="flex min-w-0 items-center gap-1.5">
             {showChain && <ChainIcon chain={r.chain} size={12} />}
             <TokenLink token={r.tokenInfo} size={24} showName />
+            <BundlesChip row={r} />
           </span>
         ),
       },
@@ -146,8 +197,7 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
         width: 180,
         render: (r) => (
           <span className="flex items-center justify-end gap-1">
-            <SellButtons row={r} />
-            <ShareRow row={r} />
+            <RowSell row={r} />
           </span>
         ),
       },
@@ -192,13 +242,14 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
   );
 }
 
-function PositionCard({ row: r, showChain }: { row: TokenPositionRow; showChain: boolean }) {
+function PositionCard({ row: r, showChain }: { row: PortfolioRow; showChain: boolean }) {
   return (
     <li className="flex flex-col gap-2 px-3 py-3">
       <div className="flex items-start justify-between gap-2">
         <span className="flex min-w-0 items-center gap-1.5">
           {showChain && <ChainIcon chain={r.chain} size={12} />}
           <TokenLink token={r.tokenInfo} size={28} showName />
+          <BundlesChip row={r} />
         </span>
         <span className="flex shrink-0 flex-col items-end leading-tight">
           <FlashValue value={r.valueUsd}>
@@ -230,8 +281,7 @@ function PositionCard({ row: r, showChain }: { row: TokenPositionRow; showChain:
         </div>
       </dl>
       <div className="flex items-center gap-1.5">
-        <SellButtons row={r} size="sm" className="min-w-0 flex-1 !justify-stretch" />
-        <ShareRow row={r} size="sm" />
+        <RowSell row={r} size="sm" className="min-w-0 flex-1 !justify-stretch" />
       </div>
     </li>
   );

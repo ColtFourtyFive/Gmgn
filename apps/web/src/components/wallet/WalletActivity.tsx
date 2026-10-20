@@ -1,7 +1,7 @@
 // Wallet activity: REST history (api.walletActivity) merged with the live
 // `wallet:<chain>:<address>` trade stream. Live trades show instantly and are
-// replaced by the server's FeedItems (token refs, first-buy/close flags) on
-// the refetch they trigger.
+// replaced by the server's FeedItems (token refs, position events) on the
+// refetch they trigger.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ import { routes } from '@/lib/chain';
 import { useChannel } from '@/lib/ws';
 import { type ActivityType, useWalletActivity } from './queries';
 import { Multiple } from './Multiple';
+import { PositionEventBadge } from './PositionEvent';
 
 const LIVE_CAP = 100;
 const REFRESH_THROTTLE_MS = 2500;
@@ -103,12 +104,11 @@ const columns: Column<FeedItem>[] = [
     key: 'type',
     header: 'Type',
     width: 120,
-    render: ({ trade: t, isFirstBuy, isClose }) => (
+    render: (it) => (
       <span className="flex flex-wrap items-center gap-1">
-        <Badge tone={t.side === 'buy' ? 'up' : 'down'}>{t.side === 'buy' ? 'Buy' : 'Sell'}</Badge>
-        {isFirstBuy && <Badge tone="info">First buy</Badge>}
-        {isClose && <Badge tone="warn">Closed</Badge>}
-        {t.isDev && <Badge tone="neutral">Dev</Badge>}
+        <Badge tone={it.trade.side === 'buy' ? 'up' : 'down'}>{it.trade.side === 'buy' ? 'Buy' : 'Sell'}</Badge>
+        <PositionEventBadge item={it} />
+        {it.trade.isDev && <Badge tone="neutral">Dev</Badge>}
       </span>
     ),
   },

@@ -21,6 +21,7 @@ export const tokenKeys = {
   trades: (chain: ChainId, address: string, q: object) => ['token-trades', chain, address, q] as const,
   holders: (chain: ChainId, address: string, tag: string, viewer: boolean) => ['token-holders', chain, address, tag, viewer] as const,
   traders: (chain: ChainId, address: string, q: object) => ['token-traders', chain, address, q] as const,
+  earlyBuyers: (chain: ChainId, address: string, viewer: boolean) => ['token-early-buyers', chain, address, viewer] as const,
   position: (chain: ChainId, address: string, wallet: string | null) => ['token-position', chain, address, wallet] as const,
   orders: (chain: ChainId, address: string, status: 'open' | 'history') => ['orders', 'token', chain, address, status] as const,
   fills: (chain: ChainId, address: string) => ['portfolio', 'token-fills', chain, address] as const,

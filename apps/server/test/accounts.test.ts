@@ -4,17 +4,22 @@ import { deserialize, serialize } from 'node:v8';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import {
+  BLACKLIST_LIMITS,
   CHAINS,
   CHAIN_IDS,
+  WATCHLIST_LIMITS,
   type Account,
   type AppNotification,
   type AuthResponse,
+  type Blacklist,
   type FollowedWallet,
   type RewardsSummary,
   type TokenSummary,
   type UserSettings,
   type UserWallet,
+  type WatchlistGroup,
   type WatchlistItem,
+  type WatchlistResponse,
   type WsServerMessage,
 } from '@trenchscope/shared';
 import { Accounts } from '../src/accounts';
@@ -170,6 +175,7 @@ describe('auth', () => {
     const locked = await login('hunter22');
     expect(locked.status).toBe(429);
     expect(locked.body).toMatchObject({ code: 'rate_limited', error: expect.stringMatching(/600s/) });
+    expect(locked.headers['retry-after']).toBe('600');
 
     built.ctx.world.now += LOGIN_ATTEMPT_WINDOW_MS;
     expect((await login('hunter22')).status).toBe(200);
@@ -389,6 +395,130 @@ describe('watchlist', () => {
     expect((await call('DELETE', `/api/watchlist/sol/${pepe.address}`, { token })).status).toBe(404);
     expect((await call<{ items: WatchlistItem[] }>('GET', '/api/watchlist', { token })).body.items).toEqual([]);
   });
+
+  it('creates, renames, recolors, reorders and deletes groups ("All" is implicit)', async () => {
+    const { token } = await guest();
+    const create = (body: unknown) => call<WatchlistGroup & { error: string; code: string }>('POST', '/api/watchlist/groups', { token, body });
+    const a = (await create({ name: '  Runners ', color: '#22C55E' })).body;
+    expect(a).toEqual({ id: expect.any(String), name: 'Runners', color: '#22c55e', order: 0 });
+    const b = (await create({ name: 'Degen plays' })).body;
+    const c = (await create({ name: 'Later' })).body;
+    expect([b.order, c.order]).toEqual([1, 2]);
+    expect('color' in b).toBe(false);
+
+    for (const [body, field] of [
+      [{ name: '' }, 'name'],
+      [{ name: 'x'.repeat(WATCHLIST_LIMITS.groupNameMaxLength + 1) }, 'name'],
+      [{ name: 'All' }, 'name'],
+      [{ name: 'Tab\u200bbed' }, 'name'],
+      [{ name: 'Ok', color: 'green' }, 'color'],
+    ] as const) {
+      const res = await create(body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(res.body.error.startsWith(`${field}:`), res.body.error).toBe(true);
+    }
+    expect((await create({ name: 'runners' })).status).toBe(409);
+
+    const patch = (id: string, body: unknown) => call<WatchlistGroup>('PATCH', `/api/watchlist/groups/${id}`, { token, body });
+    expect((await patch(c.id, { name: 'Moonbags', color: null, order: 0 })).body).toEqual({ id: c.id, name: 'Moonbags', order: 0 });
+    expect((await patch(b.id, { color: '#ffaa00' })).body).toMatchObject({ color: '#ffaa00', order: 2 });
+    expect((await patch('wlg_missing', { name: 'x' })).status).toBe(404);
+    expect((await patch(a.id, { name: 'Moonbags' })).status).toBe(409);
+    const list = () => call<WatchlistGroup[]>('GET', '/api/watchlist/groups', { token }).then((r) => r.body);
+    expect((await list()).map((g) => [g.name, g.order])).toEqual([
+      ['Moonbags', 0],
+      ['Runners', 1],
+      ['Degen plays', 2],
+    ]);
+
+    expect((await call('DELETE', `/api/watchlist/groups/${a.id}`, { token })).body).toEqual({ ok: true });
+    expect((await call('DELETE', `/api/watchlist/groups/${a.id}`, { token })).status).toBe(404);
+    expect((await list()).map((g) => [g.name, g.order])).toEqual([
+      ['Moonbags', 0],
+      ['Degen plays', 1],
+    ]);
+    expect((await call('GET', '/api/watchlist/groups')).status).toBe(401);
+  });
+
+  it(`allows ${WATCHLIST_LIMITS.maxGroups} groups`, async () => {
+    const { token } = await guest();
+    for (let i = 0; i < WATCHLIST_LIMITS.maxGroups; i++) expect((await call('POST', '/api/watchlist/groups', { token, body: { name: `G${i}` } })).status).toBe(200);
+    const res = await call<{ code: string }>('POST', '/api/watchlist/groups', { token, body: { name: 'One more' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('limit_reached');
+  });
+
+  it('files items under groups with a note, and drops a deleted group from its items', async () => {
+    const { token } = await guest();
+    const pepe = makeToken();
+    const wif = makeToken('WIFF');
+    const g1 = (await call<WatchlistGroup>('POST', '/api/watchlist/groups', { token, body: { name: 'One' } })).body;
+    const g2 = (await call<WatchlistGroup>('POST', '/api/watchlist/groups', { token, body: { name: 'Two' } })).body;
+
+    const added = await call<WatchlistItem>('POST', '/api/watchlist', { token, body: { chain: 'sol', address: pepe.address, groupIds: [g1.id], note: ' dev is based ' } });
+    expect(added.body).toEqual({ chain: 'sol', address: pepe.address, addedAt: built.ctx.world.now, groupIds: [g1.id], note: 'dev is based' });
+    await call('POST', '/api/watchlist', { token, body: { chain: 'sol', address: wif.address } });
+
+    const patch = (address: string, body: unknown) => call<WatchlistItem & { error: string }>('PATCH', `/api/watchlist/sol/${address}`, { token, body });
+    expect((await patch(wif.address, { groupIds: [g2.id, g1.id, g2.id] })).body.groupIds).toEqual([g2.id, g1.id]);
+    expect((await patch(wif.address, { groupIds: ['wlg_nope'] })).status).toBe(400);
+    expect((await patch(wif.address, { note: 'x'.repeat(WATCHLIST_LIMITS.noteMaxLength + 1) })).body.error).toMatch(/^note:/);
+    expect((await patch(pepe.address, { note: '', groupIds: [] })).body).toEqual({ chain: 'sol', address: pepe.address, addedAt: added.body.addedAt });
+    expect((await patch('missing', { note: 'hi' })).status).toBe(404);
+
+    await call('DELETE', `/api/watchlist/groups/${g2.id}`, { token });
+    const view = (await call<WatchlistResponse>('GET', '/api/watchlist', { token })).body;
+    expect(view.groups.map((g) => g.id)).toEqual([g1.id]);
+    expect(view.items.find((i) => i.address === wif.address)!.groupIds).toEqual([g1.id]);
+    await call('DELETE', `/api/watchlist/groups/${g1.id}`, { token });
+    expect((await call<WatchlistResponse>('GET', '/api/watchlist', { token })).body.items.every((i) => i.groupIds === undefined)).toBe(true);
+  });
+});
+
+describe('blacklist', () => {
+  it('adds and removes tokens, creators and keywords (deduped, newest first, normalized)', async () => {
+    const { token } = await guest();
+    const pepe = makeToken();
+    const dev = pepe.creator;
+    const evmDev = built.ctx.world.createWallet('bsc', 'dev', { native: 1 });
+    const add = (body: unknown) => call<Blacklist & { error: string; code: string }>('POST', '/api/blacklist', { token, body });
+
+    expect((await call<Blacklist>('GET', '/api/blacklist', { token })).body).toEqual({ tokens: [], creators: [], keywords: [] });
+    expect((await add({ kind: 'token', chain: 'sol', value: pepe.address })).body.tokens).toEqual([{ chain: 'sol', address: pepe.address, addedAt: built.ctx.world.now }]);
+    built.ctx.world.now += 1000;
+    await add({ kind: 'creator', chain: 'sol', value: dev });
+    await add({ kind: 'creator', chain: 'bsc', value: evmDev.address.toUpperCase().replace('0X', '0x') });
+    await add({ kind: 'keyword', value: ' $RUG ' });
+    await add({ kind: 'keyword', value: 'rug' });
+    const list = (await add({ kind: 'keyword', value: 'Scam' })).body;
+    expect(list.creators.map((e) => [e.chain, e.address])).toEqual([
+      ['bsc', evmDev.address],
+      ['sol', dev],
+    ]);
+    expect(list.keywords).toEqual(['scam', 'rug']);
+    expect((await add({ kind: 'token', chain: 'sol', value: pepe.address })).body.tokens).toHaveLength(1);
+
+    expect((await add({ kind: 'token', value: pepe.address })).body.error).toMatch(/^chain:/);
+    expect((await add({ kind: 'token', chain: 'bsc', value: pepe.address })).status).toBe(404);
+    expect((await add({ kind: 'creator', chain: 'sol', value: 'nobody' })).status).toBe(404);
+    expect((await add({ kind: 'keyword', value: '$' })).body.error).toMatch(/keyword is required/);
+    expect((await add({ kind: 'keyword', value: 'x'.repeat(BLACKLIST_LIMITS.keywordMaxLength + 1) })).status).toBe(400);
+    expect((await add({ kind: 'wallet', chain: 'sol', value: dev })).status).toBe(400);
+
+    expect((await call<Blacklist>('DELETE', `/api/blacklist/keyword/${encodeURIComponent('$RUG')}`, { token })).body.keywords).toEqual(['scam']);
+    expect((await call('DELETE', '/api/blacklist/keyword/rug', { token })).status).toBe(404);
+    expect((await call<Blacklist>('DELETE', `/api/blacklist/creator/${evmDev.address.toUpperCase().replace('0X', '0x')}?chain=bsc`, { token })).body.creators.map((e) => e.address)).toEqual([dev]);
+    expect((await call<Blacklist>('DELETE', `/api/blacklist/token/${pepe.address}`, { token })).body.tokens).toEqual([]);
+    expect((await call('GET', '/api/blacklist')).status).toBe(401);
+  });
+
+  it(`caps keywords at ${BLACKLIST_LIMITS.keywords}`, async () => {
+    const { token } = await guest();
+    for (let i = 0; i < BLACKLIST_LIMITS.keywords; i++) expect((await call('POST', '/api/blacklist', { token, body: { kind: 'keyword', value: `kw${i}` } })).status).toBe(200);
+    const res = await call<{ code: string }>('POST', '/api/blacklist', { token, body: { kind: 'keyword', value: 'one-more' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('limit_reached');
+  });
 });
 
 describe('notifications', () => {
@@ -494,7 +624,10 @@ describe('persistence', () => {
     const kol = world.createWallet('sol', 'kol', { native: 10 });
     const pepe = makeToken();
     await call('POST', '/api/follows', { token, body: { chain: 'sol', address: kol.address, remark: 'kol' } });
-    await call('POST', '/api/watchlist', { token, body: { chain: 'sol', address: pepe.address } });
+    const group = (await call<WatchlistGroup>('POST', '/api/watchlist/groups', { token, body: { name: 'Frogs', color: '#22c55e' } })).body;
+    await call('POST', '/api/watchlist', { token, body: { chain: 'sol', address: pepe.address, groupIds: [group.id], note: 'gm' } });
+    await call('POST', '/api/blacklist', { token, body: { kind: 'creator', chain: 'sol', value: kol.address } });
+    await call('POST', '/api/blacklist', { token, body: { kind: 'keyword', value: 'rug' } });
     await call('PUT', '/api/settings', { token, body: { display: { theme: 'light' }, trade: { eth: { quickBuyAmounts: [0.3] } } } });
     accounts().notify(account.id, systemNote('saved'));
     accounts().recordTradeVolume(account.id, 1234, 9.87);
@@ -511,6 +644,10 @@ describe('persistence', () => {
     expect(restored.followedWallets(account.id)).toEqual(original.followedWallets(account.id));
     expect(restored.followersOf('sol', kol.address)).toEqual([account.id]);
     expect(restored.watchlist(account.id)).toEqual(original.watchlist(account.id));
+    expect(restored.watchlist(account.id)[0]).toMatchObject({ groupIds: [group.id], note: 'gm' });
+    expect(restored.watchlistGroups(account.id)).toEqual([group]);
+    expect(restored.blacklist(account.id)).toEqual(original.blacklist(account.id));
+    expect(restored.blacklist(account.id).keywords).toEqual(['rug']);
     expect(restored.listNotifications(account.id, 10)).toEqual(original.listNotifications(account.id, 10));
     expect(restored.rewards(account.id)).toEqual(original.rewards(account.id));
     expect(restored.rewards(ref.account.id)).toEqual(original.rewards(ref.account.id));

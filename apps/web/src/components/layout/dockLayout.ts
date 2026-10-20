@@ -1,7 +1,7 @@
 // Geometry of the floating Instant trade dock (pure, unit-tested): default
 // placement, clamping into the free viewport area, moves and corner resizes
-// (pointer or arrow keys) and the collapsed header position. Rects are
-// remembered per viewport class.
+// (pointer or arrow keys) and the collapsed header (fold direction, moves).
+// Rects are remembered per viewport class.
 
 import { BREAKPOINTS } from '@/hooks/useMediaQuery';
 
@@ -95,11 +95,30 @@ export function arrowDelta(key: string, shift: boolean): [number, number] | null
 }
 
 /**
- * Top of the header while collapsed: a dock in the lower half of the viewport
- * keeps its bottom edge (folds down), one in the upper half keeps its top.
+ * Which way a dock collapses to its header: one in the lower half of the
+ * viewport keeps its bottom edge (folds down), one in the upper half keeps
+ * its top. Decided when it collapses, so dragging the folded header across
+ * the middle never makes it jump.
  */
-export function collapsedTop(rect: DockRect, vp: Viewport): number {
-  return rect.y + rect.height / 2 > vp.height / 2 ? rect.y + rect.height - DOCK_HEADER : rect.y;
+export function foldsDown(rect: DockRect, vp: Viewport): boolean {
+  return rect.y + rect.height / 2 > vp.height / 2;
+}
+
+/** Top of the header while collapsed. */
+export function collapsedTop(rect: DockRect, foldDown: boolean): number {
+  return foldDown ? rect.y + rect.height - DOCK_HEADER : rect.y;
+}
+
+/**
+ * Move a collapsed dock by a delta (0, 0 just fits it): only its header has
+ * to stay inside the free area, the folded body may hang outside it (the
+ * panel is clamped again when it expands).
+ */
+export function moveFoldedDock(rect: DockRect, dx: number, dy: number, foldDown: boolean, vp: Viewport, insets: DockInsets): DockRect {
+  const offset = collapsedTop(rect, foldDown) - rect.y;
+  const x = Math.round(clamp(rect.x + dx, DOCK_GAP, vp.width - rect.width - DOCK_GAP));
+  const top = Math.round(clamp(rect.y + offset + dy, insets.top + DOCK_GAP, vp.height - insets.bottom - DOCK_GAP - DOCK_HEADER));
+  return { ...rect, x, y: top - offset };
 }
 
 /** Saved rects by viewport key; anything malformed is dropped. */

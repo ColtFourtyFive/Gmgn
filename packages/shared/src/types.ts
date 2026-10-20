@@ -1130,9 +1130,12 @@ export interface LaunchRequest {
   chain: ChainId;
   /** Launchpad id on `chain` (LaunchConfig.launchpads). */
   launchpad: string;
-  /** 1-32 characters; a reserved ticker as the whole name is refused. */
+  /** 1-32 characters; a name that reads as a reserved ticker (after look-alike folding, see docs/API.md) is refused. */
   name: string;
-  /** 1-10 characters A-Z / 0-9 (lower case is upper-cased, a leading "$" dropped); reserved tickers are refused. */
+  /**
+   * 1-10 characters A-Z / 0-9 (lower case is upper-cased, a leading "$" dropped); reserved tickers, and
+   * look-alikes of them, are refused.
+   */
   symbol: string;
   /** At most 280 characters. */
   description?: string;

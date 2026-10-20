@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { shortAddress, type FeedItem } from '@trenchscope/shared';
 import { Activity } from 'lucide-react';
 import { Age, ChainIcon, Compact, Native, Price, TokenLink, Usd } from '@/components/common';
-import { Badge, CopyButton, DataTable, EmptyState, type Column } from '@/components/ui';
+import { CopyButton, DataTable, EmptyState, type Column } from '@/components/ui';
+import { PositionEventBadge } from '@/components/wallet';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { SideBadge } from '../orders';
 
@@ -36,8 +37,7 @@ export function ActivityTable({ rows, loading, showChain }: { rows: FeedItem[]; 
         render: (f) => (
           <span className="inline-flex items-center gap-1">
             <SideBadge side={f.trade.side} />
-            {f.isFirstBuy && <Badge tone="info">First</Badge>}
-            {f.isClose && <Badge tone="neutral">Close</Badge>}
+            <PositionEventBadge item={f} />
           </span>
         ),
       },

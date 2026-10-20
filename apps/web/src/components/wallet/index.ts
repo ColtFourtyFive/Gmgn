@@ -17,6 +17,7 @@ export {
   type FollowInput,
 } from './follows';
 export { Multiple } from './Multiple';
+export { POSITION_EVENT_META, PositionEventBadge, positionEventOf } from './PositionEvent';
 export {
   isNotFound,
   retryUnlessMissing,

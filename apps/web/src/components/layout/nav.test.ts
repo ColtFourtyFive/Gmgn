@@ -38,6 +38,7 @@ describe('chain switching', () => {
     expect(tokenRoute('/sol/address/AbC123')).toBeNull();
     expect(tokenRoute('/xyz/token/AbC123')).toBeNull();
     expect(tokenRoute('/sol/token')).toBeNull();
+    expect(tokenRoute('/sol/token/%E0%A4%A')).toBeNull();
   });
 });
 

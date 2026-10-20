@@ -2,12 +2,14 @@
 // list comes from the analytics module's holdings rows; totals, PnL and win
 // rate from one pass over the ledger), an equity curve sampled every 5 minutes
 // and after each fill (kept for 7 days), and the merged activity feed across
-// chains.
+// chains. The bundle wallets of the account's launches count as its own: their
+// rows (walletRole 'bundle') and balances join the summary and the curve.
 
 import { CHAIN_IDS, type ChainId, type FeedItem, type PortfolioSummary, type TokenPositionRow } from '@trenchscope/shared';
 import type { AppContext, Viewer } from '../context';
 import type { WalletState, World } from '../sim/world';
 import { HOUR_MS } from './common';
+import type { Launches } from './launch';
 
 const SAMPLE_EVERY_MS = 5 * 60_000;
 const RETENTION_MS = 7 * 24 * HOUR_MS;
@@ -21,39 +23,50 @@ export interface EquityPoint {
 }
 
 interface LedgerTotals {
+  nativeUsd: number;
   holdingsUsd: number;
   realizedPnlUsd: number;
   unrealizedPnlUsd: number;
-  /** Positions (open or closed) with positive total PnL. */
+  /** Tokens traded (open or closed, over all the wallets) with positive total PnL. */
   wins: number;
   traded: number;
 }
 
 /**
- * Totals over every position the wallet ever opened, with the holdings-row
- * formulas. Read from the ledger because holdings rows are capped per wallet
- * and closed ones would be built (token refs included) only to be summed.
+ * Totals over every position the wallets ever opened, with the holdings-row
+ * formulas; a token held in several wallets (a launch and its bundles) counts
+ * once toward the win rate. Read from the ledger because holdings rows are
+ * capped per wallet and closed ones would be built (token refs included) only
+ * to be summed.
  */
-function ledgerTotals(world: World, wallet: WalletState): LedgerTotals {
-  const totals: LedgerTotals = { holdingsUsd: 0, realizedPnlUsd: 0, unrealizedPnlUsd: 0, wins: 0, traded: 0 };
-  for (const pos of wallet.positions.values()) {
-    const token = world.getToken(pos.token);
-    if (!token) continue;
-    const value = pos.balance > 0 ? pos.balance * world.priceUsd(token) : 0;
-    const unrealized = pos.balance > 0 ? value - pos.costBasisUsd : 0;
-    totals.holdingsUsd += value;
-    totals.realizedPnlUsd += pos.realizedPnlUsd;
-    totals.unrealizedPnlUsd += unrealized;
-    totals.traded++;
-    if (pos.realizedPnlUsd + unrealized > 0) totals.wins++;
+function ledgerTotals(world: World, wallets: WalletState[]): LedgerTotals {
+  const totals: LedgerTotals = { nativeUsd: 0, holdingsUsd: 0, realizedPnlUsd: 0, unrealizedPnlUsd: 0, wins: 0, traded: 0 };
+  const pnlByToken = new Map<string, number>();
+  for (const wallet of wallets) {
+    totals.nativeUsd += wallet.native * world.nativeUsd(wallet.chain);
+    for (const pos of wallet.positions.values()) {
+      const token = world.getToken(pos.token);
+      if (!token) continue;
+      const value = pos.balance > 0 ? pos.balance * world.priceUsd(token) : 0;
+      const unrealized = pos.balance > 0 ? value - pos.costBasisUsd : 0;
+      totals.holdingsUsd += value;
+      totals.realizedPnlUsd += pos.realizedPnlUsd;
+      totals.unrealizedPnlUsd += unrealized;
+      pnlByToken.set(pos.token, (pnlByToken.get(pos.token) ?? 0) + pos.realizedPnlUsd + unrealized);
+    }
   }
+  totals.traded = pnlByToken.size;
+  for (const pnl of pnlByToken.values()) if (pnl > 0) totals.wins++;
   return totals;
 }
 
 export class Portfolio {
   private readonly equity = new Map<string, EquityPoint[]>();
 
-  constructor(private readonly ctx: AppContext) {}
+  constructor(
+    private readonly ctx: AppContext,
+    private readonly launches: Pick<Launches, 'bundleWallets'>,
+  ) {}
 
   install(): void {
     this.ctx.engine.addTicker('trading-equity', () => this.sampleAll(), { everyMs: SAMPLE_EVERY_MS });
@@ -72,10 +85,14 @@ export class Portfolio {
     const positions: TokenPositionRow[] = [];
     for (const c of chains) {
       const wallet = accounts.walletFor(accountId, c);
-      nativeBalanceUsd += wallet.native * world.nativeUsd(c);
-      positions.push(...analytics.walletHoldings(wallet, { includeClosed: false, sort: 'value', limit: 1000 }, viewer));
+      const bundles = this.launches.bundleWallets(accountId, c);
+      for (const w of [wallet, ...bundles]) {
+        const walletRole = w === wallet ? 'main' : 'bundle';
+        for (const row of analytics.walletHoldings(w, { includeClosed: false, sort: 'value', limit: 1000 }, viewer)) positions.push({ ...row, walletRole });
+      }
       // Closed positions count toward PnL and win rate too.
-      const totals = ledgerTotals(world, wallet);
+      const totals = ledgerTotals(world, [wallet, ...bundles]);
+      nativeBalanceUsd += totals.nativeUsd;
       holdingsValueUsd += totals.holdingsUsd;
       realizedPnlUsd += totals.realizedPnlUsd;
       unrealizedPnlUsd += totals.unrealizedPnlUsd;
@@ -130,8 +147,8 @@ export class Portfolio {
   private valueByChain(accountId: string): number[] {
     const { world, accounts } = this.ctx;
     return CHAIN_IDS.map((chain) => {
-      const wallet = accounts.walletFor(accountId, chain);
-      return wallet.native * world.nativeUsd(chain) + ledgerTotals(world, wallet).holdingsUsd;
+      const totals = ledgerTotals(world, [accounts.walletFor(accountId, chain), ...this.launches.bundleWallets(accountId, chain)]);
+      return totals.nativeUsd + totals.holdingsUsd;
     });
   }
 

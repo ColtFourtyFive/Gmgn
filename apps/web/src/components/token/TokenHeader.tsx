@@ -1,63 +1,42 @@
 // Token identity: avatar with curve ring, symbol/name, contract copy,
-// launchpad, age, socials, narrative, flags, watchlist star, share, and the
-// lifecycle line (curve progress → migrating → migrated pool).
+// launchpad, age, socials, narrative, flags, watchlist star (group picker),
+// share, the actions menu (hide token / dev) and the lifecycle line (curve
+// progress → migrating → migrated pool).
 
-import { memo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getLaunchpad, shortAddress, type TokenDetail, type TokenSummary, type WatchlistItem } from '@trenchscope/shared';
-import { Copy as CopyIcon, Eye, Flame, Link2, Loader2, Rocket, ShieldAlert, Star, Waves } from 'lucide-react';
+import { memo } from 'react';
+import { getLaunchpad, shortAddress, type TokenDetail } from '@trenchscope/shared';
+import { Copy as CopyIcon, Ellipsis, Eye, EyeOff, Flame, Link2, Loader2, Rocket, ShieldAlert, Waves } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, ChainIcon, CurveProgress, LaunchpadBadge, SocialLinks, TokenAvatar, Usd } from '@/components/common';
-import { accountKeys } from '@/components/account';
-import { Badge, CopyButton, IconButton, Tooltip } from '@/components/ui';
+import { WatchStar } from '@/components/account';
+import { isBlacklisted, useBlacklist, useHideItems } from '@/components/discovery';
+import { Badge, CopyButton, IconButton, Menu, Popover, Tooltip } from '@/components/ui';
 import { copyText } from '@/hooks/useClipboard';
-import { api } from '@/lib/api';
-import { errorMessage } from '@/lib/format';
-import { requireAuth, useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 
-type WatchData = { items: WatchlistItem[]; tokens: TokenSummary[] };
-
-/** Watchlist membership + toggle (shares the Watchlist page cache). */
-function useWatch(token: TokenDetail) {
-  const qc = useQueryClient();
-  const signedIn = useSession((s) => !!s.token);
-  const q = useQuery({ queryKey: accountKeys.watchlist, queryFn: api.watchlist, enabled: signedIn, staleTime: 30_000 });
-  const watched = !!q.data?.items.some((i) => i.chain === token.chain && i.address === token.address);
-  const [pending, setPending] = useState(false);
-  const toggle = () =>
-    requireAuth(async () => {
-      if (pending) return;
-      setPending(true);
-      const prev = qc.getQueryData<WatchData>(accountKeys.watchlist);
-      const next = !watched;
-      qc.setQueryData<WatchData>(accountKeys.watchlist, (d) => {
-        const base = d ?? { items: [], tokens: [] };
-        return next
-          ? { ...base, items: [...base.items, { chain: token.chain, address: token.address, addedAt: Date.now() }] }
-          : { items: base.items.filter((i) => !(i.chain === token.chain && i.address === token.address)), tokens: base.tokens.filter((t) => t.address !== token.address) };
-      });
-      try {
-        if (next) await api.addWatch(token.chain, token.address);
-        else await api.removeWatch(token.chain, token.address);
-        toast.success(next ? `${token.symbol} added to watchlist` : `${token.symbol} removed from watchlist`);
-      } catch (err) {
-        if (prev) qc.setQueryData(accountKeys.watchlist, prev);
-        toast.error('Watchlist not updated', errorMessage(err));
-      } finally {
-        setPending(false);
-        void qc.invalidateQueries({ queryKey: accountKeys.watchlist });
-      }
-    });
-  return { watched, toggle, pending };
+/** "More" menu: hide the token or its dev from the discovery lists. */
+function HeaderMenu({ t }: { t: TokenDetail }) {
+  const items = useHideItems(t);
+  return (
+    <Popover role="menu" placement="bottom-end" aria-label={`${t.symbol} actions`} trigger={<IconButton label="More actions" icon={<Ellipsis size={16} />} />}>
+      {(close) => <Menu items={items} onDone={close} />}
+    </Popover>
+  );
 }
 
-/** Labelled lifecycle / marketing / risk flags. */
+/** Labelled lifecycle / marketing / risk flags, and whether the viewer hid the token or its dev. */
 function HeaderFlags({ t }: { t: TokenDetail }) {
   const s = t.security;
   const tax = Math.max(s.buyTax, s.sellTax);
+  const blacklist = useBlacklist().data;
+  const hidden = isBlacklisted(blacklist, 'token', t.address, t.chain) || isBlacklisted(blacklist, 'creator', t.creator, t.chain);
   return (
     <>
+      {hidden && (
+        <Badge tone="neutral" icon={<EyeOff size={10} aria-hidden />} title="You hid this token or its dev: it stays out of Trenches, Trending and New Pairs">
+          Hidden
+        </Badge>
+      )}
       {s.isHoneypot && (
         <Badge tone="down" icon={<ShieldAlert size={10} aria-hidden />} title="Buys work, sells are blocked by the contract">
           Honeypot
@@ -152,7 +131,6 @@ function Lifecycle({ t }: { t: TokenDetail }) {
 }
 
 export const TokenHeader = memo(function TokenHeader({ token: t, compact, className }: { token: TokenDetail; compact?: boolean; className?: string }) {
-  const { watched, toggle, pending } = useWatch(t);
   const lp = getLaunchpad(t.launchpad);
   const share = async () => {
     const ok = await copyText(window.location.href);
@@ -196,14 +174,9 @@ export const TokenHeader = memo(function TokenHeader({ token: t, compact, classN
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <IconButton
-            label={watched ? 'Remove from watchlist' : 'Add to watchlist'}
-            icon={<Star size={16} className={clsx(watched && 'fill-accent text-accent')} />}
-            active={watched}
-            disabled={pending}
-            onClick={toggle}
-          />
+          <WatchStar token={t} />
           <IconButton label="Copy link" icon={<Link2 size={16} />} onClick={() => void share()} />
+          <HeaderMenu t={t} />
         </div>
       </div>
       <Lifecycle t={t} />

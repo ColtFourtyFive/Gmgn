@@ -307,10 +307,14 @@ const CLOSERS = [
   '',
 ];
 
-/** Tickers of well-known real tokens (and a listed stock) that generated names never reuse. */
+/**
+ * Tickers generated names never reuse and launches may not take: well-known real memecoins (and a
+ * listed stock), the chains' native and stable assets, and our own brand.
+ */
 export const RESERVED_TICKERS: ReadonlySet<string> = new Set([
   'ACT', 'BOME', 'BONK', 'BRETT', 'COIN', 'DOGE', 'FLOKI', 'GIGA', 'GOAT', 'MEW', 'MICHI', 'MOG', 'MYRO', 'NEIRO',
   'PENGU', 'PEPE', 'PNUT', 'PONKE', 'POPCAT', 'SAMO', 'SHIB', 'SLERF', 'TOSHI', 'TRUMP', 'TURBO', 'WIF', 'WOJAK',
+  'SOL', 'ETH', 'BNB', 'USDC', 'USDT', 'WETH', 'TRENCH', 'TRENCHSCOPE',
 ]);
 
 function slug(s: string): string {

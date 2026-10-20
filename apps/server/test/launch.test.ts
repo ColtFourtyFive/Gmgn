@@ -14,6 +14,7 @@ import {
   type LaunchRequest,
   type LaunchResponse,
   type Order,
+  type PortfolioSummary,
   type SwapReceipt,
 } from '@trenchscope/shared';
 import { Accounts } from '../src/accounts';
@@ -46,7 +47,7 @@ async function call<T = unknown>(method: 'GET' | 'POST', url: string, opts: { au
     headers: opts.auth ? { authorization: `Bearer ${opts.auth}` } : {},
     payload: opts.body as Record<string, unknown> | undefined,
   });
-  return { status: res.statusCode, body: res.json() as T };
+  return { status: res.statusCode, body: res.json() as T, headers: res.headers };
 }
 
 interface User {
@@ -160,8 +161,17 @@ describe('launch validation', () => {
       [{ name: 'Fr\ud800og' }, 'name'], // lone surrogate
       [{ name: 'Frog\u2028Coin' }, 'name'], // line separator
       [{ name: 'Fro\u0301\u0301\u0301\u0301g' }, 'name'], // stacked combining marks
+      [{ name: 'S.O.L' }, 'name'], // spacing and punctuation do not hide a reserved ticker
+      [{ name: 'Ѕоl' }, 'name'], // Cyrillic S and o
+      [{ name: 'Trеnch Ѕcope' }, 'name'], // the brand, with Cyrillic e and S
+      [{ name: 'ᴜsᴅᴄ' }, 'name'], // small capitals
       [{ symbol: 'PEPE' }, 'symbol'],
       [{ symbol: '$wif' }, 'symbol'],
+      [{ symbol: 'ЕТН' }, 'symbol'], // Cyrillic
+      [{ symbol: 'ΒΝΒ' }, 'symbol'], // Greek
+      [{ symbol: 'ＵＳＤＴ' }, 'symbol'], // full-width
+      [{ symbol: 'wёth' }, 'symbol'], // accented Cyrillic
+      [{ symbol: 'TRENCH' }, 'symbol'],
       [{ symbol: 'FR-OG' }, 'symbol'],
       [{ symbol: 'ABCDEFGHIJK' }, 'symbol'],
       [{ symbol: '' }, 'symbol'],
@@ -184,7 +194,17 @@ describe('launch validation', () => {
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect(res.body.error.startsWith(`${field}:`), `${JSON.stringify(body)} -> ${res.body.error}`).toBe(true);
     }
+    // look-alikes of reserved tickers are refused as reserved, not just as non-Latin
+    expect((await launchRaw(user, { symbol: 'ЅОL' })).body.error).toBe('symbol: this ticker is reserved');
     expect(world().tokensByChain.sol).toHaveLength(0);
+  });
+
+  it('reserves native, stable and brand tickers (served in the config), not names that merely contain them', async () => {
+    const config = (await call<LaunchConfig>('GET', '/api/launch/config')).body;
+    expect(config.reservedTickers).toEqual(expect.arrayContaining(['SOL', 'ETH', 'BNB', 'USDC', 'USDT', 'WETH', 'TRENCH', 'TRENCHSCOPE']));
+    const user = await signIn();
+    expect((await launch(user, { name: 'Solar Flare', symbol: 'SOLAR', devBuyNative: 0 })).res.token.symbol).toBe('SOLAR');
+    expect((await launch(user, { name: 'Тrench Rats', devBuyNative: 0 })).res.token.name).toBe('Тrench Rats');
   });
 
   it('only accepts https social links, on x.com / t.me for twitter / telegram', async () => {
@@ -284,9 +304,11 @@ describe('launch execution', () => {
     const user = await signIn();
     const other = await signIn();
     for (let i = 0; i < LAUNCHES_PER_HOUR; i++) expect((await launchRaw(user, { devBuyNative: 0 })).status).toBe(200);
+    world().now += 60_000;
     const limited = await launchRaw(user, { devBuyNative: 0 });
     expect(limited.status).toBe(429);
     expect(limited.body.code).toBe('rate_limited');
+    expect(limited.headers['retry-after']).toBe('3540');
     expect((await launchRaw(other, { devBuyNative: 0 })).status).toBe(200);
     world().now += 3_600_000;
     expect((await launchRaw(user, { devBuyNative: 0 })).status).toBe(200);
@@ -411,5 +433,42 @@ describe('bundle wallets', () => {
     await trading().idle();
     for (const b of bundlers) expect(balanceOf(b, token)).toBe(0);
     expect(balanceOf(wallet, token)).toBe(0);
+  });
+
+  it("count in the launcher's portfolio: rows flagged 'bundle', totals, win rate and equity", async () => {
+    const user = await signIn();
+    const { token } = await launch(user, { bundleWallets: 2, bundleBuyNative: 0.5 });
+    const other = await launch(user, { devBuyNative: 0.2 });
+    // the launch runs up (every bag of it in profit); the other one is down its fees
+    expect(world().executeSwap(world().createWallet('sol', 'whale', { native: 10_000 }), token, 'buy', 20).ok).toBe(true);
+    const wallet = user.wallet();
+    const bundlers = bundlersOf(token);
+    const portfolio = async () => (await call<PortfolioSummary>('GET', '/api/portfolio?chain=sol', { auth: user.auth })).body;
+
+    const p = await portfolio();
+    const rows = (address: string, role: string) => p.positions.filter((r) => r.token === address && r.walletRole === role);
+    expect(rows(token.address, 'main').map((r) => r.wallet)).toEqual([wallet.address]);
+    expect(rows(token.address, 'bundle').map((r) => r.wallet).sort()).toEqual(bundlers.map((b) => b.address).sort());
+    expect(rows(other.token.address, 'main')).toHaveLength(1);
+    expect(p.positions).toHaveLength(4);
+    const price = world().priceUsd(token);
+    const held = [wallet, ...bundlers].reduce((sum, w) => sum + balanceOf(w, token), 0) * price + balanceOf(wallet, other.token) * world().priceUsd(other.token);
+    expect(p.holdingsValueUsd).toBeCloseTo(held, 6);
+    expect(p.positions.reduce((sum, r) => sum + r.valueUsd, 0)).toBeCloseTo(held, 6);
+    const native = [wallet, ...bundlers].reduce((sum, w) => sum + w.native, 0) * world().nativeUsd('sol');
+    expect(p.nativeBalanceUsd).toBeCloseTo(native, 6);
+    expect(p.totalValueUsd).toBeCloseTo(native + held, 6);
+    const unrealized = [wallet, ...bundlers].reduce((sum, w) => {
+      const pos = w.positions.get(token.address)!;
+      return sum + pos.balance * price - pos.costBasisUsd;
+    }, 0);
+    expect(p.unrealizedPnlUsd).toBeCloseTo(unrealized + (balanceOf(wallet, other.token) * world().priceUsd(other.token) - wallet.positions.get(other.token.address)!.costBasisUsd), 6);
+    // a launch and its bundles are one token toward the win rate (1 of 2, not 3 of 4 bags)
+    expect(p.winRate).toBe(0.5);
+    expect(p.equity[p.equity.length - 1].valueUsd).toBe(p.totalValueUsd);
+
+    // another account's portfolio never sees them
+    const stranger = await signIn();
+    expect((await call<PortfolioSummary>('GET', '/api/portfolio?chain=sol', { auth: stranger.auth })).body.positions).toEqual([]);
   });
 });

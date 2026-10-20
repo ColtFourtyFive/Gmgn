@@ -1,5 +1,6 @@
 // Trending: tokens ranked by swap activity over a window, streamed from
-// `trending:<chain>` with server-side sorting (TrendingSort) and filters.
+// `trending:<chain>` with server-side sorting (TrendingSort) and filters (the
+// viewer's blacklist merged in).
 
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,17 +26,20 @@ import {
   hasFilters,
   LiveStatus,
   QuickBuyAmount,
+  SafetyCell,
   TagCount,
   TokenCell,
+  useBlacklistFilter,
   useLiveSnapshot,
   useQuickBuyAmount,
   useStableItems,
   useStoredFilters,
   useViewerTags,
+  withExclusions,
 } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
-import { Badge, Button, DataTable, EmptyState, ErrorState, SegmentedControl, Select, Tooltip, type Column, type SortState } from '@/components/ui';
+import { Button, DataTable, EmptyState, ErrorState, SegmentedControl, Select, Tooltip, type Column, type SortState } from '@/components/ui';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useDisplaySettings } from '@/hooks/useSettings';
@@ -75,7 +79,6 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const DEFAULT_SORT: SortState = { key: 'token', dir: 'desc' };
-const RISK_TONE = { low: 'up', medium: 'warn', high: 'down' } as const;
 
 function validWindow(w: unknown): StatWindow {
   return STAT_WINDOWS.includes(w as StatWindow) ? (w as StatWindow) : '1h';
@@ -244,15 +247,11 @@ function trendingColumns({ win, thresholds, buyAmount, devTags, mobile }: Column
       },
     },
     {
-      key: 'rug',
-      header: 'Risk',
-      title: 'Rug risk (composite)',
+      key: 'safety',
+      header: 'Safety',
+      title: 'Safety score 0-100 (hover for the reasons) and rug risk',
       align: 'center',
-      render: (t) => (
-        <Badge tone={RISK_TONE[t.security.riskLevel]} title={`Rug probability ${formatPercent(t.security.rugRatio, { sign: false, digits: 0 })}`}>
-          {formatPercent(t.security.rugRatio, { sign: false, digits: 0 })}
-        </Badge>
-      ),
+      render: (t) => <SafetyCell token={t} />,
     },
     ...(['1m', '5m', '1h'] as const).map(
       (w): Column<TokenSummary> => ({
@@ -284,10 +283,12 @@ function Trending({ chain }: { chain: ChainId }) {
   const sort = validSort(rawSort);
   const [filters, setFilters] = useStoredFilters(`ts.trending.filters.${chain}`);
 
+  const { exclusions, isHidden } = useBlacklistFilter(chain);
+
   const { sort: serverSort, order } = serverOrder(sort);
   const params = useMemo(
-    () => ({ window: win, sort: serverSort, order, filters: hasFilters(filters) ? filters : undefined, limit: LIMIT }),
-    [win, serverSort, order, filters],
+    () => ({ window: win, sort: serverSort, order, filters: withExclusions(hasFilters(filters) ? filters : undefined, exclusions), limit: LIMIT }),
+    [win, serverSort, order, filters, exclusions],
   );
   const snap = useLiveSnapshot<TrendingSnapshot>({
     channel: `trending:${chain}`,
@@ -301,7 +302,9 @@ function Trending({ chain }: { chain: ChainId }) {
     () => trendingColumns({ win, thresholds: display.riskThresholds, buyAmount, devTags, mobile }),
     [win, display.riskThresholds, buyAmount, devTags, mobile],
   );
-  const rows = useStableItems(snap.data?.tokens, tokenKey) ?? [];
+  // Hidden tokens leave at once, before the next push applies the new exclusions.
+  const visible = useMemo(() => snap.data?.tokens.filter((t) => !isHidden(t)), [snap.data, isHidden]);
+  const rows = useStableItems(visible, tokenKey) ?? [];
 
   return (
     <Page fullHeight className="!pb-2">

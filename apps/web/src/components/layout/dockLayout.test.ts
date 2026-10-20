@@ -8,7 +8,9 @@ import {
   DOCK_GAP,
   DOCK_HEADER,
   DOCK_MIN,
+  foldsDown,
   moveDockRect,
+  moveFoldedDock,
   parseDockRects,
   resizeDockRect,
   viewportKey,
@@ -69,9 +71,28 @@ describe('dock geometry', () => {
 
   it('folds down when collapsed in the lower half, up in the upper half', () => {
     const low = { x: 8, y: 500, width: 340, height: 360 };
-    expect(collapsedTop(low, vp)).toBe(500 + 360 - DOCK_HEADER);
+    expect(foldsDown(low, vp)).toBe(true);
+    expect(collapsedTop(low, true)).toBe(500 + 360 - DOCK_HEADER);
     const high = { x: 8, y: 60, width: 340, height: 300 };
-    expect(collapsedTop(high, vp)).toBe(60);
+    expect(foldsDown(high, vp)).toBe(false);
+    expect(collapsedTop(high, false)).toBe(60);
+  });
+
+  it('moves a collapsed dock by its header, which can reach every edge', () => {
+    const low = { x: 8, y: 400, width: 340, height: 460 };
+    // Folded down, the header (at the rect's bottom) follows the pointer across the middle up to the top bar.
+    const up = moveFoldedDock(low, 0, -5000, true, vp, insets);
+    expect(collapsedTop(up, true)).toBe(48 + DOCK_GAP);
+    expect(up.y).toBeLessThan(0);
+    expect(up.height).toBe(460);
+    const down = moveFoldedDock(low, 30, 5000, true, vp, insets);
+    expect(collapsedTop(down, true)).toBe(900 - 28 - DOCK_GAP - DOCK_HEADER);
+    expect(down.x).toBe(38);
+    // Folded up, the header is the rect's top.
+    const high = { x: 8, y: 60, width: 340, height: 300 };
+    expect(collapsedTop(moveFoldedDock(high, 0, 5000, false, vp, insets), false)).toBe(900 - 28 - DOCK_GAP - DOCK_HEADER);
+    // A zero move just fits the header back in after the window shrinks.
+    expect(moveFoldedDock({ x: 1300, y: 700, width: 340, height: 300 }, 0, 0, false, { width: 1024, height: 700 }, insets)).toMatchObject({ x: 1024 - 340 - DOCK_GAP, y: 700 - 28 - DOCK_GAP - DOCK_HEADER });
   });
 
   it('buckets viewports by breakpoint', () => {

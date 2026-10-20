@@ -100,3 +100,10 @@ export function openDock(tab?: DockTab): void {
     s.setCollapsed(false);
   }
 }
+
+/** Footer toggles: close the panel when it already shows `tab`, else open it there. */
+export function toggleDockTab(tab: DockTab): void {
+  const s = useDock.getState();
+  if (!isPhone() && s.open && !s.collapsed && s.tab === tab) s.setOpen(false);
+  else openDock(tab);
+}

@@ -662,6 +662,23 @@ describe('profile / holdings / activity', () => {
     expect(wa.activity(w, { before: t3.timestamp }, { accountId: null }).map((i) => i.trade.id)).toEqual([t2.id, t1.id]);
   });
 
+  it('labels what each trade did to the position: open, add, reduce, close, and a re-entry opens again', () => {
+    const w = mkWallet();
+    w.tags.add('smart');
+    const t = mkToken();
+    buy(w, t, 0.5);
+    buy(w, t, 0.2);
+    sellFrac(w, t, 0.4);
+    sellFrac(w, t, 1);
+    buy(w, t, 0.3);
+    const events = (items: FeedItem[]) => items.map((i) => i.positionEvent).reverse();
+    const expected = ['open', 'add', 'reduce', 'close', 'open'];
+    expect(events(wa.activity(w, {}, { accountId: null }))).toEqual(expected);
+    expect(events(wa.feed('sol', 'smart', 10, { accountId: null }))).toEqual(expected);
+    // the flags keep their narrower meaning: only the very first buy is a first buy
+    expect(wa.activity(w, {}, { accountId: null }).map((i) => i.isFirstBuy).reverse()).toEqual([true, false, false, false, false]);
+  });
+
   it('keeps 100 activity rows for simulated wallets and 1000 for user wallets', () => {
     const sim = mkWallet();
     const user = world.createWallet('sol', 'user', { native: 10_000, accountId: 'acc_test', createdAt: world.now - DAY_MS });

@@ -1,12 +1,12 @@
 // Call-outs (/:chain/callouts): the chain's public token calls (KOL call
 // signals) newest first with all / KOL / hits filters. Each call shows its
 // caller, the MC at the call and how far the token ran since; a side panel
-// ranks the callers of the loaded calls by hit rate.
+// ranks the callers by hit rate (useCallerRanking).
 
 import { useMemo, useRef, useState } from 'react';
 import { CHAINS, formatInt, formatPercent, type CalloutFilter, type ChainId, type Signal } from '@trenchscope/shared';
 import { MessageSquareQuote, Radio, Trophy } from 'lucide-react';
-import { aggregateCallers, CallHeader, callerOf, CallRow, TopCallersPanel, useCallerDirectory, useCallouts, type CallerDirectory } from '@/components/callouts';
+import { CallHeader, callerOf, CallRow, TopCallersPanel, useCallerDirectory, useCallerRanking, useCallouts, type CallerDirectory } from '@/components/callouts';
 import { StatTile } from '@/components/common';
 import { LiveStatus, QuickBuyAmount, useQuickBuyAmount } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
@@ -42,7 +42,7 @@ function FeedSkeleton() {
   );
 }
 
-function Summary({ calls, callers }: { calls: Signal[]; callers: number }) {
+function Summary({ calls, callers, hitsOnly }: { calls: Signal[]; callers: number; hitsOnly: boolean }) {
   const { hits, best } = useMemo(() => {
     let h = 0;
     let b: Signal | null = null;
@@ -60,7 +60,8 @@ function Summary({ calls, callers }: { calls: Signal[]; callers: number }) {
         label="Hit 2x+"
         hint="Calls whose token reached at least 2x the market cap at the call"
         value={<span className="text-up">{formatInt(hits)}</span>}
-        sub={n > 0 ? `${formatPercent(hits / n, { sign: false, digits: 0 })} hit rate` : '--'}
+        // With the Hits filter every listed call is a hit, so a rate would always read 100%.
+        sub={hitsOnly ? 'hits filter on' : n > 0 ? `${formatPercent(hits / n, { sign: false, digits: 0 })} hit rate` : '--'}
       />
       <StatTile label="Best call" value={best ? <Multiple value={best.maxMultiple} /> : '--'} sub={best ? `$${best.token.symbol}` : '--'} />
       <StatTile label="Callers" value={formatInt(callers)} sub="distinct wallets" />
@@ -84,7 +85,7 @@ function Callouts({ chain }: { chain: ChainId }) {
   const callers = useMemo(() => [...new Set(feed.calls.map(callerOf))], [feed.calls]);
   const directory = useCallerDirectory(chain, callers);
   directoryRef.current = directory;
-  const ranked = useMemo(() => aggregateCallers(feed.calls), [feed.calls]);
+  const ranking = useCallerRanking(chain, filter, feed);
 
   const onFilter = (f: CalloutFilter) => {
     setLimit(PAGE);
@@ -136,7 +137,7 @@ function Callouts({ chain }: { chain: ChainId }) {
     </section>
   );
 
-  const top = <TopCallersPanel chain={chain} callers={ranked} directory={directory} loading={feed.loading} className={wide ? 'max-h-full' : 'min-h-0 flex-1'} />;
+  const top = <TopCallersPanel chain={chain} callers={ranking.callers} directory={directory} loading={ranking.loading} className={wide ? 'max-h-full' : 'min-h-0 flex-1'} />;
 
   return (
     <Page fullHeight className="max-w-[1800px]">
@@ -149,7 +150,7 @@ function Callouts({ chain }: { chain: ChainId }) {
       {mobile && <div className="mb-3 flex flex-wrap items-center gap-2">{headerActions}</div>}
       {!feed.error && (
         <div className="mb-3 shrink-0">
-          <Summary calls={feed.calls} callers={callers.length} />
+          <Summary calls={feed.calls} callers={callers.length} hitsOnly={filter === 'hits'} />
         </div>
       )}
       {!wide && (
@@ -160,7 +161,7 @@ function Callouts({ chain }: { chain: ChainId }) {
           className="mb-3 w-full [&>button]:flex-1 [&>button]:justify-center"
           items={[
             { value: 'feed', label: 'Calls', icon: <Radio size={13} /> },
-            { value: 'callers', label: 'Top callers', icon: <Trophy size={13} />, count: ranked.length || null },
+            { value: 'callers', label: 'Top callers', icon: <Trophy size={13} />, count: ranking.callers.length || null },
           ]}
         />
       )}

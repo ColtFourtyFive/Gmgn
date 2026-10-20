@@ -7,6 +7,7 @@ import { Age, Compact, FlashValue, SocialLinks, TokenAvatar, Usd } from '@/compo
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { CopyButton, HoverCard } from '@/components/ui';
 import { routes } from '@/lib/chain';
+import { contextPoint, TokenContextMenu, type ContextPoint } from './HideActions';
 import { HolderCount, RiskChips, TagCount, TokenFlags } from './TokenBadges';
 import { TokenHoverSummary } from './TokenHoverSummary';
 
@@ -39,18 +40,22 @@ function Metric({ label, children, title }: { label: string; children: ReactNode
 /**
  * Dense Trenches card: avatar with curve ring + launchpad dot (hover for a
  * summary), symbol/name/CA, live age, socials, MC/volume/TX/holders, smart &
- * KOL counts, badges, risk chips and an instant-buy button. Clicking anywhere
- * that is not a control opens the token page.
+ * KOL counts, badges, safety score, risk chips and an instant-buy button.
+ * Clicking anywhere that is not a control opens the token page; right-click
+ * opens the actions menu (new tab, copy, hide token / dev).
  */
 export const TokenCard = memo(function TokenCard({ token: t, column, thresholds, buyAmount, selected, animate, compact, devTags }: TokenCardProps) {
   const navigate = useNavigate();
   const [entering, setEntering] = useState(!!animate);
+  const [menuAt, setMenuAt] = useState<ContextPoint | null>(null);
   const curve = t.status !== 'migrated';
   const lp = getLaunchpad(t.launchpad);
   const href = routes.token(t.chain, t.address);
   const day = t.stats['24h'];
 
   const onClick = (e: MouseEvent<HTMLElement>) => {
+    // Clicks inside portaled layers (hover card, dialogs) bubble here through React; they are not card clicks.
+    if (!e.currentTarget.contains(e.target as Node)) return;
     const hit = (e.target as HTMLElement).closest(INTERACTIVE);
     if (hit && e.currentTarget.contains(hit)) return;
     if (e.metaKey || e.ctrlKey) window.open(href, '_blank', 'noopener');
@@ -58,106 +63,114 @@ export const TokenCard = memo(function TokenCard({ token: t, column, thresholds,
   };
 
   return (
-    <li
-      data-token={t.address}
-      aria-current={selected || undefined}
-      onClick={onClick}
-      onAnimationEnd={() => setEntering(false)}
-      className={clsx(
-        'relative flex cursor-pointer gap-2.5 border-b border-line/70 px-2.5 transition-colors last:border-b-0 hover:bg-panel-2',
-        compact ? 'py-1.5' : 'py-2',
-        selected && 'bg-panel-2 shadow-[inset_2px_0_0_rgb(var(--accent))]',
-        entering && 'animate-slide-in',
-      )}
-    >
-      <div className={clsx('flex shrink-0 flex-col items-center gap-1', compact ? 'w-10' : 'w-12')}>
-        <HoverCard
-          placement="right-start"
-          aria-label={`${t.symbol} summary`}
-          trigger={
-            <span className="block rounded-full">
-              <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={compact ? 40 : 48} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
-            </span>
-          }
-        >
-          <TokenHoverSummary token={t} devTags={devTags} />
-        </HoverCard>
-        {curve ? (
-          <span className={clsx('num text-2xs font-medium', t.progress >= 0.8 ? 'text-accent' : 'text-muted')} title="Bonding curve progress">
-            {formatPercent(t.progress, { sign: false, digits: 0 })}
-          </span>
-        ) : (
-          <span className="num inline-flex items-center gap-0.5 text-2xs text-up" title={`Bonded in ${formatDuration(t.completeCostSeconds)} · trading on ${t.dex ?? 'DEX'}`}>
-            <Check size={10} strokeWidth={3} aria-hidden />
-            {formatDuration(t.completeCostSeconds)}
-          </span>
+    <>
+      <li
+        data-token={t.address}
+        aria-current={selected || undefined}
+        onClick={onClick}
+        onContextMenu={(e) => {
+          if (!e.currentTarget.contains(e.target as Node)) return;
+          e.preventDefault();
+          setMenuAt(contextPoint(e));
+        }}
+        onAnimationEnd={() => setEntering(false)}
+        className={clsx(
+          'relative flex cursor-pointer gap-2.5 border-b border-line/70 px-2.5 transition-colors last:border-b-0 hover:bg-panel-2',
+          compact ? 'py-1.5' : 'py-2',
+          selected && 'bg-panel-2 shadow-[inset_2px_0_0_rgb(var(--accent))]',
+          entering && 'animate-slide-in',
         )}
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Link to={href} className="link shrink-0 truncate text-md font-semibold leading-5" title={t.symbol}>
-            {t.symbol}
-          </Link>
-          <span className="min-w-0 truncate text-xs text-muted" title={t.name}>
-            {t.name}
-          </span>
-          <CopyButton text={t.address} label="Copy contract address" size={11} />
-          <span className="ml-auto shrink-0 pl-1 text-sm">
-            <span className="text-faint">MC </span>
-            <FlashValue value={t.marketCapUsd}>
-              <Usd value={t.marketCapUsd} className="font-semibold text-fg" />
-            </FlashValue>
-          </span>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-1.5 text-xs">
-          <Age ts={column === 'migrated' && t.migratedAt ? t.migratedAt : t.createdAt} className={clsx('shrink-0 font-medium', column === 'migrated' ? 'text-info' : 'text-up')} />
-          <SocialLinks socials={t.socials} size={12} className="shrink-0" />
-          {t.xFollowers !== null && t.xFollowers > 0 && (
-            <span className="shrink-0 text-faint" title="X followers">
-              <Compact value={t.xFollowers} digits={1} />
+      >
+        <div className={clsx('flex shrink-0 flex-col items-center gap-1', compact ? 'w-10' : 'w-12')}>
+          <HoverCard
+            placement="right-start"
+            aria-label={`${t.symbol} summary`}
+            trigger={
+              <span className="block rounded-full">
+                <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={compact ? 40 : 48} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} title={lp?.name} />
+              </span>
+            }
+          >
+            <TokenHoverSummary token={t} devTags={devTags} />
+          </HoverCard>
+          {curve ? (
+            <span className={clsx('num text-2xs font-medium', t.progress >= 0.8 ? 'text-accent' : 'text-muted')} title="Bonding curve progress">
+              {formatPercent(t.progress, { sign: false, digits: 0 })}
+            </span>
+          ) : (
+            <span className="num inline-flex items-center gap-0.5 text-2xs text-up" title={`Bonded in ${formatDuration(t.completeCostSeconds)} · trading on ${t.dex ?? 'DEX'}`}>
+              <Check size={10} strokeWidth={3} aria-hidden />
+              {formatDuration(t.completeCostSeconds)}
             </span>
           )}
-          <TokenFlags token={t} followedDev={devTags?.includes('following')} className="min-w-0 overflow-hidden" />
-          <span className="ml-auto shrink-0 pl-1">
-            <span className="text-faint">V </span>
-            <FlashValue value={day.volumeUsd}>
-              <Usd value={day.volumeUsd} className="font-medium text-fg" />
-            </FlashValue>
-          </span>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-xs">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-            <Metric label="TX" title={`${day.buys} buys / ${day.sells} sells (24h)`}>
-              <FlashValue value={day.swaps}>
-                <Compact value={day.swaps} digits={1} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link to={href} className="link shrink-0 truncate text-md font-semibold leading-5" title={t.symbol}>
+              {t.symbol}
+            </Link>
+            <span className="min-w-0 truncate text-xs text-muted" title={t.name}>
+              {t.name}
+            </span>
+            <CopyButton text={t.address} label="Copy contract address" size={11} />
+            <span className="ml-auto shrink-0 pl-1 text-sm">
+              <span className="text-faint">MC </span>
+              <FlashValue value={t.marketCapUsd}>
+                <Usd value={t.marketCapUsd} className="font-semibold text-fg" />
               </FlashValue>
-            </Metric>
-            <HolderCount
-              count={
-                <FlashValue value={t.holderCount}>
-                  <Compact value={t.holderCount} digits={1} className="font-medium text-fg" />
-                </FlashValue>
-              }
-            />
-            {column === 'migrated' && (
-              <Metric label="Liq">
-                <Usd value={t.liquidityUsd} />
-              </Metric>
-            )}
-            <span className="flex shrink-0 items-center gap-0.5">
-              <TagCount tag="smart" count={t.smartDegenCount} />
-              <TagCount tag="kol" count={t.kolCount} />
             </span>
           </div>
-          <QuickBuyButton chain={t.chain} token={t.address} symbol={t.symbol} amount={buyAmount} className="-my-0.5 shrink-0" />
-        </div>
 
-        <RiskChips token={t} thresholds={thresholds} className="mt-0.5 min-w-0" />
-      </div>
-    </li>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            <Age ts={column === 'migrated' && t.migratedAt ? t.migratedAt : t.createdAt} className={clsx('shrink-0 font-medium', column === 'migrated' ? 'text-info' : 'text-up')} />
+            <SocialLinks socials={t.socials} size={12} className="shrink-0" />
+            {t.xFollowers !== null && t.xFollowers > 0 && (
+              <span className="shrink-0 text-faint" title="X followers">
+                <Compact value={t.xFollowers} digits={1} />
+              </span>
+            )}
+            <TokenFlags token={t} followedDev={devTags?.includes('following')} className="min-w-0 overflow-hidden" />
+            <span className="ml-auto shrink-0 pl-1">
+              <span className="text-faint">V </span>
+              <FlashValue value={day.volumeUsd}>
+                <Usd value={day.volumeUsd} className="font-medium text-fg" />
+              </FlashValue>
+            </span>
+          </div>
+
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <Metric label="TX" title={`${day.buys} buys / ${day.sells} sells (24h)`}>
+                <FlashValue value={day.swaps}>
+                  <Compact value={day.swaps} digits={1} />
+                </FlashValue>
+              </Metric>
+              <HolderCount
+                count={
+                  <FlashValue value={t.holderCount}>
+                    <Compact value={t.holderCount} digits={1} className="font-medium text-fg" />
+                  </FlashValue>
+                }
+              />
+              {column === 'migrated' && (
+                <Metric label="Liq">
+                  <Usd value={t.liquidityUsd} />
+                </Metric>
+              )}
+              <span className="flex shrink-0 items-center gap-0.5">
+                <TagCount tag="smart" count={t.smartDegenCount} />
+                <TagCount tag="kol" count={t.kolCount} />
+              </span>
+            </div>
+            <QuickBuyButton chain={t.chain} token={t.address} symbol={t.symbol} amount={buyAmount} className="-my-0.5 shrink-0" />
+          </div>
+
+          <RiskChips token={t} thresholds={thresholds} className="mt-0.5 min-w-0" />
+        </div>
+      </li>
+      {menuAt && <TokenContextMenu token={t} at={menuAt} onClose={() => setMenuAt(null)} />}
+    </>
   );
 }, sameCard);
 
@@ -197,6 +210,8 @@ function sameCard(a: TokenCardProps, b: TokenCardProps): boolean {
     sx.isWashTrading === sy.isWashTrading &&
     sx.lpBurnedRate === sy.lpBurnedRate &&
     sx.isHoneypot === sy.isHoneypot &&
+    sx.safety?.score === sy.safety?.score &&
+    sx.safety?.band === sy.safety?.band &&
     JSON.stringify(x.socials) === JSON.stringify(y.socials)
   );
 }

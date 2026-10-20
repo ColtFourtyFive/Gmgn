@@ -54,7 +54,7 @@ export class Trading implements TradingApi {
     this.sniper = new Sniper(ctx, this.executor, this.jobs);
     this.alerts = new Alerts(ctx);
     this.launches = new Launches(ctx, this.executor);
-    this.portfolio = new Portfolio(ctx);
+    this.portfolio = new Portfolio(ctx, this.launches);
   }
 
   install(): void {

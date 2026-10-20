@@ -1,6 +1,7 @@
 // Trenches: the live three-column launchpad board (New | Almost bonded |
 // Migrated) streamed from `trenches:<chain>`, with per-column filters (saved
-// per chain + column), client-side sorting, pause-on-hover and hotkeys.
+// per chain + column, the viewer's blacklist merged into each), client-side
+// sorting, pause-on-hover and hotkeys.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -13,10 +14,12 @@ import {
   LiveStatus,
   QuickBuyAmount,
   TrenchesColumn,
+  useBlacklistFilter,
   useLiveSnapshot,
   useQuickBuyAmount,
   useStoredFilters,
   useViewerTags,
+  withExclusions,
   type HotkeyRow,
   type TrenchSort,
   type TrenchSortKey,
@@ -83,14 +86,17 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
   const [rawTab, setTab] = useLocalStorage<Column>('ts.trenches.tab', 'new');
   const tab = COLUMNS.includes(rawTab) ? rawTab : 'new';
 
-  // Only columns with active filters are sent; params stay referentially stable.
+  // Only columns with active filters or blacklist exclusions are sent; params stay referentially stable.
+  const { exclusions, isHidden } = useBlacklistFilter(chain);
   const wsFilters = useMemo(() => {
     const out: Partial<Record<Column, TokenFilters>> = {};
-    if (hasFilters(fNew)) out.new = fNew;
-    if (hasFilters(fAlmost)) out.almost = fAlmost;
-    if (hasFilters(fMigrated)) out.migrated = fMigrated;
+    const own: Record<Column, TokenFilters> = { new: fNew, almost: fAlmost, migrated: fMigrated };
+    for (const c of COLUMNS) {
+      const f = withExclusions(hasFilters(own[c]) ? own[c] : undefined, exclusions);
+      if (f) out[c] = f;
+    }
     return Object.keys(out).length ? out : undefined;
-  }, [fNew, fAlmost, fMigrated]);
+  }, [fNew, fAlmost, fMigrated, exclusions]);
   const params = useMemo(() => ({ filters: wsFilters, limit: LIMIT }), [wsFilters]);
   const snap = useLiveSnapshot<TrenchesSnapshot>({
     channel: `trenches:${chain}`,
@@ -99,6 +105,14 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
     fetch: () => api.trenches(chain, wsFilters, LIMIT),
     queryKey: ['trenches', chain, params],
   });
+  // A token hidden just now leaves at once, before the next push applies the new exclusions.
+  const data = snap.data;
+  const columns = useMemo(() => {
+    if (!data) return null;
+    const out = {} as Record<Column, TokenSummary[]>;
+    for (const c of COLUMNS) out[c] = data[c].filter((t) => !isHidden(t));
+    return out;
+  }, [data, isHidden]);
 
   // ---- keyboard selection ---------------------------------------------------
   const [sel, setSel] = useState<{ col: Column; address: string | null } | null>(null);
@@ -159,7 +173,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
       key={c}
       chain={chain}
       column={c}
-      tokens={snap.data ? snap.data[c] : null}
+      tokens={columns ? columns[c] : null}
       error={snap.error}
       onRetry={snap.retry}
       retrying={snap.retrying}
@@ -174,6 +188,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
       focused={sel?.col === c}
       onDisplayed={onDisplayed}
       devTags={devTags}
+      isHidden={isHidden}
       hideTitle={extra.hideTitle}
       className={extra.className}
     />
@@ -204,7 +219,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
               setTab(c);
               if (sel && sel.col !== c) setSel(null);
             }}
-            items={COLUMNS.map((c) => ({ value: c, label: COLUMN_META[c].short, count: snap.data ? snap.data[c].length : null }))}
+            items={COLUMNS.map((c) => ({ value: c, label: COLUMN_META[c].short, count: columns ? columns[c].length : null }))}
             aria-label="Trenches columns"
           />
           {renderColumn(tab, { hideTitle: true, className: 'flex-1' })}

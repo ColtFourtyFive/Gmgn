@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import { Age, Compact, Native, Pct, Price, StatTile, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { Button, DataTable, EmptyState, ErrorState, Skeleton, type Column } from '@/components/ui';
+import { PositionEventBadge } from '@/components/wallet';
 import { serverNow } from '@/hooks/useNow';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { useSwap } from '@/hooks/useSwap';
@@ -41,8 +42,9 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
         key: 'type',
         header: 'Type',
         render: (f) => (
-          <span className={clsx('text-xs font-semibold', f.trade.side === 'buy' ? 'text-up' : 'text-down')}>
-            {f.trade.side === 'buy' ? (f.isFirstBuy ? 'First buy' : 'Buy') : f.isClose ? 'Sell all' : 'Sell'}
+          <span className="flex items-center gap-1">
+            <span className={clsx('text-xs font-semibold', f.trade.side === 'buy' ? 'text-up' : 'text-down')}>{f.trade.side === 'buy' ? 'Buy' : 'Sell'}</span>
+            <PositionEventBadge item={f} />
           </span>
         ),
       },

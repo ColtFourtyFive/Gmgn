@@ -6,7 +6,10 @@
 // priority-fee suggestions, and the trading engine into landing latency and
 // expiry failures.
 //
-//   fast, slow = trades/s EMAs (time constants 60s / 30min)
+//   fast, slow = trades/s EMAs (time constants 60s / 30min), both starting at
+//                the first rate seen; during the warm-up fast-forward (which
+//                grows the market from nothing for about an hour) slow follows
+//                fast, so that ramp never reads as a surge
 //   surge      = clamp((fast / slow - 1) / 2, 0, 0.5)      a 2x burst adds 0.5
 //   rush       = decays e^(-t / 4min); a new rush (on average every 30 min per
 //                chain) jumps to max(rush, U(0.5, 0.9))
@@ -25,8 +28,11 @@ const SLOW_TAU_S = 30 * 60;
 const RUSH_DECAY_S = 4 * 60;
 const RUSH_MEAN_GAP_S = 30 * 60;
 
-/** Suggested medium priority fee (native) at calm; low = 0.5x, high = 3x. */
-const BASE_PRIORITY_FEE: Record<ChainId, number> = { sol: 0.0001, bsc: 0.0001, base: 0.00002, eth: 0.0008 };
+/**
+ * Suggested medium priority fee (native) at calm; low = 0.5x, high = 3x. Every chain's default
+ * Standard preset (accounts/settings.ts) stays above the 'low' tier at full congestion.
+ */
+const BASE_PRIORITY_FEE: Record<ChainId, number> = { sol: 0.0001, bsc: 0.0001, base: 0.00001, eth: 0.0008 };
 
 /** Model state per chain (persisted by the market module). */
 export interface CongestionModel {
@@ -41,13 +47,17 @@ export function newCongestionModel(trades: number): CongestionModel {
   return { fast: 0, slow: 0, rush: 0, trades };
 }
 
-/** Advance by `dtS` seconds given the chain's running trade counter; returns the new level. */
-export function stepCongestion(m: CongestionModel, rng: Rng, dtS: number, trades: number): number {
+/**
+ * Advance by `dtS` seconds given the chain's running trade counter; returns the new level.
+ * `settling` (the warm-up fast-forward) pins the baseline to the fast average.
+ */
+export function stepCongestion(m: CongestionModel, rng: Rng, dtS: number, trades: number, settling = false): number {
   if (dtS <= 0) return levelOf(m);
   const rate = Math.max(0, trades - m.trades) / dtS;
   m.trades = trades;
+  if (m.slow <= 0) m.fast = m.slow = rate;
   m.fast += (rate - m.fast) * (1 - Math.exp(-dtS / FAST_TAU_S));
-  m.slow += (rate - m.slow) * (1 - Math.exp(-dtS / SLOW_TAU_S));
+  m.slow = settling ? m.fast : m.slow + (rate - m.slow) * (1 - Math.exp(-dtS / SLOW_TAU_S));
   m.rush *= Math.exp(-dtS / RUSH_DECAY_S);
   if (rng.chance(dtS / RUSH_MEAN_GAP_S)) m.rush = Math.max(m.rush, rng.float(0.5, 0.9));
   return levelOf(m);

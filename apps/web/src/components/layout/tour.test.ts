@@ -18,6 +18,13 @@ describe('tour steps', () => {
     expect(phone.length).toBeLessThan(ids('trenches', false).length);
   });
 
+  it('uses the phone copy on phones only', () => {
+    const body = (mobile: boolean) => resolveTourSteps(TOUR_STEPS, { page: 'trenches', mobile }).find((s) => s.id === 'columns')?.body;
+    expect(body(false)).toMatch(/Hover a column/);
+    expect(body(true)).not.toMatch(/Hover/);
+    for (const s of resolveTourSteps(TOUR_STEPS, { page: 'trenches', mobile: true })) expect(s.body).not.toMatch(/hotkeys|Hover|Ctrl/);
+  });
+
   it('keeps every desktop tour within 5-7 steps', () => {
     for (const page of ['trenches', 'token'] as const) {
       const n = ids(page, false).length;

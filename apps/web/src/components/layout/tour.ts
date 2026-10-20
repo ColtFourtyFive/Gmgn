@@ -14,6 +14,8 @@ export interface TourStep {
   id: string;
   title: string;
   body: string;
+  /** Copy for the phone tour when the desktop copy mentions hover or hotkeys. */
+  phoneBody?: string;
   /**
    * Selectors of the element to highlight, in order of preference: the first
    * selector with a visible match wins. No match shows the card centered.
@@ -43,7 +45,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'columns',
     title: 'The Trenches',
     body: 'New launches, tokens about to bond and fresh migrations stream in live. Hover a column to pause it; each one has its own sort and filters (the funnel).',
-    target: [COLUMN_HEADERS, 'main [role="tablist"][aria-label="Trenches columns"]'],
+    phoneBody: 'New launches, tokens about to bond and fresh migrations stream in live, one tab each, with their own sort and filters (the funnel).',
+    target: [`${COLUMN_HEADERS}, main [role="tablist"][aria-label="Trenches columns"]`],
     union: true,
     page: 'trenches',
     placement: 'bottom',
@@ -52,6 +55,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'quick-buy',
     title: 'Quick buy',
     body: 'The ⚡ button buys instantly with your active preset. Set the amount at the top of the page; with hotkeys on, B buys the selected card.',
+    phoneBody: 'The ⚡ button buys instantly with your active preset. Set the amount at the top of the page.',
     target: ['main [data-quick-buy]'],
     page: 'trenches',
     placement: 'right',
@@ -68,6 +72,7 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'search',
     title: 'Search and commands',
     body: 'Find any token or wallet, or paste a contract address to trade it. Ctrl/⌘ K opens the command palette: pages, chains and actions.',
+    phoneBody: 'Find any token or wallet, or paste a contract address to trade it. The ⌘ button opens the command palette: pages, chains and actions.',
     target: ['[data-tour="search"]'],
     placement: 'bottom',
   },
@@ -75,13 +80,14 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'monitor',
     title: 'Monitor',
     body: 'Follow smart money and KOLs: their buys and sells land here live, with the tokens several of them are piling into.',
-    target: ['nav[aria-label="Primary"] a[href$="/monitor"]'],
+    // Narrow desktops fold Monitor into the nav's More menu.
+    target: ['nav[aria-label="Primary"] a[href$="/monitor"]', 'nav[aria-label="Primary"] button'],
     placement: 'bottom',
   },
   {
     id: 'dock',
     title: 'Instant trade & positions',
-    body: 'A floating panel with one-click buys and sells for the token you are viewing and your open positions. Press I to toggle it.',
+    body: 'A floating panel with one-click buys and sells for the token you are viewing (or viewed last) and your open positions. Drag it anywhere; press I to toggle it.',
     target: ['[data-tour="dock"]'],
     desktopOnly: true,
     placement: 'bottom-end',
@@ -94,9 +100,11 @@ export function tourPage(pathname: string): TourPage {
   return activeSection(pathname) === 'trenches' ? 'trenches' : 'other';
 }
 
-/** Steps of the tour on a page, desktop or phone. */
+/** Steps of the tour on a page, desktop or phone (phones get their own copy where a step has one). */
 export function resolveTourSteps(steps: TourStep[], ctx: { page: TourPage; mobile: boolean }): TourStep[] {
-  return steps.filter((s) => (!s.page || s.page === ctx.page) && !(ctx.mobile && s.desktopOnly));
+  return steps
+    .filter((s) => (!s.page || s.page === ctx.page) && !(ctx.mobile && s.desktopOnly))
+    .map((s) => (ctx.mobile && s.phoneBody ? { ...s, body: s.phoneBody } : s));
 }
 
 /** Where a tour started on `pathname` begins: Trenches unless already on a page with its own steps (null = stay). */

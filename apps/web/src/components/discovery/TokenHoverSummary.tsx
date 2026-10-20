@@ -3,6 +3,8 @@ import { getLaunchpad, type SecurityCheck, type TokenSummary, type WalletTag } f
 import { Layers } from 'lucide-react';
 import { AddressLink, Age, Compact, CurveProgress, LaunchpadBadge, Pct, Price, SecurityChecksList, TokenAvatar, Usd } from '@/components/common';
 import { Badge } from '@/components/ui';
+import { HideButtons } from './HideActions';
+import { coverageLabel, SAFETY_BAND, SafetyReasons, SafetyRing } from './Safety';
 import { devStatusMeta, TagCount } from './TokenBadges';
 
 const LEVEL_ORDER: Record<SecurityCheck['level'], number> = { bad: 0, warn: 1, good: 2, info: 3 };
@@ -31,13 +33,18 @@ export interface TokenHoverSummaryProps {
   devTags?: WalletTag[];
 }
 
-/** Mini token summary for hover cards: price & changes, key stats, dev, narrative, top audit lines. */
+/**
+ * Mini token summary for hover cards: price & changes, key stats, dev, narrative, safety score,
+ * top audit lines and the hide actions.
+ */
 export function TokenHoverSummary({ token: t, devTags = [] }: TokenHoverSummaryProps) {
   const dev = devStatusMeta(t.security.devStatus);
   const lp = getLaunchpad(t.launchpad);
   const curve = t.status !== 'migrated';
+  const safety = t.security.safety;
   return (
-    <div className="flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2.5 text-sm">
+    // The card is portaled but React still bubbles its clicks to the row / card that opened it.
+    <div className="flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-2.5 text-sm" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2.5">
         <TokenAvatar seed={t.logoSeed} glyph={t.logoGlyph} size={40} progress={curve ? t.progress : undefined} launchpadColor={lp?.color} />
         <div className="min-w-0 flex-1">
@@ -117,7 +124,24 @@ export function TokenHoverSummary({ token: t, devTags = [] }: TokenHoverSummaryP
         </p>
       </div>
 
-      {t.security.checks.length > 0 && <SecurityChecksList checks={topChecks(t.security.checks, 5)} className="border-t border-line pt-1" />}
+      {safety && (
+        <div className="flex items-center gap-2.5 border-t border-line pt-2">
+          <SafetyRing safety={safety} size={40} />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs">
+              <span className="font-semibold" style={{ color: `rgb(var(--${SAFETY_BAND[safety.band].token}))` }}>
+                {SAFETY_BAND[safety.band].label}
+              </span>
+              <span className="text-faint"> · {coverageLabel(safety.coverage)}</span>
+            </p>
+            <SafetyReasons reasons={safety.reasons} max={2} />
+          </div>
+        </div>
+      )}
+
+      {t.security.checks.length > 0 && <SecurityChecksList checks={topChecks(t.security.checks, 4)} className="border-t border-line pt-1" />}
+
+      <HideButtons token={t} />
     </div>
   );
 }

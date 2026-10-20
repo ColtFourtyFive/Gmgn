@@ -1,6 +1,7 @@
 // Token page (/:chain/token/:address): header, live stats, candlestick chart
-// with trade markers, trade panel, audit / holders / dev / info panels and
-// the activity / holders / traders / position / orders / dev-tokens tabs.
+// with trade markers, trade panel, audit / holders / early buyers / dev / info
+// panels and the activity / holders / traders / position / orders / dev-tokens
+// tabs.
 //
 // Data: api.token for the first paint, then one `token:<chain>:<address>`
 // subscription (detail every ~1s, trade batches, candles for the chart's
@@ -16,6 +17,7 @@ import { Page } from '@/components/layout';
 import {
   BottomTabs,
   DevPanel,
+  EarlyBuyers,
   HolderStrip,
   isNotFound,
   MobileTradeBar,
@@ -117,6 +119,7 @@ export default function TokenPage() {
   const trade = <TradePanel token={t} position={pos} />;
   const security = <SecurityPanel token={t} />;
   const holders = <HolderStrip token={t} onOpenHolders={() => openTab('holders')} />;
+  const early = <EarlyBuyers token={t} />;
   const dev = <DevPanel token={t} onOpenTokens={() => openTab('dev')} />;
   const info = <TokenInfoPanel token={t} />;
   const bottom = (
@@ -151,6 +154,7 @@ export default function TokenPage() {
           <>
             {security}
             {holders}
+            {early}
             {dev}
             {info}
           </>
@@ -172,6 +176,7 @@ export default function TokenPage() {
           {trade}
           {security}
           {holders}
+          {early}
           {dev}
           {info}
         </aside>
@@ -188,6 +193,7 @@ export default function TokenPage() {
           <div className="flex min-w-0 flex-col gap-2">
             {security}
             {holders}
+            {early}
           </div>
         </div>
         {bottom}

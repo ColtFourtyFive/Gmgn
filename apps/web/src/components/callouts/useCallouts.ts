@@ -1,6 +1,7 @@
 // Call-out feed: the REST list for a filter (refreshed every 15s so max
 // multiples stay current) plus new kol_call signals pushed on
-// `signals:<chain>` (the "all" and "kol" feeds take them as they arrive).
+// `signals:<chain>` (the "all" and "kol" feeds take them as they arrive),
+// and the caller ranking.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
@@ -8,9 +9,21 @@ import type { CalloutFilter, ChainId, LeaderboardRow, Signal, WalletProfile, Wal
 import { walletKeys } from '@/components/wallet';
 import { api } from '@/lib/api';
 import { realtime, useChannel, useConnectionState } from '@/lib/ws';
-import { callerOf } from './callerStats';
+import { aggregateCallers, callerOf, type CallerStats } from './callerStats';
 
 export const CALLOUTS_LIMIT = 300;
+
+/** REST list of calls for a filter (shared by the feed and the ranking). */
+function useCalloutsQuery(chain: ChainId, filter: CalloutFilter, enabled = true) {
+  return useQuery({
+    queryKey: ['callouts', chain, filter],
+    queryFn: () => api.callouts(chain, filter, CALLOUTS_LIMIT),
+    enabled,
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
 
 export interface CallerInfo {
   label: string | null;
@@ -67,13 +80,7 @@ export interface LiveCallouts {
 
 /** `accept` decides whether a pushed call belongs to the current filter. */
 export function useCallouts(chain: ChainId, filter: CalloutFilter, accept: (s: Signal) => boolean): LiveCallouts {
-  const q = useQuery({
-    queryKey: ['callouts', chain, filter],
-    queryFn: () => api.callouts(chain, filter, CALLOUTS_LIMIT),
-    refetchInterval: 15_000,
-    staleTime: 5_000,
-    retry: 1,
-  });
+  const q = useCalloutsQuery(chain, filter);
   // Calls pushed since the last REST read, for this filter only.
   const key = `${chain}:${filter}`;
   const [pushed, setPushed] = useState<{ key: string; calls: Signal[] }>({ key, calls: [] });
@@ -124,4 +131,23 @@ export function useCallouts(chain: ChainId, filter: CalloutFilter, accept: (s: S
     },
     retrying: q.isFetching,
   };
+}
+
+export interface CallerRanking {
+  callers: CallerStats[];
+  loading: boolean;
+}
+
+/**
+ * Callers ranked by hit rate (aggregateCallers). The "all" and "kol" feeds
+ * rank their own calls (a caller filter keeps each caller's every call); the
+ * "hits" feed holds only winning calls, which would put every caller at 100%,
+ * so it ranks the chain's full call list instead.
+ */
+export function useCallerRanking(chain: ChainId, filter: CalloutFilter, feed: LiveCallouts): CallerRanking {
+  const full = filter === 'hits';
+  const all = useCalloutsQuery(chain, 'all', full);
+  const calls = full ? all.data : feed.calls;
+  const callers = useMemo(() => (calls ? aggregateCallers(calls) : []), [calls]);
+  return { callers, loading: full ? !all.data && !all.isError : feed.loading };
 }

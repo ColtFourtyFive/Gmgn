@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CHAIN_IDS, LAUNCHPADS, type NotificationKind, type Range, type SecurityCheck, type WalletTag } from '@trenchscope/shared';
-import { ArrowUpToLine, Bell, Boxes, ChefHat, Command, Crosshair, Crown, Ellipsis, Filter, Palette, Settings, Star, Trash2 } from 'lucide-react';
+import { ArrowUpToLine, Bell, Boxes, ChefHat, Command, Compass, Crosshair, Crown, Ellipsis, Filter, Palette, Settings, Star, Trash2, Wallet, Zap } from 'lucide-react';
 import {
   AddressLink,
   Age,
@@ -31,6 +31,7 @@ import {
   type TokenLinkData,
 } from '@/components/common';
 import { NOTIFICATION_KIND_META, Page, PageHeader } from '@/components/layout';
+import { DockPositions, InstantTradeTab } from '@/components/trade/InstantTrade';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import {
   Badge,
@@ -64,7 +65,9 @@ import {
 } from '@/components/ui';
 import { MOD_KEY } from '@/hooks/useHotkeys';
 import { useTheme } from '@/hooks/useTheme';
+import { openDock } from '@/store/dock';
 import { toast } from '@/store/toasts';
+import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 
 /** Deterministic PRNG so the gallery looks the same on every load. */
@@ -486,6 +489,33 @@ export default function UiGalleryPage() {
               );
             })}
           </Row>
+        </Section>
+
+        <Section title="Shell: dock & tour">
+          <Row label="Dock">
+            <Button size="sm" icon={<Zap size={13} />} onClick={() => openDock('trade')}>
+              Instant trade
+            </Button>
+            <Button size="sm" icon={<Wallet size={13} />} onClick={() => openDock('positions')}>
+              Positions
+            </Button>
+            <span className="text-xs text-muted">
+              <Kbd>I</Kbd> toggles it · drag the header, arrow keys on the grip
+            </span>
+          </Row>
+          <Row label="Tour">
+            <Button size="sm" icon={<Compass size={13} />} onClick={startTour}>
+              Take the tour
+            </Button>
+          </Row>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded border border-line">
+              <InstantTradeTab target={null} onPage={false} />
+            </div>
+            <div className="rounded border border-line">
+              <DockPositions chain="sol" />
+            </div>
+          </div>
         </Section>
 
         <Section title="Feedback & states">

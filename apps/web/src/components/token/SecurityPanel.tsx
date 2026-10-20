@@ -1,16 +1,19 @@
-// Audit panel: risk level, rug-ratio gauge and the server's check list.
+// Audit panel: safety score headline (ring, band, coverage, top reasons with
+// their impact, "Explain" for all of them), rug-ratio gauge and the server's
+// check list.
 
 import { memo, useState } from 'react';
-import { formatPercent, type RiskLevel, type TokenDetail } from '@trenchscope/shared';
+import { formatPercent, type RiskLevel, type SafetyScore, type TokenDetail } from '@trenchscope/shared';
 import { ChevronDown, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import clsx from 'clsx';
 import { SecurityChecksList } from '@/components/common';
+import { coverageLabel, SAFETY_BAND, SafetyReasons, SafetyRing } from '@/components/discovery';
 import { Badge, Panel, Tooltip } from '@/components/ui';
 
 const LEVEL: Record<RiskLevel, { label: string; tone: 'up' | 'warn' | 'down'; icon: typeof ShieldCheck }> = {
-  low: { label: 'Low risk', tone: 'up', icon: ShieldCheck },
-  medium: { label: 'Medium risk', tone: 'warn', icon: ShieldQuestion },
-  high: { label: 'High risk', tone: 'down', icon: ShieldAlert },
+  low: { label: 'Low rug risk', tone: 'up', icon: ShieldCheck },
+  medium: { label: 'Medium rug risk', tone: 'warn', icon: ShieldQuestion },
+  high: { label: 'High rug risk', tone: 'down', icon: ShieldAlert },
 };
 
 /** 0..1 rug probability on a green / yellow / red track (10% and 30% bands). */
@@ -43,10 +46,45 @@ export function RugGauge({ value }: { value: number }) {
 }
 
 const COLLAPSED = 7;
+const TOP_REASONS = 3;
+
+/** Score ring, band and coverage, then the largest deductions; "Explain" lists all of them. */
+function SafetyHeadline({ safety }: { safety: SafetyScore }) {
+  const [explain, setExplain] = useState(false);
+  const band = SAFETY_BAND[safety.band];
+  const more = safety.reasons.length > TOP_REASONS;
+  return (
+    <div className="flex gap-3">
+      <SafetyRing safety={safety} size={60} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <Tooltip content={band.hint}>
+            <span className="cursor-help text-md font-semibold" style={{ color: `rgb(var(--${band.token}))` }} tabIndex={0}>
+              {band.label}
+            </span>
+          </Tooltip>
+          <Tooltip content="Share of the applicable checks that have data. Below 50% the band reads Unknown.">
+            <span className="num cursor-help text-xs text-muted" tabIndex={0}>
+              {coverageLabel(safety.coverage)} · {formatPercent(safety.coverage, { sign: false, digits: 0 })}
+            </span>
+          </Tooltip>
+        </div>
+        <SafetyReasons reasons={safety.reasons} max={explain ? undefined : TOP_REASONS} />
+        {more && (
+          <button type="button" className="inline-flex items-center gap-0.5 self-start text-xs text-muted hover:text-fg" aria-expanded={explain} onClick={() => setExplain((e) => !e)}>
+            {explain ? 'Top reasons' : `Explain all ${safety.reasons.length}`}
+            <ChevronDown size={12} className={clsx('transition-transform', explain && 'rotate-180')} aria-hidden />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const SecurityPanel = memo(function SecurityPanel({ token, className }: { token: TokenDetail; className?: string }) {
   const s = token.security;
   const meta = LEVEL[s.riskLevel];
+  const band = s.safety && SAFETY_BAND[s.safety.band];
   const [expanded, setExpanded] = useState(false);
   // Problems first so a collapsed list never hides a red flag.
   const order = { bad: 0, warn: 1, info: 2, good: 3 } as const;
@@ -56,8 +94,8 @@ export const SecurityPanel = memo(function SecurityPanel({ token, className }: {
   return (
     <Panel
       className={className}
-      title="Audit"
-      icon={<meta.icon size={14} />}
+      title="Safety & audit"
+      icon={band ? <band.icon size={14} /> : <meta.icon size={14} />}
       subtitle={issues ? `${issues} flag${issues === 1 ? '' : 's'}` : 'No flags'}
       actions={
         <Badge tone={meta.tone} icon={<meta.icon size={10} aria-hidden />}>
@@ -66,7 +104,8 @@ export const SecurityPanel = memo(function SecurityPanel({ token, className }: {
       }
       padded={false}
     >
-      <div className="flex flex-col gap-2 p-3 pb-1">
+      <div className="flex flex-col gap-2.5 p-3 pb-1">
+        {s.safety && <SafetyHeadline safety={s.safety} />}
         {s.isHoneypot && (
           <p className="flex items-center gap-1.5 rounded bg-down/15 px-2 py-1 text-xs font-semibold text-down">
             <ShieldAlert size={13} aria-hidden /> Honeypot — sells are blocked
