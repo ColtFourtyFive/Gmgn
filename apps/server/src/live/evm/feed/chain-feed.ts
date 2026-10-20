@@ -11,9 +11,10 @@ import { getDex } from '@trenchscope/shared';
 import type { PublicClient } from 'viem';
 import type { ExternalTrade, TokenState, World } from '../../../sim/world';
 import { EIP1967_BEACON_SLOT, EVM_CHAINS, ROBINHOOD_STOCK_TOKEN_BEACON, type EvmChainId, type EvmChainInfo } from '../chains';
-import { ENTRY_POINTS, TOPIC, ZERO_ADDRESS } from './abi';
+import { ZERO_ADDRESS } from './abi';
 import { BlockClock } from './clock';
 import { LruMap } from './lru';
+import { toUnits } from './math';
 import { cleanText, METADATA_LIMITS, TokenMetadata, type Erc20Info } from './metadata';
 import { classifyNarrative } from './narrative';
 import { LogPoller, type LogInterest, type PollWindow } from './poller';
@@ -37,6 +38,8 @@ export interface ChainFeedOptions {
   backfill: number;
   ipfsGateways: string[];
   pruneWorld: boolean;
+  /** Ledger tokens kept for this chain (default: max(500, 2 x maxTrackedTokens)). */
+  worldTokenCap?: number;
   /** Subscription client: new heads wake the poller (null = interval polling). */
   ws?: PublicClient | null;
   /** Wall clock (ms); defaults to the World clock. */
@@ -217,7 +220,7 @@ export class ChainFeed implements FeedContext {
 
   async processWindow(w: PollWindow): Promise<void> {
     this.windowTo = w.to;
-    const interests: LogInterest[] = [{ address: [...ENTRY_POINTS], topics: [TOPIC.userOperation] }];
+    const interests: LogInterest[] = [];
     for (const v of this.venues) interests.push(...v.interests(this));
     const logs = await this.poller.fetch(interests, w.from, w.to);
     const events = this.decodeAll(logs);
@@ -234,7 +237,6 @@ export class ChainFeed implements FeedContext {
         events.sort((a, b) => (a.log.blockNumber !== b.log.blockNumber ? (a.log.blockNumber < b.log.blockNumber ? -1 : 1) : a.log.logIndex - b.log.logIndex));
       }
     }
-    this.senders.noteLogs(all);
 
     for (const v of this.venues) {
       if (!v.prepare) continue;
@@ -294,7 +296,7 @@ export class ChainFeed implements FeedContext {
   }
 
   traderOf(log: RawLog, reported?: string): string | null {
-    return this.senders.traderOf(log.transactionHash, reported);
+    return this.senders.traderOf(log.transactionHash, log.logIndex, reported);
   }
 
   token(address: string): TokenState | undefined {
@@ -333,7 +335,7 @@ export class ChainFeed implements FeedContext {
     }
     if (this.world.tokens.has(address)) return null; // same address on another chain
     const { erc20 } = input;
-    const supply = Number(erc20.totalSupply) / 10 ** erc20.decimals;
+    const supply = toUnits(erc20.totalSupply, erc20.decimals);
     if (!(supply > 0) || !Number.isFinite(supply)) return null;
     const description = cleanText(input.description ?? '', METADATA_LIMITS.MAX_DESCRIPTION);
     const { narrative, glyph } = classifyNarrative(erc20.name, erc20.symbol, description);
@@ -529,7 +531,7 @@ export class ChainFeed implements FeedContext {
   pruneWorld(pins: Set<string> = this.world.pinnedTokens()): number {
     const { world } = this;
     const addrs = world.tokensByChain[this.chain];
-    const cap = Math.max(this.tracked.cap * WORLD_TOKENS_FACTOR, 500);
+    const cap = this.opts.worldTokenCap ?? Math.max(this.tracked.cap * WORLD_TOKENS_FACTOR, 500);
     if (addrs.length <= cap) return 0;
     let excess = addrs.length - Math.floor(cap * 0.95);
     const deleted: TokenState[] = [];

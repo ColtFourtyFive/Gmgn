@@ -110,6 +110,9 @@ interface TradeEvent extends FeedEvent {
 interface CompleteEvent extends FeedEvent {
   kind: 'complete';
   curve: string;
+  /** Quote raised and token reserve when the curve completed. */
+  realQuote: bigint;
+  tokenReserve: bigint;
 }
 interface GraduateEvent extends FeedEvent {
   kind: 'graduate';
@@ -170,7 +173,10 @@ export class PonsVenue implements Venue {
       const buy = t0 === PONS_TOPIC.curveBuy;
       return { venue: this, log, kind: 'trade', curve: log.address, side: buy ? 'buy' : 'sell', quote: buy ? a : b, tokens: buy ? b : a, fee, tax, trade: true };
     }
-    if (t0 === PONS_TOPIC.curveCompleted && (this.curves.has(log.address) || this.pending.has(log.address))) return { venue: this, log, kind: 'complete', curve: log.address };
+    if (t0 === PONS_TOPIC.curveCompleted && (this.curves.has(log.address) || this.pending.has(log.address))) {
+      const [, realQuote, tokenReserve] = decodeAbiParameters([{ type: 'address' }, { type: 'uint256' }, { type: 'uint256' }], log.data);
+      return { venue: this, log, kind: 'complete', curve: log.address, realQuote, tokenReserve };
+    }
     return null;
   }
 
@@ -190,8 +196,17 @@ export class PonsVenue implements Venue {
           c.tokenReserve = c.launchSupply;
           c.graduated = false;
         } else {
-          // Read at the window's end: walk this window's trades back to the state before them.
-          for (const e of evs) if (e.kind === 'trade' && e.curve === curve) undoTrade(c, e);
+          const done = evs.find((e): e is CompleteEvent => e.kind === 'complete' && e.curve === curve);
+          if (done) {
+            // Completed (and swept) this window: anchor on the state CurveCompleted reports, walk back from there.
+            c.quoteReserve = c.phantomQuote + done.realQuote;
+            c.tokenReserve = done.tokenReserve;
+            c.graduated = false;
+            for (const e of evs) if (e.kind === 'trade' && e.curve === curve && e.log.blockNumber <= done.log.blockNumber && isBefore(e.log, done.log)) undoTrade(c, e);
+          } else {
+            // Read at the window's end: walk this window's trades back to the state before them.
+            for (const e of evs) if (e.kind === 'trade' && e.curve === curve) undoTrade(c, e);
+          }
         }
       }
       const tokens = [...loaded.values()].map((c) => c.token);
@@ -438,6 +453,10 @@ export function applyTrade(c: PonsCurve, e: { side: 'buy' | 'sell'; quote: bigin
     c.quoteReserve -= e.quote + e.fee + e.tax;
     c.tokenReserve += e.tokens;
   }
+}
+
+function isBefore(a: RawLog, b: RawLog): boolean {
+  return a.blockNumber < b.blockNumber || (a.blockNumber === b.blockNumber && a.logIndex < b.logIndex);
 }
 
 /** The reserves before a trade (inverse of applyTrade). */

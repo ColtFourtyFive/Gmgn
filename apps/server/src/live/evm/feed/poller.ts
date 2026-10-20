@@ -149,12 +149,24 @@ export class LogPoller {
     }
   }
 
-  /** Group interests by topic filter; union their emitters; chunk long address / topic lists. */
+  /**
+   * Group interests into as few queries as possible: interests naming emitters
+   * and only a topic0 list share one query (union of emitters x union of
+   * topic0s: a contract only emits its own events, so the cross product adds
+   * nothing material); others group by identical topic filters. Long address /
+   * topic lists are chunked.
+   */
   mergeInterests(interests: LogInterest[]): Omit<LogQuery, 'fromBlock' | 'toBlock'>[] {
     const groups = new Map<string, { any: boolean; addresses: Set<string>; topics?: (Hex | Hex[] | null)[] }>();
+    const simple = { addresses: new Set<string>(), topic0: new Set<Hex>() };
     for (const i of interests) {
       if (i.address && i.address.length === 0) continue;
       if (i.topics?.some((t) => Array.isArray(t) && t.length === 0)) continue;
+      if (i.address && i.topics && i.topics.length === 1 && i.topics[0] !== null) {
+        for (const a of i.address) simple.addresses.add(a.toLowerCase());
+        for (const t of Array.isArray(i.topics[0]) ? i.topics[0] : [i.topics[0]]) simple.topic0.add(t);
+        continue;
+      }
       const key = JSON.stringify(i.topics ?? null);
       let g = groups.get(key);
       if (!g) groups.set(key, (g = { any: false, addresses: new Set(), topics: i.topics }));
@@ -162,6 +174,11 @@ export class LogPoller {
       else for (const a of i.address) g.addresses.add(a.toLowerCase());
     }
     const out: Omit<LogQuery, 'fromBlock' | 'toBlock'>[] = [];
+    if (simple.addresses.size) {
+      const addrs = [...simple.addresses].sort();
+      const topic0 = [...simple.topic0].sort();
+      for (let i = 0; i < addrs.length; i += this.opts.maxAddresses) out.push({ address: addrs.slice(i, i + this.opts.maxAddresses), topics: [topic0] });
+    }
     for (const g of groups.values()) {
       for (const topics of this.chunkTopics(g.topics)) {
         if (g.any) {

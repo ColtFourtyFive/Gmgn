@@ -31,6 +31,7 @@ export const CLANKER_TOPIC = {
 const factoryAbi = parseAbi(['function tokenDeploymentInfo(address token) view returns ((address token, address hook, address locker, address[] extensions))']);
 
 interface Launch {
+  txHash: string;
   token: string;
   admin: string;
   image: string;
@@ -51,9 +52,19 @@ export class ClankerVenue implements Venue {
   readonly id = 'clanker';
   /** Launches by pool id (the pool's Initialize precedes TokenCreated in the deploy tx). */
   private readonly byPool = new LruMap<string, Launch>(2000);
+  /** Launches listed recently (dev-buy attribution). */
+  private readonly listed = new LruMap<string, Launch>(500);
 
   constructor(private readonly v4: UniswapV4Venue) {
-    v4.addClaimant({ expects: (init) => this.byPool.has(init.id), onSwap: (init, ctx) => this.list(init, ctx) });
+    v4.addClaimant({
+      expects: (init) => this.byPool.has(init.id) || this.listed.has(init.id),
+      onSwap: (init, ctx) => this.list(init, ctx),
+      // The dev buy is run by Clanker's deployer in the deploy tx, for the token admin.
+      traderOf: (init, log) => {
+        const l = this.listed.get(init.id);
+        return l && l.txHash === log.transactionHash ? l.admin : null;
+      },
+    });
   }
 
   interests(): LogInterest[] {
@@ -84,6 +95,7 @@ export class ClankerVenue implements Venue {
     // Only launches against the native asset price in the World's unit.
     if (!ctx.isNative(pairedToken)) return null;
     const launch: Launch = {
+      txHash: log.transactionHash,
       token: topicAddress(log.topics[1]),
       admin: topicAddress(log.topics[2]),
       image,
@@ -116,6 +128,7 @@ export class ClankerVenue implements Venue {
     const l = this.byPool.get(init.id);
     if (!l?.erc20 || init.pool.token !== l.token) return false;
     this.byPool.delete(init.id);
+    this.listed.set(init.id, l);
     const pool = init.pool;
     pool.tokenDecimals = l.erc20.decimals;
     // Clanker positions are held by its locker for good.

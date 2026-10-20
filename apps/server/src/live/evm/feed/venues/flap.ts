@@ -140,7 +140,8 @@ export class FlapVenue implements Venue {
   }
 
   interests(): LogInterest[] {
-    return [{ address: [this.portal] }];
+    // Everything but the progress / tax-paid / cosmetic events the venue never reads.
+    return [{ address: [this.portal], topics: [Object.values(FLAP_TOPIC)] }];
   }
 
   decode(log: RawLog): FlapEvent | null {

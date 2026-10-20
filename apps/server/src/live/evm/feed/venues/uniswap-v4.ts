@@ -11,7 +11,7 @@
 import { getDex } from '@trenchscope/shared';
 import { decodeAbiParameters, encodeFunctionData, type Hex } from 'viem';
 import type { TokenState } from '../../../../sim/world';
-import { TOPIC, v4PoolManagerAbi, v4StateSlots, ZERO_ADDRESS, type PoolKey } from '../abi';
+import { TOPIC, v4PoolId, v4PoolManagerAbi, v4StateSlots, ZERO_ADDRESS, type PoolKey } from '../abi';
 import { LruMap } from '../lru';
 import { absBig, toUnits } from '../math';
 import type { Erc20Info } from '../metadata';
@@ -19,11 +19,18 @@ import type { LogInterest } from '../poller';
 import { applyV4Modify, applyV4Swap, newPool, worldReserves, type AmmPool } from '../pools';
 import type { RawLog } from '../rpc';
 import { PairCandidates, qualifiesAt, type CandidateRules } from './candidates';
-import type { FeedContext, FeedEvent, Venue } from './types';
+import type { FeedContext, FeedEvent, PoolProbe, Venue } from './types';
 
 export const DYNAMIC_FEE_FLAG = 0x800000;
 /** Absurd static fees mark honeypot / spam pools: never listed as new pairs. */
 const MAX_LISTED_FEE = 100_000;
+/** Hookless (fee, tick spacing) pairs probed by ensureToken. */
+const PROBE_TIERS: [number, number][] = [
+  [500, 10],
+  [3000, 60],
+  [10_000, 200],
+  [2500, 25],
+];
 
 /** A native-paired pool initialized recently: its key and live state since its first block. */
 export interface V4Init {
@@ -79,6 +86,8 @@ export interface UniswapV4Options {
 export interface PoolClaimant {
   expects(init: V4Init): boolean;
   onSwap?(init: V4Init, ctx: FeedContext): boolean;
+  /** Who made a swap on the pool when not the tx sender (e.g. a dev buy run by the launchpad's deployer). */
+  traderOf?(init: V4Init, log: RawLog): string | null;
 }
 
 export class UniswapV4Venue implements Venue {
@@ -89,6 +98,8 @@ export class UniswapV4Venue implements Venue {
   private readonly candidates: PairCandidates;
   private readonly claimants: PoolClaimant[] = [];
   private readonly promotions = new Map<string, Erc20Info>();
+  /** Recent pools claimed by a launchpad and not followed yet. */
+  private readonly claimed = new Set<string>();
   /** Pools first seen this window (their Swap / ModifyLiquidity may need a follow-up fetch). */
   private windowInits: string[] = [];
   private filteredIds = new Set<string>();
@@ -126,6 +137,11 @@ export class UniswapV4Venue implements Venue {
     if (this.opts.unfiltered) return [{ address: [this.pm] }];
     const ids = new Set<string>(ctx.pools.ids('v4'));
     for (const id of this.candidates.ids()) ids.add(id);
+    // Pools a launchpad claimed whose token is not listed yet (e.g. a crowd launch's pool before its first swap).
+    for (const id of this.claimed) {
+      if (ctx.pools.get(id) || !this.recent.has(id)) this.claimed.delete(id);
+      else ids.add(id);
+    }
     this.filteredIds = ids;
     const out: LogInterest[] = [{ address: [this.pm], topics: [TOPIC.v4Initialize] }];
     if (ids.size) out.push({ address: [this.pm], topics: [[TOPIC.v4Swap, TOPIC.v4ModifyLiquidity], [...ids] as Hex[]] });
@@ -252,7 +268,7 @@ export class UniswapV4Venue implements Venue {
       for (const c of this.claimants) {
         if (!c.expects(init) || !c.onSwap?.(init, ctx)) continue;
         const t = ctx.token(pool.token);
-        if (t && ctx.pools.get(e.id) === pool) this.bookTrade(t, pool, e, ctx);
+        if (t && ctx.pools.get(e.id) === pool) this.bookTrade(t, pool, e, ctx, c.traderOf?.(init, e.log) ?? undefined);
         return;
       }
       return;
@@ -282,7 +298,10 @@ export class UniswapV4Venue implements Venue {
     init.pool.sqrtPriceX96 = e.sqrtPriceX96;
     init.pool.tick = e.tick;
     init.pool.createdAt = init.pool.lastSwapAt = ctx.timeOf(e.log);
-    if (this.claimants.some((c) => c.expects(init))) return;
+    if (this.claimants.some((c) => c.expects(init))) {
+      this.claimed.add(init.id);
+      return;
+    }
     if (!this.opts.newPairLaunchpad || ctx.token(init.pool.token) || !this.listable(init)) return;
     this.candidates.add({ pool: init.pool, creator: ctx.traderOf(e.log), volume: 0n, swaps: 0 });
   }
@@ -332,7 +351,7 @@ export class UniswapV4Venue implements Venue {
     return pool;
   }
 
-  private bookTrade(t: TokenState, pool: AmmPool, e: SwapEvent, ctx: FeedContext): void {
+  private bookTrade(t: TokenState, pool: AmmPool, e: SwapEvent, ctx: FeedContext, trader?: string): void {
     const at = ctx.timeOf(e.log);
     pool.lastSwapAt = at;
     // Amounts are the swapper's balance deltas: positive = received.
@@ -342,7 +361,7 @@ export class UniswapV4Venue implements Venue {
       ctx.syncPool(t, pool);
       return;
     }
-    const wallet = ctx.traderOf(e.log);
+    const wallet = trader ?? ctx.traderOf(e.log);
     const r = worldReserves(pool);
     if (!wallet || !r) return;
     ctx.trade(t, {
@@ -356,6 +375,29 @@ export class UniswapV4Venue implements Venue {
       pool: { native: r.native, tokens: r.tokens },
       priceNative: r.priceNative,
     });
+  }
+
+  /**
+   * ensureToken fallback: the token's deepest hookless pool against native ETH
+   * or the wrapped native among the common fee tiers (Pools.trade's 0.25% / 25
+   * included), read from the PoolManager.
+   */
+  async probe(token: string, ctx: FeedContext): Promise<PoolProbe | null> {
+    const natives = [ZERO_ADDRESS, ctx.info.wrappedNative.toLowerCase()];
+    const keys: PoolKey[] = [];
+    for (const n of natives) {
+      for (const [fee, tickSpacing] of PROBE_TIERS) {
+        const [c0, c1] = token < n ? [token, n] : [n, token];
+        keys.push({ currency0: c0, currency1: c1, fee, tickSpacing, hooks: ZERO_ADDRESS });
+      }
+    }
+    let best: PoolProbe | null = null;
+    for (const key of keys) {
+      const pool = await this.loadPool(key, v4PoolId(key), token, 18, ctx.now(), ctx);
+      const r = pool && worldReserves(pool);
+      if (pool && r && (!best || r.native > best.depth)) best = { depth: r.native, pool, launchpad: this.opts.newPairLaunchpad ?? this.id, venue: this.id };
+    }
+    return best;
   }
 
   endWindow(): void {

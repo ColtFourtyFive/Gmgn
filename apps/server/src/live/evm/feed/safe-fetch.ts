@@ -18,7 +18,9 @@ export interface SafeFetchOptions {
 
 const DEFAULTS = { timeoutMs: 6000, maxBytes: 256 * 1024, maxRedirects: 2 };
 
-const blocked = new BlockList();
+// One list per family: Node's BlockList also matches IPv4 addresses against IPv4-mapped IPv6 rules.
+const blockedV4 = new BlockList();
+const blockedV6 = new BlockList();
 for (const [net, prefix] of [
   ['0.0.0.0', 8],
   ['10.0.0.0', 8],
@@ -36,11 +38,10 @@ for (const [net, prefix] of [
   ['224.0.0.0', 4],
   ['240.0.0.0', 4],
 ] as const)
-  blocked.addSubnet(net, prefix, 'ipv4');
+  blockedV4.addSubnet(net, prefix, 'ipv4');
 for (const [net, prefix] of [
   ['::', 128],
   ['::1', 128],
-  ['::ffff:0:0', 96],
   ['64:ff9b::', 96],
   ['64:ff9b:1::', 48],
   ['100::', 64],
@@ -51,16 +52,17 @@ for (const [net, prefix] of [
   ['fe80::', 10],
   ['ff00::', 8],
 ] as const)
-  blocked.addSubnet(net, prefix, 'ipv6');
+  blockedV6.addSubnet(net, prefix, 'ipv6');
 
-/** True for addresses on the public internet (not private, loopback, link-local, multicast, reserved or mapped). */
+/** True for addresses on the public internet (not private, loopback, link-local, multicast, reserved or IPv4-mapped). */
 export function isPublicAddress(address: string): boolean {
   const family = isIP(address);
-  if (family === 4) return !blocked.check(address, 'ipv4');
+  if (family === 4) return !blockedV4.check(address, 'ipv4');
   if (family === 6) {
-    const mapped = address.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return false;
-    return !blocked.check(address, 'ipv6');
+    const a = address.toLowerCase();
+    // IPv4-mapped / -compatible forms (::ffff:a.b.c.d, ::ffff:xxxx:xxxx, ::a.b.c.d) are refused outright.
+    if (/^::(ffff:)?\d+\.\d+\.\d+\.\d+$/.test(a) || /^::ffff:[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(a)) return false;
+    return !blockedV6.check(a, 'ipv6');
   }
   return false;
 }

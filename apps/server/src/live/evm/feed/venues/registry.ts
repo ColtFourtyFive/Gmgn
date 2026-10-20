@@ -62,8 +62,7 @@ export function buildVenues(chain: EvmChainId, s: VenueSettings): Venue[] {
 
   switch (chain) {
     case 'robinhood': {
-      // The PoolManager is quiet enough here to read whole (graduation pools keep their full history).
-      const uni4 = v4('uniswap-robinhood', true);
+      const uni4 = v4('uniswap-robinhood', false);
       const uni3 = v3(DEX_FACTORIES.robinhoodV3, 'uniswap-v3-robinhood', false, 'uniswap-robinhood');
       const pcs2 = v2(DEX_FACTORIES.robinhoodPancakeV2, 'pancake-v2-robinhood', 0.0025, null);
       return [uni4, uni3, pcs2, new PonsVenue(uni4), new FlapVenue('robinhood', 'flap-robinhood', { v2: pcs2, v3: uni3 }), new PoolsTradeVenue(uni4)];

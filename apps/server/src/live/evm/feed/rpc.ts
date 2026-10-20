@@ -47,6 +47,8 @@ export interface EvmRpc {
   blockTimestamps(blocks: bigint[]): Promise<Map<bigint, number>>;
   /** Sender / recipient of transactions by hash (lowercase keys). */
   transactions(hashes: Hex[]): Promise<Map<string, TxInfo>>;
+  /** Logs of transactions by hash, from their receipts (lowercase keys). */
+  receiptLogs(hashes: Hex[]): Promise<Map<string, RawLog[]>>;
   /**
    * eth_call batch through Multicall3 (null for a failed call), at `block` when
    * given (falling back to the latest block where the node keeps no history).
@@ -75,18 +77,35 @@ export function parseRawLog(j: Record<string, unknown>): RawLog {
 
 /** The node refused the query for its size (block span or result count): split the range and retry. */
 export function isRangeError(err: unknown): boolean {
-  const msg = errorText(err);
-  return /more than|exceed|too (many|large|wide|big)|limit|range|response size|block range|query timeout|-32005/i.test(msg) && !isRateLimit(err);
+  if (isRateLimit(err)) return false;
+  return /more than \d+|exceed|too (many|large|wide|big)|limit|response size|block range|range (is )?too|query timeout|code -32005/i.test(errorText(err));
 }
 
 export function isRateLimit(err: unknown): boolean {
-  return /429|rate.?limit|too many requests|capacity/i.test(errorText(err));
+  return /status 429|code 429|rate.?limit|too many requests|capacity/i.test(errorText(err));
 }
 
+/**
+ * What an RPC error says, from the error and its causes: short messages,
+ * details, codes and HTTP statuses (never viem's long message, which embeds
+ * the request body; its hex would match anything).
+ */
 export function errorText(err: unknown): string {
-  if (!err) return '';
-  const e = err as { shortMessage?: string; details?: string; message?: string; status?: number };
-  return [e.shortMessage, e.details, e.message, e.status ? `status ${e.status}` : ''].filter(Boolean).join(' | ');
+  const parts: string[] = [];
+  let e = err as { shortMessage?: string; details?: string; message?: string; status?: number; code?: number; cause?: unknown } | undefined;
+  for (let depth = 0; e && depth < 6; depth++) {
+    if (typeof e !== 'object') {
+      parts.push(String(e));
+      break;
+    }
+    if (e.shortMessage) parts.push(e.shortMessage.split('\n')[0]);
+    else if (e.message) parts.push(e.message.split('\n')[0]);
+    if (e.details) parts.push(e.details);
+    if (e.code !== undefined) parts.push(`code ${e.code}`);
+    if (e.status) parts.push(`status ${e.status}`);
+    e = e.cause as typeof e;
+  }
+  return parts.join(' | ');
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +178,7 @@ const MULTICALL3_ABI = parseAbi(['function aggregate3((address target, bool allo
 const MULTICALL_CHUNK = 150;
 /** JSON-RPC calls issued concurrently (viem batches them into one HTTP request). */
 const BATCH_CHUNK = 25;
+const RATE_LIMIT_RETRIES = 3;
 
 export class ViemEvmRpc implements EvmRpc {
   constructor(
@@ -167,9 +187,17 @@ export class ViemEvmRpc implements EvmRpc {
     private readonly multicall3: string,
   ) {}
 
+  /** One JSON-RPC call within the budget; rate-limit answers are retried with backoff. */
   private async request<T>(method: string, params: unknown[]): Promise<T> {
-    await this.budget.take(1);
-    return (await this.client.request({ method: method as never, params: params as never })) as T;
+    for (let attempt = 0; ; attempt++) {
+      await this.budget.take(1);
+      try {
+        return (await this.client.request({ method: method as never, params: params as never })) as T;
+      } catch (err) {
+        if (attempt >= RATE_LIMIT_RETRIES || !isRateLimit(err)) throw err;
+        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+      }
+    }
   }
 
   async blockNumber(): Promise<bigint> {
@@ -209,6 +237,21 @@ export class ViemEvmRpc implements EvmRpc {
       chunk.forEach((h, j) => {
         const r = res[j];
         if (r?.from) out.set(h.toLowerCase(), { from: r.from.toLowerCase(), to: r.to ? r.to.toLowerCase() : null });
+      });
+    }
+    return out;
+  }
+
+  async receiptLogs(hashes: Hex[]): Promise<Map<string, RawLog[]>> {
+    const out = new Map<string, RawLog[]>();
+    for (let i = 0; i < hashes.length; i += BATCH_CHUNK) {
+      const chunk = hashes.slice(i, i + BATCH_CHUNK);
+      const res = await Promise.all(
+        chunk.map((h) => this.request<{ logs: Record<string, unknown>[] } | null>('eth_getTransactionReceipt', [h]).catch(() => null)),
+      );
+      chunk.forEach((h, j) => {
+        const r = res[j];
+        if (r?.logs) out.set(h.toLowerCase(), r.logs.map(parseRawLog));
       });
     }
     return out;

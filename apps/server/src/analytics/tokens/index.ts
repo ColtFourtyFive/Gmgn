@@ -251,6 +251,8 @@ export class TokenAnalytics {
     world.prependListener('trade', (trade: Trade, t: TokenState, w: WalletState) => this.onTrade(trade, t, w));
     world.on('tokenCreated', (t) => {
       if (!this.tracks.has(t.address)) this.tracks.set(t.address, newTrack(world, t));
+      // Live tokens can start on a DEX pool (launched straight into one, or found after migrating).
+      if (t.status === 'migrated') this.migrated[t.chain].push(t.address);
     });
     world.on('curveCompleted', (t) => {
       const s = this.tracks.get(t.address);

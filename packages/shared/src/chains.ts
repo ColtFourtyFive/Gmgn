@@ -172,7 +172,7 @@ export const LIVE_LAUNCHPADS: LaunchpadConfig[] = [
   // BNB Chain. four.meme (BNB quote): constant product on virtual reserves of 25/73 x (max funds, 800M), graduates
   // at the token's max funds (13.6-13.8 BNB at launch) into PancakeSwap.
   { id: 'fourmeme', chain: 'bsc', name: 'four.meme', totalSupply: 1e9, virtualNative: 4.6917808, virtualTokens: 1_073_972_602.74, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#3CE07A' },
-  // Flap (CDPV2 curve, BNB quote): r = 6.14 BNB, h = 107,036,752; 800M sold, graduates at 16 BNB into PancakeSwap.
+  // Flap (CDPV2 curve, BNB quote): r = 6.14 BNB, h = 107,036,752; 800M sold, graduates at ~16 BNB into PancakeSwap.
   { id: 'flap-bsc', chain: 'bsc', name: 'Flap', totalSupply: 1e9, virtualNative: 6.14, virtualTokens: 1_107_036_752, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#FF6FB5' },
   { id: 'pancake-bsc', chain: 'bsc', name: 'PancakeSwap', totalSupply: 0, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0, migrationFeeNative: 0, weight: 1, color: '#1FC7D4' },
   // Ethereum: tokens launched straight into a Uniswap pool.

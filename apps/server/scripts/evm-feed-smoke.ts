@@ -7,12 +7,25 @@
 //
 // Usage: npx tsx scripts/evm-feed-smoke.ts [--seconds 90] [--chains base,robinhood,bsc,eth]
 //        [--backfill-seconds 60] [--ensure <chain>:<address> ...]
+//
+// Record mode writes a test fixture: every RPC answer the feed needed to
+// process a fixed block range (plus optional ensureToken lookups), replayed
+// offline by FixtureRpc in the tests.
+//        npx tsx scripts/evm-feed-smoke.ts record <chain> <fromBlock> <toBlock> <out.json> [--ensure <address> ...]
 
 import { CHAINS, type ChainId } from '@trenchscope/shared';
 import { buildApp, defaultConfig } from '../src/app';
 import { EVM_CHAIN_IDS, EVM_CHAINS, type EvmChainId } from '../src/live/evm/chains';
 import { loadEvmLiveConfig } from '../src/live/evm/config';
+import { writeFileSync } from 'node:fs';
+import { createEvmPublicClient } from '../src/live/evm/clients';
 import { EvmMarketFeed, loadEvmFeedSettings } from '../src/live/evm/feed';
+import { ChainFeed } from '../src/live/evm/feed/chain-feed';
+import { RecordingRpc } from '../src/live/evm/feed/fixture-rpc';
+import { RequestBudget, ViemEvmRpc } from '../src/live/evm/feed/rpc';
+import { buildVenues } from '../src/live/evm/feed/venues/registry';
+import { NativePriceFeed } from '../src/live/evm/price';
+import { World } from '../src/sim/world';
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -24,6 +37,45 @@ function args(name: string): string[] {
     if (a === `--${name}` && process.argv[i + 1]) out.push(process.argv[i + 1]);
   });
   return out;
+}
+
+if (process.argv[2] === 'record') {
+  await record();
+  process.exit(0);
+}
+
+/** Process [from, to] on one chain through a recording RPC and write the fixture. */
+async function record(): Promise<void> {
+  const [, , , chain, fromS, toS, out] = process.argv as [string, string, string, EvmChainId, string, string, string];
+  const from = Number(fromS);
+  const to = Number(toS);
+  const { config } = loadEvmLiveConfig({ ...process.env, LIVE_CHAINS: chain });
+  const cfg = config.chains[chain]!;
+  const settings = loadEvmFeedSettings(config.chains);
+  const live = new ViemEvmRpc(createEvmPublicClient(cfg), new RequestBudget(settings.chains[chain]!.rps), EVM_CHAINS[chain].multicall3);
+  const rpc = new RecordingRpc(live, chain, { from, to });
+  const world = new World('fixture', Date.now());
+  const feed = new ChainFeed({
+    chain,
+    world,
+    rpc,
+    venues: buildVenues(chain, { newPairs: true, newPairMinSwaps: settings.newPairMinSwaps, newPairMinVolume: settings.chains[chain]!.newPairMinVolume }),
+    maxTrackedTokens: 1500,
+    pollMs: 1000,
+    confirmations: 0,
+    rescan: 0,
+    backfill: to - from + 1,
+    ipfsGateways: settings.ipfsGateways,
+    pruneWorld: false,
+    fetchJson: async () => null,
+    now: () => world.now,
+  });
+  while ((feed.poller.cursor ?? -1n) < BigInt(to)) await feed.pollOnce();
+  await new NativePriceFeed(world, { [chain]: rpc }).refresh();
+  for (const a of args('ensure')) console.log('ensureToken', a, (await feed.ensureToken(a))?.symbol ?? 'not found');
+  writeFileSync(out, JSON.stringify(rpc.fixture));
+  const st = feed.status();
+  console.log(`recorded ${chain} ${from}-${to}: ${rpc.fixture.logs.length} logs, ${Object.keys(rpc.fixture.calls).length} calls, ${Object.keys(rpc.fixture.txs).length} txs; tokens ${st.worldTokens}`, JSON.stringify(st.venues));
 }
 
 const seconds = Number(arg('seconds', '90'));
