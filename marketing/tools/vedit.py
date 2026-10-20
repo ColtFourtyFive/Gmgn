@@ -4,7 +4,7 @@ Usage: python3 vedit.py edit.json
 edit.json:
 { "out": "x.mp4", "w": 1920, "h": 1080, "fps": 30,
   "segments": [ {"src": "clip.mp4", "start": 0, "end": 4.4, "crop": [x,y,w,h]|null, "zoom": 1.0->1.06 optional,
-                 "still": false}  # a PNG still: set "still": true and "dur"
+                 "window": [x,y,w,h] optional (picture in a box on the "bg" colour), "still": false}  # a PNG still: "still": true and "dur"
               ],
   "overlays": [ {"png": "cap.png", "t0": 0.2, "t1": 3.0, "fade": 0.12} ],  # full-frame PNGs, times on the output timeline
   "audio": "score.wav" | null }
@@ -48,13 +48,19 @@ def run(edit):
             chain += f"crop={w}:{h}:{x}:{y},"
         if chain.endswith("]"):
             chain += "null,"
+        # "window": [x, y, w, h] places the picture in that box on a flat background instead of filling the frame.
+        win = s.get("window")
+        ow, oh = (win[2], win[3]) if win else (W, H)
         z = s.get("zoom")
         if z:
             # Slow push-in from z[0] to z[1] over the segment (centre crop).
             n = max(1, int(dur * FPS))
-            chain += (f"scale={W*2}:{H*2}:flags=lanczos,"
+            chain += (f"scale={ow*2}:{oh*2}:flags=lanczos,"
                       f"crop=w='iw/({z[0]}+({z[1]}-{z[0]})*n/{n})':h='ih/({z[0]}+({z[1]}-{z[0]})*n/{n})':x='(iw-ow)/2':y='(ih-oh)/2',")
-        chain += f"scale={W}:{H}:flags=lanczos,setsar=1,format=yuv420p,trim=duration={dur}[v{i}]"
+        chain += f"scale={ow}:{oh}:flags=lanczos,setsar=1,"
+        if win:
+            chain += f"pad={W}:{H}:{win[0]}:{win[1]}:color={edit.get('bg', '0x0A0C10')},"
+        chain += f"format=yuv420p,trim=duration={dur}[v{i}]"
         filters.append(chain)
         labels.append(f"[v{i}]")
         idx += 1
