@@ -495,7 +495,7 @@ Follow only if **all** of these hold:
 2. Open Metricool's connections page for the brand: `https://app.metricool.com/brands/connections?blogId=7078702` (or Metricool → brand settings → Connections).
 3. Choose **X / Twitter → Connect**. On X's authorization screen, check the account name shown, then **Authorize app**.
 4. If Metricool asks for a plan upgrade to connect X, that's a billing decision for the owner.
-5. In Metricool's brand settings, set the **timezone to `America/New_York`** so the ET posting windows map directly. EU clocks go back on the Sunday of warm-up week (Day 6) and US clocks the Sunday after launch, so in launch week London is 4 h and Berlin 5 h ahead of ET.
+5. In Metricool's brand settings, set the **timezone to `America/New_York`** so the ET posting windows map directly. EU clocks go back on the Sunday of warm-up week (Day 6) and US clocks a week later. So London is 5 h and Berlin 6 h ahead of ET until Day 6, then 4 h and 5 h. If launch day comes before Day 6 (the compressed plan, `WARMUP_WEEK.md` §11.1), use the 5 h / 6 h offsets.
 6. Back on X, open Settings → Security and account access → Apps and sessions → **Connected apps** and confirm Metricool is the **only** third-party app.
 7. Tell Claude once it's connected. Posts can then be drafted into Metricool **for review**, so the owner approves each one before it's scheduled.
 
@@ -529,10 +529,10 @@ Follow only if **all** of these hold:
 ## 13. Open items for the owner
 
 1. **Confirm the handle** (Phase A). Every other doc uses the `@trenchscope` placeholder until then.
-2. **Tick the §0 owner checks before the profile goes up:** self-custody (K-1, plus K-2 for automated orders: the custody line must describe how limit orders, auto exits, copy trades and sniper tasks sign), each named chain (C-1), and tags plus audit on real data (F-1). If any chain won't be ready, use the four-chain bio, pin, FAQ and header.
-3. **Pick the pin:** PIN (approved) or PIN-v2 (fixes three ledger flags: "every wallet gets a tag", "risky buys ask first", "kol"). Or, to keep PIN as is, route quick buy through the risk prompt in the live build (F-3) and confirm a real KOL source (F-2).
-4. **Header fixes** at the next `profile.py` re-render: the subtext "every wallet tagged" (§7), the phone-size type, and the chain pill and KOL chip if C-1 or F-2 change anything. Decide whether to build the optional candle-valley `header-main` (no AI credits needed).
-5. **BIO-2:** if it's ever used, use BIO-2b ("every wallet tagged" fix).
+2. **Tick the §0 C-0 checks before the profile goes up:** self-custody and each named chain are in the launch build, the K-2 answer is on its way (the custody line must describe how limit orders, auto exits, copy trades and sniper tasks sign), and tags plus audit run on real data (F-1). If any chain won't be ready, use the four-chain bio, pin, FAQ and header. C-1 and K-1 come later, on launch day.
+3. **The pin is PIN-v2** (fixes three ledger flags: "every wallet gets a tag", "risky buys ask first", "kol"). The original PIN stays retired unless quick buy goes through the risk prompt (F-3), a real KOL source exists (F-2) and its "every wallet gets a tag" is reworded. If PIN is already up, replace it (§9.2).
+4. **Re-render `header-alt` before Day 1** (`profile.py`, 0 credits): the subline `snipers, bundlers, insiders, the dev: tagged · self-custody` (§7), the phone-size type, and the chain pill and KOL chip if C-0 or F-2 change anything. Until it's re-rendered, the built file (with "every wallet tagged") doesn't go up. Decide whether to build the optional candle-valley `header-main` (BRAND_GUIDE §14.4, no AI credits needed).
+5. **BIO-2 is retired.** The fallback is BIO-2b. BIO-3 is the optional post-launch bio.
 6. **In-app strings** before launch-day footage and before the live build ships (also CLAIMS_LEDGER section 7): the "Live" badges in the status bar, board and activity tab (crop them out of pre-launch footage); the "Safe" and "Safe contract" filter presets; the anti-MEV tooltip's "no sandwich attacks"; the remaining sim strings that `marketing/tools/capture-mode.js` misses (guest sign-in modal, the phone-menu sim notice, "Paper account", "paper balance", the copy-trade, sniper and Rewards footers, the "Faucet failed" toast).
 7. **Approve Premium** on Day 1. Decide on a Verified Organization (optional; it helps against impersonators).
 8. **"Wen token" replies:** decide what we say, if anything (T-1). Until then the account doesn't answer token questions (§9.4).
@@ -541,3 +541,4 @@ Follow only if **all** of these hold:
 11. **Connect X in Metricool** (§11.1). Decide whether a Metricool plan upgrade is needed.
 12. **Confirm who operates the account daily** from Day 1 through launch day. Replies must be written by a human.
 13. **Pick the domain** for `[LINK]` so the bio link and handle match, and have the landing page ready with RISK and CHAINS (§6.2).
+14. **Launch-day plan, before Day 1:** confirm launch day is the first morning after the gate passes (the expected path, `WARMUP_WEEK.md` §11.1), or say launch posts wait until after Day 7.

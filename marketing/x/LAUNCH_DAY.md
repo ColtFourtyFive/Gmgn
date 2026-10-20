@@ -4,7 +4,7 @@
 |---|---|
 | **For** | The owner/operator of the brand account on launch day (the day after warm-up Day 7) and the two days after it, L+1 and L+2 |
 | **The gate** | **Everything in this file is gated: post it only once real trading works on every chain the post names** (POSITIONING "What we never do"; ledger rules 1–2, MNC-01). The owner runs the gate in §1.1 at 9:00 a.m. ET. If it fails, nothing here posts, the Day-1 pin stays up, the website field stays blank, and the whole schedule moves to the next day |
-| **What goes out** | **Launch day:** the re-cut trailer (native video, link-free caption) with the thread T1–T10 as self-replies (`[LINK]` in T1 only), a safety reply (SAFE-L1), three quote posts (QT-1 "the trailer is AI. the terminal isn't.", QT-2 making-of, QT-3 Asia re-push with the 9:16 cut) and the "worst rug" prompt (COMM-1). **L+1:** rug autopsy on demo data, guess the fate (demo data) and its reveal, the worst-rug recap. **L+2:** the life of a launch (AMBER stats), a poll, a POV meme |
+| **What goes out** | **Launch day:** the re-cut trailer (native video, link-free caption) with the thread T1–T10 as self-replies (`[LINK]` in T1 only), a safety reply (SAFE-L1), three quote posts (QT-1 "the trailer is AI. the terminal isn't.", QT-2 making-of, QT-3 Asia re-push with the 9:16 cut) and the "worst rug" prompt (COMM-1). **L+1:** rug autopsy on demo data, a POV meme (the default in L1-B's slot; "guess the fate" on demo data and its reveal only as an owner-approved exception, §7), the worst-rug recap. **L+2:** the life of a launch (AMBER stats), a poll, a POV meme |
 | **Placeholders** | `@trenchscope` (handle not confirmed) and `[LINK]` (the owner's own domain over `https`: no shortener, no redirect chain, no link-in-bio aggregator; UTM parameters on the direct URL are fine). Brackets such as `[n]`, `[0:03]` or `[tell]` are filled from the real asset or the real replies, then re-measured |
 | **Rules come from** | `research/POSITIONING.md` (the binding brief), `research/CLAIMS_LEDGER.md` (claim IDs, never-say list, disclaimers, owner checks), `x/TODAY.md` (the approved Day-1 kit), `brand/BRAND_GUIDE.md` (voice, disclaimer placement, visuals), `research/CT_PLAYBOOK.md` (ranking, cadence, spam rules), `research/AI_VIDEO_NOTES.md` (trailer craft), `x/PROFILE.md` (pin plan, the website gate, settings, impersonation watch). If this file disagrees with POSITIONING or the ledger, they win and this file gets fixed |
 | **Trailer** | The re-cut *Field Guide to the Trenches, EP.01* specified in `video/SCRIPT.md`: the approved AI clips, new app shots captured in marketing capture mode, and one new VO take. SCRIPT owns the cut and its on-screen lines; this file owns the posting copy |
@@ -15,7 +15,7 @@
 
 | ID | Text | Count | Where in this file |
 |---|---|---|---|
-| **RISK** | `memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.` | 92 | The last line of **every post that shows, names or links the product**: the trailer caption, T1–T10, QT-1, QT-3, L1-A, L1-B, L1-Br, L2-A5, L2-C, L2-Calt. That leaves **186** characters before it. Left off only the posts that say nothing about the product or trading: SAFE-L1, COMM-1, COMM-1r, QT-2 (how the video was made), L1-C, L2-A1–A4, L2-A6 (the source), the L2-B poll and the WARN posts |
+| **RISK** | `memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.` | 92 | The last line of **every post that shows, names or links the product**: the trailer caption, T1–T10, QT-1, QT-2 (it names "a trading terminal"), QT-3, L1-A, L1-B and L1-Br (if the owner approves them), L2-A5, L2-C, L2-Calt. That leaves **186** characters before it. Left off only the posts that say nothing about the product or trading: SAFE-L1, COMM-1 (reworded as a rug-story prompt; L-1 decides whether it needs RISK too), COMM-1r, L1-C, L2-A1–A4, L2-A6 (the source), the L2-B poll and the WARN posts |
 | **CUSTODY** | `we will never DM you first, ask for your seed phrase, or ask you to send funds.` | 79 | Verbatim in **T9** (one thread post, ledger §6) and in WARN-1. SAFE-L1, COMM-1r and replies say it in fresh words |
 | **DEMO** | `UI shown with demo data` | 23 | Burned into **every** product frame (corner label, legible on a phone) and written into the alt text |
 | **AI** | `AI-generated` | 12 | Burned into every AI frame. X's **"Made with AI"** label on at posting. Alt text starts with "AI-generated" |
@@ -26,7 +26,7 @@
 
 **RISK repeats verbatim** in about a dozen posts on launch day, because the ledger forbids rewording it. Everything else in each post is unique, so X's duplicate-text rules (which compare whole posts, CT_PLAYBOOK §3.4) shouldn't cluster them. Check Under the Hood at T+60 anyway (§4).
 
-**Time zones in launch week.** The US is on summer time and Europe on winter time, so **UTC = London = ET + 4 h**, **Berlin = ET + 5 h**, **Singapore = ET + 12 h**. If launch slips past the US clock change, add 1 h to every non-ET column.
+**Time zones in launch week.** UTC = ET + 4 h and Singapore = ET + 12 h until the US clock change. Europe's clocks go back on warm-up Day 6, so the table below assumes launch day falls **after** it: **London = ET + 4 h**, **Berlin = ET + 5 h**. If launch day comes **before** Day 6 (the compressed plan, `WARMUP_WEEK.md` §11.1), London is ET + 5 h and Berlin ET + 6 h: add 1 h to those two columns. If launch slips past the US clock change, add 1 h to every non-ET column.
 
 ---
 
@@ -57,7 +57,7 @@ From ledger §8 and PROFILE §6.2. Tick against the **live build**, not staging.
 
 - [ ] **C-1 Chains, one tick per chain:** Solana [ ] · Base [ ] · BNB Chain (BSC) [ ] · Ethereum [ ] · Robinhood Chain [ ]. Real buys and sells execute on each. A chain that fails comes out of **every** post here, the bio and the header that morning (PROFILE §5, §7). Four-chain variants (no Robinhood Chain, the one chain in no file of the code) are pre-measured for TR-B, T9 and QT-3. Any other combination: rewrite the chain list and re-measure.
 - [ ] **K-1 Custody:** users hold their keys and the team never touches funds. TR-A/B/C, T9, T10 and the bio depend on it.
-- [ ] **K-2 Automated trades:** how limit orders, auto exits (TP/SL/trailing/dev-sell), copy trades and sniper tasks sign in the live build, given they run server-side in the code (`apps/server/src/trading/orders.ts`, `copytrade.ts`, `sniper.ts`; the Auto tab itself says "Exit orders are created from your fill price and run server-side", `apps/web/src/components/token/trade/AutoForm.tsx:112`). If they use delegated or session keys, the owner rewrites T9's "you keep your keys" and checks T5 and T8 before anything posts. No answer → T5 and T8 don't post, and T9 drops "you keep your keys. so:" and keeps the CUSTODY line on its own.
+- [ ] **K-2 Automated trades:** how limit orders, auto exits (TP/SL/trailing/dev-sell), copy trades and sniper tasks sign in the live build, given they run server-side in the code (`apps/server/src/trading/orders.ts`, `copytrade.ts`, `sniper.ts`; the Auto tab itself says "Exit orders are created from your fill price and run server-side", `apps/web/src/components/token/trade/AutoForm.tsx:112`). If they use delegated or session keys, the owner rewrites T9's "you keep your keys" and checks T5 and T8 before anything posts. No answer → T5 and T8 don't post, and T9 drops ", and your keys stay with you" and "so:" and keeps the CUSTODY line on its own. Pre-measured fallback, **237/280** (four chains: 220): `stop 9: sol, base, bsc, eth and robinhood chain. one terminal.` / CUSTODY / RISK.
 - [ ] **F-1 Features** in the live build, on real chain data, for each post that names them: the board (T1), the tags (T2), the audit and funding links (T3), the risk prompt (T4), auto exits and the dev-sell exit (T5), the quote with fees (T6), hotkeys (T7), copy trade, sniper tasks, signals, alerts and the monitor (T8). A missing feature comes out of its post (re-measure) or the post is skipped.
 - [ ] **F-2 KOL source:** the KOL row on `launch-3` goes in only if the live build has a real KOL source and a labelling policy (MNC-15). No post here names KOLs.
 - [ ] **F-3 Risk-prompt scope:** if quick buy now goes through the risk prompt, post **T4-F3**. If not, post **T4** ("from the trade panel").
@@ -86,7 +86,7 @@ From ledger §8 and PROFILE §6.2. Tick against the **live build**, not staging.
 ### 1.3 Assets exported and QA'd
 
 - [ ] Every asset marked NEW in §10 is built and passes BRAND_GUIDE §15.
-- [ ] **Product frames:** captured in marketing capture mode on demo data. DEMO burned in on every frame and in the alt text. The frame check passes (`paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`), with capture-mode gaps kept out of frame (ledger §7.1). No "Live" badge. Four chains only in the UI, no Robinhood Chain mock-up. Tickers, KOL handles and token socials blurred in close-ups. No demo PnL, balance or equity curve as the subject. The footer's demo price strip blurred.
+- [ ] **Product frames:** captured in marketing capture mode on demo data. DEMO burned in on every frame and in the alt text. The frame check passes (`paper`, `simulat`, `faucet`, `top up`, `guest`, `fake`, `fictional`, `no real funds`, `0.8%`, `ms`, and the demo venue names `TrenchSwap`, `Moonpit`, `Bonkfire`, `Rayforge`, `FourPad`, `BNB Rocket`, `ClawLab`, `BaseDrop`, `EtherForge`), with capture-mode gaps kept out of frame (ledger §7.1). Blurred: the `· NNNms` latency in any fill toast, and on any quote the Fees value and the Route venue name (ledger §2.6, §7.3). Chain chips recoloured to neutral (F-7) or out of frame. No "Live" badge. Four chains only in the UI, no Robinhood Chain mock-up. Tickers, KOL handles and token socials blurred in close-ups. No demo PnL, balance or equity curve as the subject. The footer's demo price strip blurred.
 - [ ] **AI frames:** AI label burned in, no glyphs at 100%.
 - [ ] **The trailer (`launch-1`):** frame 0 per SCRIPT (the whale, the reticle and one caption) works as the thumbnail. AI on AI shots and DEMO on UI shots, swapping on the cut. The end card holds AI + RISK + CHAINS for at least 3 s with nothing moving over them. No URL. The handle only if confirmed and owned. Captions burned in. At most 3 flashes per second. Generated music only.
 - [ ] **Trailer file:** MP4, H.264, AAC-LC, 1920×1080, 30 fps, 8–12 Mbps, runtime per SCRIPT, ≤ 512 MB (posts without Premium). A 1280×720, 6 Mbps fallback in the same folder.
@@ -116,7 +116,7 @@ Team members may share the trailer **once, from their own personal accounts, in 
 
 **Video:** `launch-1` (16:9 master), native upload. **The caption is link-free:** `[LINK]` goes only in the first self-reply (T1). Pin this post: it replaces the Day-1 pin (PROFILE §9.1), which stays on the timeline.
 
-**The cut** (`video/SCRIPT.md`): a deadpan wildlife documentary shot like a war epic. The whale over the trenches, the periscope rising (the scope), then a roll call of hooded species, each with its **real** wallet-tag chip: the sniper, the bundler, the insider, the dev. Real UI on demo data shows the board, the audit and the risk prompt, where *homo fomo* ticks the box and clicks **Buy anyway**. The carpet gets yanked, a dev sell lands in the real UI on demo data, and a lamp comes on over the empty desk. End card: the lockup, "see who's really buying.", AI + RISK + CHAINS.
+**The cut** (`video/SCRIPT.md`): a deadpan wildlife documentary shot like a war epic. The whale over the trenches, the periscope rising (the scope), then a roll call of hooded species, each with its **real** wallet-tag chip: the sniper, the bundler, the insider, the dev. Real UI on demo data shows the board, the audit and the risk prompt, where *homo fomo* ticks the box and clicks **Buy anyway**. The carpet gets yanked, a dev sell lands in the real UI on demo data and the buyer's dev-sell exit fires right after, and a lamp comes on over the empty desk. End card: the lockup, "see who's really buying.", AI + RISK + CHAINS.
 
 ### TR-A (recommended): the self-aware hook + a one-word question · `273/280`
 
@@ -156,10 +156,10 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 
 - Turn on X's **"Made with AI"** label (AI disclosure; the film is mostly AI shots).
 - No content warning, no location, no hashtags, no @-mentions, no cashtags.
-- **Video description** (alt text), 948 characters, under X's 1,000 limit. **Check it against SCRIPT's final cut** and delete any sentence whose beat was cut:
+- **Video description** (alt text), 979 characters, under X's 1,000 limit. Verbatim from `video/SCRIPT.md` §15.4: **SCRIPT owns the video text (cut, on-screen lines, descriptions); this file owns the post copy.** If they ever differ, SCRIPT wins for the description. Check it against the final cut and delete any sentence whose beat was cut:
 
 ```text
-AI-generated trailer for Trenchscope, a memecoin trading terminal, made as a deadpan wildlife documentary shot like a war epic. A giant whale glides over night-time trenches while two hooded figures watch, and a brass periscope rises over the sandbags. Hooded figures are introduced as species, each with a wallet tag from the app: a sniper at a brass telescope, six identical bundlers in a row, an insider already seated at a glowing table, a dev gripping the end of a carpet. Screen recordings of the real app, each labelled UI shown with demo data, show the launch board, a token audit, a high-risk warning where the buyer ticks the box and clicks Buy anyway, and a chart collapsing after a dev sell. A carpet is yanked from under a banquet table and blank plates fly. A lamp comes on over an empty desk. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
+AI-generated trailer for Trenchscope, a memecoin trading terminal, made as a deadpan wildlife documentary shot like a war epic. A giant whale glides over night-time trenches while two hooded figures watch, and a brass periscope rises over the sandbags. Hooded figures are introduced as species, each with a wallet tag from the app: a sniper at a brass telescope, six identical bundlers in a row, an insider already seated at a glowing table, a dev gripping the end of a carpet. Screen recordings of the real app, each labelled UI shown with demo data, show the launch board, a token audit, a high-risk warning where the buyer ticks the box and clicks Buy anyway, then a dev sell, a collapsing chart and the buyer's dev-sell exit filling. A carpet is yanked from under a banquet table and blank plates fly. A lamp glows over an empty desk. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
 ```
 
 ---
@@ -172,6 +172,7 @@ Build it in the composer as one thread: post 1 is the trailer, posts 2–11 are 
 - **RISK** is the last line of every thread post. **CUSTODY** is verbatim in T9.
 - Every image carries DEMO in the pixels and in its alt text. No @-mentions, hashtags or cashtags anywhere in the thread.
 - Each post opens with "stop N", so the tour reads in order, and each still makes sense quoted on its own.
+- **Length.** Eleven posts is longer than BRAND_GUIDE §4.2's 4–6, and each stop spends 92 characters on RISK. BRAND_GUIDE allows this one thread as the exception. **Owner option, a six-stop cut:** T1, T2, T3, T5, T9, T10 (renumbered stop 1 to stop 6), with T4, T6, T7 and T8 moved to L+1–L+3 as standalone receipts posts (drop "stop N, ", keep RISK, re-measure, at most one a day, 2.5–3 h from any other original). If the cut is chosen, remove those four rows from §4 and §12 for launch day and attach their assets on the new days.
 - **The warm-up already previewed most of these features** (`WARMUP_WEEK.md` Days 2–7: the board, the keyboard, funding links, five chains, exits, the audit, the risk prompt). Every line here is written fresh, never pasted from a warm-up post: near-duplicate text inside a week reads as a template to readers and to X's duplicate rules (CT_PLAYBOOK §3.4). Keep it that way if you edit.
 
 ### T1 · it's live + the link + the board · `270/280` · media: none (so the link card shows)
@@ -252,7 +253,7 @@ and a dev-sell exit: the dev sells 20%+ of their bag in one trade, yours fires r
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-Ledger: SC-14, SC-41. Code: the order kinds (`apps/server/src/trading/orders.ts:32-41`); the dev-sell trigger fires on the dev's sell when it is at least the threshold share of that wallet's holding, default 20% (`orders.ts:29,263-271`); the Auto tab (`apps/web/src/components/token/trade/AutoForm.tsx:155-162,201-208`). It reacts **after** the dev's sell: never "before the dev", "beat the dev" or "front-run" (MNC-17). **Gated on K-2** (these orders run server-side). Alt text (308):
+Ledger: SC-14, SC-41. If the arming buy's fill toast ("Bought … · NNNms · N exit orders") gets into `launch-6`, blur its latency (ledger §2.6, MNC-08). Code: the order kinds (`apps/server/src/trading/orders.ts:32-41`); the dev-sell trigger fires on the dev's sell when it is at least the threshold share of that wallet's holding, default 20% (`orders.ts:29,263-271`); the Auto tab (`apps/web/src/components/token/trade/AutoForm.tsx:155-162,201-208`). It reacts **after** the dev's sell: never "before the dev", "beat the dev" or "front-run" (MNC-17). **Gated on K-2** (these orders run server-side). Alt text (308):
 
 ```text
 Trenchscope's token page, UI shown with demo data, ticker blurred. The Orders tab lists a buy's open exits: take-profit, stop-loss, a trailing stop, and a dev-sell exit that sells when the dev sells a set share of their holding in one trade. Their levels are drawn on the chart above. Callout: dev-sell exit.
@@ -268,23 +269,23 @@ impact goes amber past 3%, red past 10%. your pnl counts the fees. rude, but acc
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-Ledger: SC-11, SC-32, SC-12 (no fee number, anywhere). Code: the quote rows and `impactTone` (amber above 3%, red above 10%: `apps/web/src/components/token/trade/QuotePreview.tsx:42-45,91-119`); fees in the cost basis (`apps/server/src/sim/world.ts:647-648,749`). **Gated on the Fees check.** Keep the trade-panel footer fee line out of frame (capture mode hides it). Alt text (263):
+Ledger: SC-11, SC-32, SC-12 (no fee number, anywhere). Code: the quote rows and `impactTone` (amber above 3%, red above 10%: `apps/web/src/components/token/trade/QuotePreview.tsx:42-45,91-119`); fees in the cost basis (`apps/server/src/sim/world.ts:647-648,749`). **Gated on the Fees check.** Keep the trade-panel footer fee line out of frame (capture mode hides it). On a demo-data capture, **blur the Fees value** (it's priced from the simulator's 0.8% placeholder, `PLATFORM_FEE_RATE`, and its hover title splits out the platform fee) and **the Route venue name** (`TrenchSwap` reads as an exchange we own; the demo launchpads `Bonkfire`, `FourPad`, `BNB Rocket` and the rest echo real brands), keeping "bonding curve" / "AMM pool" if wanted (ledger §7.3, `apps/web/src/components/token/trade/QuotePreview.tsx:108-120`). Or capture `launch-7` on the live build once the Fees check passes, with real tickers still blurred. Alt text (311):
 
 ```text
-Trenchscope's buy panel before confirming, UI shown with demo data, ticker blurred. Under the amount, the quote lists You receive, Min received at the set slippage, Price impact with a warning icon, Exec. price, Fees and Route. Caption: the bill, before the meal.
+Trenchscope's buy panel before confirming, UI shown with demo data, ticker blurred. Under the amount, the quote lists You receive, Min received at the set slippage, Price impact with a warning icon, Exec. price, Fees and Route, with the fee amount and the venue name blurred. Caption: the bill, before the meal.
 ```
 
-### T7 · keyboard first · `247/280` · video: `launch-8`
+### T7 · keyboard first · `241/280` · video: `launch-8`
 
 ```text
 stop 7, hands off the mouse. j/k down the board, b to buy, s to sell, / to search a name, ticker or pasted address.
 
-your mouse hand was never the alpha.
+your mouse can finally retire.
 
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-Ledger: SC-30. `launch-8` runs a different key sequence from the warm-up's `peek-keys` clip, so it isn't a repeat. Code: the board hotkeys (`apps/web/src/pages/TrenchesPage.tsx:39-46`), B and S on the token page (`apps/web/src/components/token/trade/TradePanel.tsx:85-91`), `/` for search (`apps/web/src/components/layout/Omnibox.tsx:142`). Say "hotkeys" or "keyboard first", never "command palette" (not built, SC-44) and no speed claims (MNC-08). Video description (318):
+Ledger: SC-30. `launch-8` runs a different key sequence from the warm-up's `peek-keys` clip, so it isn't a repeat, and the closer is new (D3-P4 already used the mouse-hand joke). Code: the board hotkeys (`apps/web/src/pages/TrenchesPage.tsx:39-46`), B and S on the token page (`apps/web/src/components/token/trade/TradePanel.tsx:85-91`), `/` for search (`apps/web/src/components/layout/Omnibox.tsx:142`). Say "hotkeys" or "keyboard first", never "command palette" (not built, SC-44) and no speed claims (MNC-08). Video description (318):
 
 ```text
 Screen recording of Trenchscope, keyboard only, UI shown with demo data, tickers blurred. A keycap overlay shows each key: / opens search and a pasted address finds the coin, Enter opens it, B opens the buy panel and S flips it to sell. Back on the board, 3 jumps to the Migrated column and J and K move between coins.
@@ -356,7 +357,7 @@ launch days bring clones: fake support accounts, fake sites, coins borrowing our
 our only links: the bio and the first reply up top. we never DM first. see a fake? report it, block it, don't click.
 ```
 
-"coins borrowing our name" warns about fake tokens without saying anything about a token of ours (MNC-02). If the owner wants no coin-adjacent words at all, cut it to `fake support accounts and fake sites.` (re-measure). Every fake-token response beyond this goes through §9.2.
+"coins borrowing our name" warns about fake tokens without saying anything about a token of ours (MNC-02). Like WARN-Tb and `REPLY_BANK.md` R61, a "not ours" line of this kind is **allowed by default**; only WARN-Ta ("there is no trenchscope token") needs the owner's T-1 decision. If the owner wants no coin-adjacent words at all, cut it to `fake support accounts and fake sites.` (re-measure). Every fake-token response beyond this goes through §9.2.
 
 ---
 
@@ -366,7 +367,7 @@ our only links: the bio and the first reply up top. we never DM first. see a fak
 |---|---|---|
 | **9:00** | **Launch gate** (§1.1). Open `[LINK]` logged out on phone and desktop. Open the live product's health dashboard | [ ] |
 | 9:05 | Under the Hood: no labels. Note followers and the Day-1 pin's stats as a baseline. Run the impersonation search (`trenchscope`, `trenchscope_`, `trenchscopes`, `trench_scope`, `trenchsc0pe`, `trenchscopesupport`) and note what already exists | [ ] |
-| 9:10 | Composer on desktop. Post 1: upload `launch-1`, paste TR-A, add the video description, turn on "Made with AI". Let the video finish processing | [ ] |
+| 9:10 | Composer on desktop. Post 1: upload `launch-1`, paste TR-A, add the video description (§2, the SCRIPT §15.4 text), turn on "Made with AI". Let the video finish processing | [ ] |
 | 9:20 | Add T1–T10 with `launch-3` … `launch-9` and their alt texts. Pick T4 or T4-F3, T10-A or T10-B, and the chain versions that match C-1. **Don't publish** | [ ] |
 | 9:35 | Proofread: the real URL in T1 and nowhere else. No @-mentions, cashtags, hashtags, emoji or dates. Every bracket filled | [ ] |
 | 9:40 | Profile → Edit → **Website: `[LINK]`** (PROFILE §6.2). The bio stays (or switch to BIO-3, the post-launch option with `high risk · nfa`, BRAND_GUIDE §14.2). Only photo, display-name and handle changes trigger a verification re-review | [ ] |
@@ -423,19 +424,21 @@ Ledger: SC-09, SC-18, SC-21, SC-25, MNC-23 (AI never shown as real), MNC-19 (dem
 Screen recording of Trenchscope, not AI, UI shown with demo data, ticker blurred. One token's chart on 1-second candles sits beside its audit panel with red rows. Bundler and dev sell rows land in the Activity tab, then the candles collapse to the floor. Burned-in captions name each moment.
 ```
 
-### QT-2 · 6:15 p.m. · the making-of · `255/280` (filled as below: `247/280`) · image: `launch-11`
+### QT-2 · 6:15 p.m. · the making-of · `272/280` (filled as below: `264/280`) · image: `launch-11`
 
 ```text
-how a trading terminal got a nature documentary shot like a war movie:
+how a trading terminal got a nature documentary:
 
 [N] stills. [N] clips. [N] kept. [N] voice takes.
 
-the whale, the hooded species and the yanked carpet: AI. every UI shot: a screen recording on demo data. the terminal itself: no AI.
+the species: AI. the UI: screen recordings on demo data. the terminal: no AI.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
 **Fill each `[N]` from the real Higgsfield generation log**, never an estimate. The log at the time of writing, trailer only (the two header-art stills don't count): **8 stills, 8 clips, 8 kept, 1 voice take**, so `8 stills. 8 clips. 8 kept. 2 voice takes.` once the re-cut's new VO take is made. Recount before posting; if the cut drops a clip, "kept" changes.
 
-No RISK: it's about how the video was made and names no feature or trading. If the legal check (L-1) treats every brand post as a promotion, replace the last paragraph with RISK. Ledger: MNC-07 (the product has no AI), MNC-23. Alt text (334):
+RISK as the last line: the post names the product as "a trading terminal" on launch day, and POSITIONING wants RISK on every launch-day post about trading. The copy was trimmed to 170 characters before RISK (filled) to make room. Ledger: MNC-07 (the product has no AI), MNC-23. Alt text (334):
 
 ```text
 AI-generated making-of card for the Trenchscope trailer. Left: the AI-generated keyframe of six identical hooded figures in a trench at night. Middle: a frame from the same shot animated. Right: the final frame with its title card and the real Bundler tag chip. A row underneath gives the real counts of stills, clips and voice takes.
@@ -453,24 +456,24 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 
 Four chains: `...and the dev on sol, base, bsc and eth. it's live.`
 
-Ledger: SC-21, SC-21d, SC-43, SC-45, SC-47. OWNER: C-1. It's a re-framed cut with new words, not a bare repost (CT_PLAYBOOK §5.3). Turn "Made with AI" on again. Video description (559):
+Ledger: SC-21, SC-21d, SC-43, SC-45, SC-47. OWNER: C-1. It's a re-framed cut with new words, not a bare repost (CT_PLAYBOOK §5.3). Turn "Made with AI" on again. Video description (594), verbatim from `video/SCRIPT.md` §15.4:
 
 ```text
-AI-generated vertical cut of the Trenchscope trailer, a deadpan wildlife documentary shot like a war epic. A whale over the trenches, a periscope, and hooded species with their wallet tags: the sniper, six identical bundlers, the insider, the dev. Phone-layout screen recordings of the real app, labelled UI shown with demo data, show the board, the audit, the high-risk warning and a dev sell. The carpet gets yanked. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
+AI-generated vertical cut of the Trenchscope trailer, a deadpan wildlife documentary shot like a war epic. A whale over the trenches, a periscope, and hooded species with their wallet tags: the sniper, six identical bundlers, the insider, the dev. Phone-layout screen recordings of the real app, labelled UI shown with demo data, show the board, the audit, the high-risk warning, a dev sell and the buyer's dev-sell exit filling. The carpet gets yanked. End card: see who's really buying, a risk warning, and a note that Trenchscope isn't affiliated with any chain, launchpad or exchange named.
 ```
 
 ---
 
 ## 6. Community prompt: "reply with your worst rug" (4:00 p.m.)
 
-A standalone original about the trenches, not the product, so it carries no RISK. **No prizes, no "best reply wins", no follow or RT asks.** Incentivised posting is banned (CT_PLAYBOOK §3.9) and off-brand.
+A standalone original about rug stories, not the product or trading, so it carries no RISK (it no longer asks "when you aped"). **L-1 decides** whether it needs RISK anyway; if so, it fits (172 + 2 + 92 = 266). **No prizes, no "best reply wins", no follow or RT asks.** Incentivised posting is banned (CT_PLAYBOOK §3.9) and off-brand.
 
-### COMM-1 · `183/280` · image: none (optional `launch-12`)
+### COMM-1 · `172/280` · image: none (optional `launch-12`)
 
 ```text
 reply with your worst rug.
 
-no tickers, no cas, no names. just the story: when you aped, what the chart did, what you didn't see coming.
+no tickers, no cas, no names. just the story: what the chart did, and what you didn't see coming.
 
 we'll answer as many as we can with the tell.
 ```
@@ -518,8 +521,8 @@ AI-generated still: in a dark hall lit by one amber spotlight, an ornate carpet 
 | ET | Post | Asset |
 |---|---|---|
 | 10:00 a.m. | **L1-A** rug autopsy (demo data) | `launch-13` |
-| 1:30 p.m. | **L1-B** guess the fate (demo data) | `launch-14` |
-| 7:30 p.m. | **L1-Br** the reveal (self-reply to L1-B) | `launch-15` |
+| 1:30 p.m. | **POV meme** (default: L2-C's format, a new line, DEMO and RISK if it shows the product), or **L1-B** guess the fate (demo data) **as an owner-approved exception only** | new capture, or `launch-14` |
+| 7:30 p.m. | **L1-Br** the reveal (self-reply to L1-B), only with L1-B | `launch-15` |
 | 8:30 p.m. | **L1-C** worst-rug recap | none |
 
 Replies: 30–60, hand-written. Keep the trailer pinned. Impersonation search morning and evening.
@@ -550,7 +553,7 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 Screen recording of one token from launch to collapse, UI shown with demo data, ticker blurred. Timestamped captions mark each moment: bundlers buy in the creation block, snipers follow in the next blocks, a bundler sell, a dev sell, then the floor. The audit panel stays in frame with its red rows.
 ```
 
-### L1-B · guess the fate · `271/280` · image: `launch-14`
+### L1-B · guess the fate (owner-approved exception only) · `271/280` · image: `launch-14`
 
 ```text
 guess the fate: a launch on demo data, captured at 2 minutes old. we already know how it ends.
@@ -560,7 +563,7 @@ graduates, rugs or goes quiet? reply with your call and the tell. reveal tonight
 memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
 ```
 
-- **Demo data only, never a live coin.** BRAND_GUIDE §14.3 retired "guess the fate" because on live data it's a call on a real coin (MNC-18). On demo data, recorded first and posted after, nobody can trade it, so it stays a game about reading the tells. That's an exception to BRAND_GUIDE §14.3 for demo data only: the owner confirms it, or drops L1-B and L1-Br and posts a POV meme in L1-B's slot (L2-C's format, new line, DEMO and RISK).
+- **Demo data only, never a live coin.** BRAND_GUIDE §14.3 retired "guess the fate" because on live data it's a call on a real coin (MNC-18). On demo data, recorded first and posted after, nobody can trade it, so it stays a game about reading the tells. BRAND_GUIDE §14.3 lists it as an owner-approved exception for demo data only. **The default is the POV meme** in L1-B's slot (L2-C's format, new line, DEMO and RISK), with no L1-Br and no `launch-14`/`launch-15`. Posted the day after "it's live", demo-data puzzles also risk being read as live market data, so "a launch on demo data" stays in the first line.
 - **Record the launch through its outcome first, then post.** That's why the copy says "captured" and "we already know".
 - Blur the ticker, the name, the socials and any narrative or theme chip (demo names can collide with real coins, and a political theme reads as commentary). Alt text (263):
 
@@ -616,7 +619,7 @@ the coins change. the tells don't.
 
 ### L2-A · the life of a launch, by the clock (real-market stats: AMBER, re-verify each one)
 
-**Every real-market number here is AMBER** (ledger §4). The owner re-checks each the day before against a public dashboard or primary post (check S-1), keeps the "~", the time window and "one launchpad" / "one older sample", and updates the source line in L2-A6 (no dates). If one can't be verified, cut that post: the clock still reads without it. If it's L2-A1's, keep its first line as the hook and drop the 0:00 sentence. **One stat per post.** Never name the launchpad (MNC-20). Not graduating is not rugging.
+**Every real-market number here is AMBER** (ledger §4). The owner re-checks each the day before against a public dashboard or primary post (check S-1), keeps the "~", the time window and "one launchpad" / "one dataset", and updates the source line in L2-A6 (no dates). If one can't be verified, cut that post: the clock still reads without it. If it's L2-A1's, keep its first line as the hook and drop the 0:00 sentence. **One stat per post.** Never name the launchpad (MNC-20). Not graduating is not rugging.
 
 **Why these four stats.** The warm-up already used KS-01 (~97 of 100 never graduate, Day 3) and KS-02 (~73% of graduates down 60%+ in 20 minutes, Day 7), and its Day-3 lifecycle thread explained the curve. This thread is a different angle (a clock) with stats the account hasn't posted: KS-04, KS-06, KS-05, KS-03.
 
@@ -630,21 +633,21 @@ the life of a launch, by the clock. most coins never reach the second stop.
 0:00, mint. on one launchpad, that's somewhere between 27k and 50k new coins a day.
 ```
 
-**L2-A6** · source, posted as the **first reply** to L2-A1 · STAT verbatim + the caveats · `183/280`
+**L2-A6** · source, posted as the **first reply** to L2-A1 · STAT verbatim + the caveats · `184/280`
 
 ```text
 source: launchpad lifecycle data (secondary). approximate, and it moves month to month.
 
-the ~5-minute median comes from an older sample. the ~9 hours is an average, and a skewed one.
+the ~5-minute median is for coins that graduated. the ~9 hours is an average, and a skewed one.
 ```
 
-**L2-A2** · `152/280` · KS-06 (an older sample, so it says so; graduates only)
+**L2-A2** · `147/280` · KS-06 (graduates only)
 
 ```text
-~5 minutes, graduation. if a coin is going to fill its curve, it usually does it fast. in one older sample, the median graduate got there in ~5 minutes.
+~5 minutes, graduation. if a coin is going to fill its curve, it usually does it fast. in one dataset, the median graduate got there in ~5 minutes.
 ```
 
-The ~5 minutes is the median for coins that did graduate, from an older sample (4.4 minutes in the research doc). Never apply it to all launches.
+The ~5 minutes is the research doc's headline median for coins that did graduate (`docs/research/gmgn-research.md` §13.4: "median ~5 min"; the older sample it also cites is 4.4 minutes, ~457 curve trades). Never apply it to all launches.
 
 **L2-A3** · `125/280` · KS-05 (an average with heavy skew)
 
@@ -654,13 +657,15 @@ The ~5 minutes is the median for coins that did graduate, from an older sample (
 not rugged, mostly. just forgotten.
 ```
 
-**L2-A4** · `131/280` · KS-03 (graduates only; "1 in 5" rounds 19.7%)
+**L2-A4** · `147/280` · KS-03 (graduates only; "1 in 5" rounds 19.7%)
 
 ```text
 24 hours, the survivors. of the coins that did graduate, ~1 in 5 still has $5k+ liquidity a day later.
 
-a diploma is not a pension.
+the other four are still technically coins.
 ```
+
+(The diploma joke is retired here: D7-P2 and `REPLY_BANK.md` L21 already use graduation-as-diploma.)
 
 **L2-A5** · `239/280` · SC-21, SC-49, SC-18
 
@@ -672,10 +677,10 @@ memecoins are extremely risky. most go to zero. only trade what you can afford t
 
 "shows", not "catches" or "predicts" (MNC-06). It shows them as they happen; it doesn't see the future.
 
-`launch-16` alt text (444):
+`launch-16` alt text (465):
 
 ```text
-Timeline card titled the life of a launch, by the clock. Four marks left to right. 0:00, mint: somewhere between 27k and 50k new coins a day on one launchpad. About 5 minutes: the median time to graduate, in one older sample. About 9 hours: when the average coin that doesn't graduate goes quiet. 24 hours: about 1 in 5 graduates still has $5k+ liquidity. Footer: real-market figures from secondary lifecycle data, approximate. high risk · nfa.
+Timeline card titled the life of a launch, by the clock. Four marks left to right. 0:00, mint: somewhere between 27k and 50k new coins a day on one launchpad. About 5 minutes: the median time to graduate, for coins that graduated, in one dataset. About 9 hours: when the average coin that doesn't graduate goes quiet. 24 hours: about 1 in 5 graduates still has $5k+ liquidity. Footer: real-market figures from secondary lifecycle data, approximate. high risk · nfa.
 ```
 
 ### L2-B · poll · `41/280` · 24 hours
