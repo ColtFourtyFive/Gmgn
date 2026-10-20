@@ -1,55 +1,115 @@
 {
-  "createCat": {
-    "signature": "3vBVRhYf5esvVxMMQog9xoergDTwGPbsLgRjqkZWviMGb7spJpoj6qSTZwSNpX55UjWWUkmksytfvky8toJCHwUg",
-    "mint": "EbqX7mgSZZhDAk3WFrwYWwB719EgwLXXkE8FK694Gszb",
-    "traderPublicKey": "F1mtgAcJymFTCN6QgAwhd4y6z2GuN9HnLriZXShWyQ1A",
+  "createNoBuy": {
+    "signature": "3XEXsD66Y15rwDcFgtznA3Bfz4gCdnU1pcKmV748RmjrFdpBuBQeJAowhyrPTnYJdREsWozUDfeVrBtwkFY3fQBL",
+    "mint": "5LQfim8tDyx2gEH5NCAqh2GKQ1Cs3md35cM2XMzmfxHA",
+    "traderPublicKey": "EdrYoiY2BVEy52y1Ex7Ew7rs7C976mH8d3PXhagbDE3E",
     "txType": "create",
     "initialBuy": 0,
     "solAmount": 0,
-    "bondingCurveKey": "HFbsn2rYgiys2UmWWqhJkBHuhRKtbqFGgLAzLAmcdcL4",
+    "bondingCurveKey": "7PxocKsedBoWJyw9woACTCPPnx18S3qBfK4JmTBc1bwa",
     "vTokensInBondingCurve": 1073000000,
     "vSolInBondingCurve": 30,
-    "marketCapSol": 27.958993476,
-    "name": "Sir Meowington",
-    "symbol": "MEOW",
-    "uri": "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+    "marketCapSol": 27.958993476234856,
+    "name": "Mystic Marshmallow Mongoose",
+    "symbol": "MYMOMO",
+    "uri": "https://gateway.pinata.cloud/ipfs/bafkreiahucuqm6jrh5vzy5pofxqlitk6p5j2j6l2grcq636oatjraysnbe",
+    "is_mayhem_mode": false,
     "pool": "pump"
   },
-  "createBonk": {
-    "signature": "612zGNECnvU89UViNuaG6oeWueX2RJgqHyUnNWACuQ93MmJLbA76kd2z8NmSK9YHEzEFEftqJgpbPuRwZiP2AM7A",
-    "traderPublicKey": "139uJLNYdGMPaaFXXnMkmk9YGGP3qaZjWU8BfL5BZTg4",
+  "createMayhemWrongCurveKey": {
+    "signature": "5Y5T9mTbUqA7GrEBVA4UDpvDDNnfDrZNcYi1sZYKu31iZCir2cFWus7SW8A5d36wVcD5efvop64Q3qDt7JHohaEB",
+    "mint": "AM1y1MDPwNwE38zECwJHJ1iN8bLD7o9YNYWjKP5ipump",
+    "traderPublicKey": "Bq3JYJbkrRYxe8VRHdRqXgcmFzF5DEoeAufZWeAgYoK",
     "txType": "create",
-    "mint": "FBk9vzgM2trfJxeVUAxupw5hc1Ata3bSSAivRJS4veMH",
-    "solInPool": 0.89055,
-    "tokensInPool": 967574707.778913,
-    "initialBuy": 32425292.22108698,
-    "solAmount": 0.89055,
-    "newTokenBalance": 32425292.221087,
-    "marketCapSol": 29.72713613571716,
-    "name": "Blume",
-    "symbol": "BLUME",
-    "uri": "https://ipfs.io/ipfs/QmVGxiWSGprdNoUBghjurgb3Hxm1UAU6ZJTHnhzidT6Rc7",
+    "initialBuy": 0,
+    "solAmount": 0,
+    "bondingCurveKey": "BwWK17cbHxwWBKZkUYvzxLcNQ1YVyaFezduWbtm2de6s",
+    "vTokensInBondingCurve": 1073000000,
+    "vSolInBondingCurve": 30,
+    "marketCapSol": 27.958993476234856,
+    "name": "freedom",
+    "symbol": "freedom",
+    "uri": "https://metadata.j7tracker.io/metadata/12b882da51e4497b.json",
+    "is_mayhem_mode": true,
+    "pool": "pump"
+  },
+  "createQuotedInPump": {
+    "signature": "2vgPkC8AXWK1r2SNcHjKckNn3kg3P6hf5jj2SWUSqNv7uUbvV87i6Rb6hLfcV9GYpi3FTg1aTacf63rVJMbuBbRy",
+    "mint": "GQ7RhPxwAeREjrr3sLoh2EWXWgtaCMueixvSqAzm2JAc",
+    "traderPublicKey": "74fj9ej4a34ducyBbP5uwzgczJYLcAPTxLXynFerevU3",
+    "txType": "create",
+    "initialBuy": 0,
+    "solAmount": 0,
+    "bondingCurveKey": "4wJsGrmX2wxnQSMvMb42a6BFDkYz4z98jQBEpK1Xswfq",
+    "vTokensInBondingCurve": 1073000000,
+    "vSolInBondingCurve": 30,
+    "marketCapSol": 27.958993476234856,
+    "name": "freedom",
+    "symbol": "freedom",
+    "uri": "https://metadata.j7tracker.io/metadata/3f2496f9d9964206.json",
+    "is_mayhem_mode": false,
+    "pool": "pump"
+  },
+  "createInstantGraduation": {
+    "signature": "4hM2tBPSjAMjUnmsePKhfbZ2v4eacNjzSoNtfnoffBWq6LUsF2RSMC5B3vRznmYjByk5pbnQKqPnw2gcJjqopYZr",
+    "mint": "XtTnn7QS4JkR5YfPhu4AvBE7FNbeidyaAPZuvUbpump",
+    "traderPublicKey": "3Bm4mE5JsnV3X1WPXTc84FcGkVtJH6QEVWdnSQh94bax",
+    "txType": "create",
+    "initialBuy": 793100000,
+    "solAmount": 85.005359057,
+    "bondingCurveKey": "6NtWfBTgnPmJmdj46agi6PZkDEG94ZxD9ejcfRKirhME",
+    "vTokensInBondingCurve": 279900000,
+    "vSolInBondingCurve": 115.005359056806,
+    "marketCapSol": 410.8801681200643,
+    "name": "Official Barron Coin",
+    "symbol": "BARRON",
+    "uri": "https://ipfs.io/ipfs/Qmf9HHF3M3VceKe4eyrhAfPdudkY3v7sBdkgK3QLQkEGDF",
+    "is_mayhem_mode": false,
+    "pool": "pump"
+  },
+  "migrateInstantGraduation": {
+    "signature": "3NFZ5FVZW7VK9p3zrLf8qud4mKs39Rq9b4k2avxtuhJmbjkHrdAz64WTeFF7B54ruw8gNQpEVGW7oDYXhVWBJa9s",
+    "mint": "XtTnn7QS4JkR5YfPhu4AvBE7FNbeidyaAPZuvUbpump",
+    "txType": "migrate",
+    "pool": "pump-amm"
+  },
+  "createBonk": {
+    "signature": "5HeUQWAWqrAv3BQdwVCc8ryaceUTcsMx6NgViqcgzRa6HCATLWMsfSnvz5SC7FYxjGut2vXQZ3Sq47MmGVn1hUQi",
+    "traderPublicKey": "GZPQTNFpnyyjqQ65e7L6ZjYmmn6Q3jBF4x9r1jQwaf9T",
+    "txType": "create",
+    "mint": "71cHf6v8suXBMJoXioytrQL6kJ5wcrT2RSyr3aSsXxqx",
+    "solInPool": 0.873734233,
+    "tokensInPool": 969708468.959946,
+    "initialBuy": 30291531.040053964,
+    "solAmount": 0.873734233,
+    "newTokenBalance": 30291531.040054,
+    "marketCapSol": 29.605598514210737,
     "pool": "bonk"
   },
-  "subscribedKeys": {
-    "message": "Successfully subscribed to keys."
+  "subscribedNewToken": {
+    "message": "Successfully subscribed to token creation events."
   },
-  "errorKeys": {
-    "errors": "Invalid message. Message must contain parameter 'keys' which should be an array of strings."
+  "subscribedMigration": {
+    "message": "Subscribed to 'migration' events."
+  },
+  "unsubscribed": {
+    "message": "Unsubscribed."
+  },
+  "tradeStreamsRefused": {
+    "message": "'subscribeTokenTrade' and 'subscribeAccountTrade' methods are only available when connecting with an API key funded with at least 0.02 SOL."
+  },
+  "errorInvalidMethod": {
+    "errors": "Invalid message. 'method' must be 'subscribeNewToken', 'subscribeTokenTrade', 'subscribeAccountTrade', or 'subscribeMigration'."
+  },
+  "errorFailedToSubscribe": {
+    "errors": "Invalid message. Failed to subscribe."
   },
   "malformed": [
     "not json at all",
     "[1,2,3]",
     "{\"txType\":\"buy\",\"signature\":\"x\",\"mint\":\"y\"}",
-    "{\"txType\":\"buy\",\"signature\":\"3znknrxFmgRYuL9AXeg1JbTb8jCsFRiMZzXvyWJPWLL3nMuMbnxvpdUo7Y3jqAP9PrwPAPpPB4uTTmR6ju58CfNr\",\"mint\":\"9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg\",\"traderPublicKey\":\"83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk\",\"tokenAmount\":-5,\"solAmount\":1}",
-    "{\"txType\":\"teleport\",\"mint\":\"9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg\"}",
+    "{\"txType\":\"buy\",\"signature\":\"k2Qxr9uUCmpECK29UoMVttz9pccyJWorRDjHPxF3UuESzMW1QLvWKrKXMNTJ3B9unDGtMTctjYxM1wmtsUjyCUX\",\"mint\":\"DLdYrQ2qGJqXNtQ8CtaFLPdTB43QaZgtoYg7itGCxo5j\",\"traderPublicKey\":\"GsU8sG19zMGZTnjxCG4fXiPs87pv6yqzfyLKdU8PUDdq\",\"tokenAmount\":-5,\"solAmount\":1}",
+    "{\"txType\":\"teleport\",\"mint\":\"DLdYrQ2qGJqXNtQ8CtaFLPdTB43QaZgtoYg7itGCxo5j\"}",
     "{\"hello\":\"world\"}"
-  ],
-  "wallets": {
-    "DEV": "3dTjsU6ZDcvWc4oPitgshvqrbevjDTtY1BDS6oTiHnrW",
-    "A": "83Z3mA3vhSa5DBtdYPwbnY2AADd4YkrnJLuNRcWzvCpk",
-    "B": "6jaogixbndx3JduqN8Y5d2XsRGDK7yJiCP57ysYTHrKE",
-    "MINT": "9UGyu8cMcbmuaiNbrmo3C7KsLDkH4navUCyx2a4XTEfg",
-    "MINT2": "EbqX7mgSZZhDAk3WFrwYWwB719EgwLXXkE8FK694Gszb"
-  }
+  ]
 }

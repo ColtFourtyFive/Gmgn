@@ -2,21 +2,35 @@
 // with zod. The feed has no versioned schema, so parsing is defensive: a frame
 // that is not one of the shapes below is reported as malformed (and counted),
 // never thrown. Amounts are UI units as the feed sends them: SOL (not lamports)
-// and whole tokens (pump.fun mints have 6 decimals and a 1e9 supply).
+// and whole tokens (pump.fun mints have 6 decimals).
 //
-// Shapes (as documented by PumpPortal and observed by other integrators; not
-// verified against the live service from this codebase):
+// Shapes captured from the live service (2026-10-20; real frames in
+// test/fixtures/pumpportal, see its README):
 //   create   { signature, mint, traderPublicKey, txType: 'create', initialBuy, solAmount,
 //              bondingCurveKey, vTokensInBondingCurve, vSolInBondingCurve, marketCapSol,
-//              name, symbol, uri, pool: 'pump' }
-//   buy/sell { signature, mint, traderPublicKey, txType: 'buy' | 'sell', tokenAmount, solAmount,
-//              newTokenBalance, bondingCurveKey, vTokensInBondingCurve, vSolInBondingCurve,
-//              marketCapSol, pool: 'pump' | 'pump-amm' }
-//   migrate  { signature, mint, txType: 'migrate', pool: 'pump-amm' }
-//   ack      { message: 'Successfully subscribed to ...' }
-//   error    { errors: '...' }
-// Some launchpads (e.g. pool 'bonk') send solInPool / tokensInPool instead of
-// the bonding-curve fields; those are accepted and carried through.
+//              name, symbol, uri, is_mayhem_mode, pool: 'pump' }
+//   migrate  { signature, mint, txType: 'migrate', pool: 'pump-amm' }   (the MigrateV2 transaction)
+//   ack      { message: 'Successfully subscribed to token creation events.' }
+//            { message: "Subscribed to 'migration' events." }   { message: 'Unsubscribed.' }
+//   refusal  { message: "'subscribeTokenTrade' and 'subscribeAccountTrade' methods are only available
+//              when connecting with an API key funded with at least 0.02 SOL." }
+//   error    { errors: "Invalid message. 'method' must be ..." } / { errors: 'Invalid message. Failed to subscribe.' }
+// A create's numbers are those of the pump program's TradeEvent for the creator's buy (checked
+// against the transactions on-chain): solAmount is the SOL that went into the curve, NOT what the
+// wallet paid (protocol 0.95% + creator 0.30% fees come on top for buys and off the top for sells);
+// vSol / vTokensInBondingCurve are the post-trade virtual reserves; marketCapSol = vSol / vTokens x 1e9.
+// Trades (buy / sell, pool 'pump' or 'pump-amm') could not be captured: PumpPortal streams them only
+// with a funded API key. Their shape (tokenAmount, solAmount, newTokenBalance and the curve fields
+// above) is taken from PumpPortal's documentation and assumed to follow the same TradeEvent units.
+// Caveats the live feed showed:
+//   - bondingCurveKey is wrong for some mayhem-mode launches (it names the mayhem agent's wallet):
+//     derive the curve from the mint instead (bondingCurvePda), never trust this field.
+//   - pump.fun curves may be quoted in another mint (the PUMP token, CARDS, ...: about a quarter of
+//     launches). The frame does not say so and its SOL fields then hold the program's legacy shadow
+//     values (30 SOL virtual), not real SOL: the quote mint has to be read from the curve account.
+//   - mayhem-mode mints (is_mayhem_mode) have a 2B supply; marketCapSol still assumes 1B.
+// Other launchpads (pool 'bonk') send solInPool / tokensInPool and no name / symbol / uri; those
+// frames are accepted and carried through (ingest ignores launchpads other than pump.fun).
 
 import { z } from 'zod';
 import { BASE58_ADDRESS, BASE58_SIGNATURE, cleanText } from '../enrich/sanitize';
@@ -39,6 +53,7 @@ const curveFields = {
   solInPool: optAmount,
   tokensInPool: optAmount,
   newTokenBalance: optAmount,
+  is_mayhem_mode: z.boolean().nullish(),
   pool,
 };
 
@@ -74,6 +89,7 @@ const migrateSchema = z.object({
 
 /** Post-trade curve / pool state a message reports. */
 export interface ReportedReserves {
+  /** As sent; unreliable (wrong for some mayhem-mode launches): derive the curve from the mint. */
   bondingCurveKey?: string;
   /** Virtual reserves of a pump.fun bonding curve (UI units). */
   vTokensInBondingCurve?: number;
@@ -84,6 +100,8 @@ export interface ReportedReserves {
   tokensInPool?: number;
   /** The trader's token balance after the transaction. */
   newTokenBalance?: number;
+  /** A pump.fun mayhem-mode coin (2B supply, an agent trading it fee-free). */
+  mayhem?: boolean;
   /** Venue: 'pump' (bonding curve), 'pump-amm' (PumpSwap) or another launchpad. */
   pool?: string;
 }
@@ -96,11 +114,16 @@ export interface CreateEvent extends ReportedReserves {
   trader: string;
   /** Tokens the creator bought in the creation transaction. */
   initialBuy: number;
-  /** SOL the creator spent on that buy. */
+  /** SOL that buy put into the curve (the creator paid the curve's fees on top). */
   solAmount: number;
   name: string;
   symbol: string;
   uri: string;
+  /**
+   * Set once the launch's curve account was read on-chain (feed/verify.ts): its fee rate
+   * (protocol + creator). Absent for launches that could not be checked.
+   */
+  curveFeeRate?: number;
 }
 
 export interface TradeEvent extends ReportedReserves {
@@ -110,6 +133,7 @@ export interface TradeEvent extends ReportedReserves {
   mint: string;
   trader: string;
   tokenAmount: number;
+  /** SOL into (buy) / out of (sell) the curve or pool, before the venue's fees. */
   solAmount: number;
 }
 
@@ -139,13 +163,19 @@ function reserves(m: z.infer<typeof tradeSchema> | z.infer<typeof createSchema>)
   if (m.solInPool !== undefined) r.solInPool = m.solInPool;
   if (m.tokensInPool !== undefined) r.tokensInPool = m.tokensInPool;
   if (m.newTokenBalance !== undefined) r.newTokenBalance = m.newTokenBalance;
+  if (typeof m.is_mayhem_mode === 'boolean') r.mayhem = m.is_mayhem_mode;
   if (m.pool) r.pool = m.pool;
   return r;
 }
 
+/** A frame's text, however the socket delivered it. */
+export function frameText(raw: string | Buffer | ArrayBuffer | Buffer[]): string {
+  return Array.isArray(raw) ? Buffer.concat(raw).toString('utf8') : raw instanceof ArrayBuffer ? Buffer.from(raw).toString('utf8') : String(raw);
+}
+
 /** Parse one feed frame. Never throws. */
 export function parseFeedMessage(raw: string | Buffer | ArrayBuffer | Buffer[]): FeedMessage {
-  const text = Array.isArray(raw) ? Buffer.concat(raw).toString('utf8') : raw instanceof ArrayBuffer ? Buffer.from(raw).toString('utf8') : String(raw);
+  const text = frameText(raw);
   if (text.length > MAX_FRAME_BYTES) return { kind: 'malformed', reason: 'frame too large' };
   let data: unknown;
   try {
@@ -197,4 +227,14 @@ function issue(err: z.ZodError): string {
 /** Whether a notice reads like a refused subscription (e.g. trade streams that need an API key). */
 export function isRefusalNotice(message: string): boolean {
   return !/success/i.test(message) && /(api.?key|fund|not allowed|unauthori[sz]ed|forbidden|denied|refus|limit|invalid)/i.test(message);
+}
+
+/**
+ * Whether a notice refuses the token / account trade streams as a whole: PumpPortal answers every
+ * subscribeTokenTrade / subscribeAccountTrade on a connection without a funded API key with
+ * "'subscribeTokenTrade' and 'subscribeAccountTrade' methods are only available when connecting
+ * with an API key funded with at least 0.02 SOL."
+ */
+export function isTradeStreamRefusal(message: string): boolean {
+  return isRefusalNotice(message) && /(subscribe(Token|Account)Trade|api.?key|fund)/i.test(message);
 }

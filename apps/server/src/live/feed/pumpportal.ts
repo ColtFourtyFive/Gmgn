@@ -7,12 +7,19 @@
 // the open connection already has. A dropped or silent connection reconnects
 // with jittered exponential backoff and re-sends every subscription. Liveness
 // is any frame or a pong to our protocol ping; nothing heard for `staleMs`
-// counts as dead. Messages are validated (messages.ts) and malformed ones are
-// counted and dropped. The optional API key travels only in the socket URL and
-// is never logged.
+// counts as dead (PumpPortal answers protocol pings and pings us too). Messages
+// are validated (messages.ts) and malformed ones are counted and dropped. The
+// optional API key travels only in the socket URL and is never logged.
+//
+// Trade streams need an API key funded with at least 0.02 SOL: without one
+// PumpPortal answers every subscribeTokenTrade / subscribeAccountTrade with a
+// refusal notice (launches and migrations still stream). After a refusal the
+// client stops sending trade subscriptions on that connection (they would only
+// be refused again, one notice per message) and retries every `tradeRetryMs`
+// and on reconnect, so funding the key needs no restart.
 
 import WebSocket from 'ws';
-import { isRefusalNotice, parseFeedMessage, type FeedEvent } from './messages';
+import { frameText, isRefusalNotice, isTradeStreamRefusal, parseFeedMessage, type FeedEvent } from './messages';
 
 export interface PumpPortalOptions {
   url: string;
@@ -20,6 +27,8 @@ export interface PumpPortalOptions {
   apiKey?: string | null;
   /** Called for every valid create / trade / migrate event, in arrival order. */
   onEvent: (e: FeedEvent) => void;
+  /** Every frame's text as received, before validation (capture tools; frames never carry the key). */
+  onFrame?: (text: string) => void;
   /** Connection state changes. */
   onStatus?: (connected: boolean) => void;
   /** Debounce for subscription changes (ms). */
@@ -34,6 +43,8 @@ export interface PumpPortalOptions {
   staleMs?: number;
   /** Connection attempt timeout. */
   handshakeTimeoutMs?: number;
+  /** After PumpPortal refused the trade streams, try them again this often (ms). */
+  tradeRetryMs?: number;
   random?: () => number;
   now?: () => number;
   log?: Pick<Console, 'warn' | 'info'>;
@@ -53,6 +64,11 @@ export interface PumpPortalDiagnostics {
   subscribeMessages: number;
   lastNotice: string | null;
   lastMalformed: string | null;
+  /**
+   * Token / account trade streams: 'refused' after PumpPortal refused them (no or unfunded API
+   * key), 'active' once a trade arrived, 'unknown' before either.
+   */
+  tradeStreams: 'unknown' | 'active' | 'refused';
 }
 
 const OPEN = 1;
@@ -72,6 +88,9 @@ export class PumpPortalClient {
   private flushTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private tradeRetryTimer: NodeJS.Timeout | null = null;
+  /** The current connection's trade subscriptions were refused: send none until the retry. */
+  private tradePaused = false;
   private lastHeardAt = 0;
   private openedAt = 0;
   private readonly loggedNotices = new Set<string>();
@@ -92,6 +111,7 @@ export class PumpPortalClient {
     subscribeMessages: 0,
     lastNotice: null,
     lastMalformed: null,
+    tradeStreams: 'unknown',
   };
 
   private readonly batchMs: number;
@@ -100,6 +120,7 @@ export class PumpPortalClient {
   private readonly maxMs: number;
   private readonly pingEveryMs: number;
   private readonly staleMs: number;
+  private readonly tradeRetryMs: number;
   private readonly random: () => number;
   private readonly now: () => number;
   private readonly log: Pick<Console, 'warn' | 'info'>;
@@ -111,6 +132,7 @@ export class PumpPortalClient {
     this.maxMs = opts.backoffMaxMs ?? 60_000;
     this.pingEveryMs = opts.pingEveryMs ?? 20_000;
     this.staleMs = opts.staleMs ?? 90_000;
+    this.tradeRetryMs = opts.tradeRetryMs ?? 10 * 60_000;
     this.random = opts.random ?? Math.random;
     this.now = opts.now ?? Date.now;
     this.log = opts.log ?? console;
@@ -137,8 +159,8 @@ export class PumpPortalClient {
 
   async stop(): Promise<void> {
     this.stopped = true;
-    for (const t of [this.flushTimer, this.reconnectTimer, this.heartbeatTimer]) if (t) clearTimeout(t);
-    this.flushTimer = this.reconnectTimer = this.heartbeatTimer = null;
+    for (const t of [this.flushTimer, this.reconnectTimer, this.heartbeatTimer, this.tradeRetryTimer]) if (t) clearTimeout(t);
+    this.flushTimer = this.reconnectTimer = this.heartbeatTimer = this.tradeRetryTimer = null;
     const ws = this.ws;
     this.ws = null;
     if (!ws) return;
@@ -218,6 +240,10 @@ export class PumpPortalClient {
       this.lastHeardAt = this.openedAt;
       this.sentTokens.clear();
       this.sentAccounts.clear();
+      // A new connection tries the trade streams again (the key may have been funded meanwhile).
+      this.tradePaused = false;
+      if (this.tradeRetryTimer) clearTimeout(this.tradeRetryTimer);
+      this.tradeRetryTimer = null;
       this.setOpen(true);
       this.send({ method: 'subscribeNewToken' });
       this.send({ method: 'subscribeMigration' });
@@ -306,9 +332,29 @@ export class PumpPortalClient {
 
   /** Send the difference between what is wanted and what this connection has. */
   private flush(): void {
-    if (!this.open) return;
+    if (!this.open || this.tradePaused) return;
     this.sync('subscribeTokenTrade', 'unsubscribeTokenTrade', this.desiredTokens, this.sentTokens);
     this.sync('subscribeAccountTrade', 'unsubscribeAccountTrade', this.desiredAccounts, this.sentAccounts);
+  }
+
+  /**
+   * PumpPortal refused the trade streams: nothing this connection sent is subscribed. Stop sending
+   * (every message would draw another refusal) and try the whole set again after tradeRetryMs.
+   */
+  private pauseTradeStreams(): void {
+    this.diag.tradeStreams = 'refused';
+    this.sentTokens.clear();
+    this.sentAccounts.clear();
+    if (this.tradePaused) return;
+    this.tradePaused = true;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+    this.tradeRetryTimer = setTimeout(() => {
+      this.tradeRetryTimer = null;
+      this.tradePaused = false;
+      this.flush();
+    }, this.tradeRetryMs);
+    this.tradeRetryTimer.unref?.();
   }
 
   private sync(sub: string, unsub: string, desired: Set<string>, sent: Set<string>): void {
@@ -343,14 +389,24 @@ export class PumpPortalClient {
   private onFrame(raw: Buffer | ArrayBuffer | Buffer[]): void {
     this.diag.messages++;
     this.lastMessageAt = this.now();
-    const msg = parseFeedMessage(raw);
+    const text = frameText(raw);
+    if (this.opts.onFrame) {
+      try {
+        this.opts.onFrame(text);
+      } catch {
+        // a capture tool's failure is not the feed's
+      }
+    }
+    const msg = parseFeedMessage(text);
     switch (msg.kind) {
       case 'create':
       case 'trade':
       case 'migrate':
         if (msg.kind === 'create') this.diag.creates++;
-        else if (msg.kind === 'trade') this.diag.trades++;
-        else this.diag.migrations++;
+        else if (msg.kind === 'trade') {
+          this.diag.trades++;
+          this.diag.tradeStreams = 'active';
+        } else this.diag.migrations++;
         this.lastEventAt = this.lastMessageAt;
         try {
           this.opts.onEvent(msg);
@@ -363,7 +419,14 @@ export class PumpPortalClient {
         this.diag.lastNotice = msg.message;
         if (isRefusalNotice(msg.message)) {
           this.diag.refusals++;
-          this.logOnce(`[pumpportal] subscription refused: ${msg.message}`);
+          if (isTradeStreamRefusal(msg.message)) {
+            this.pauseTradeStreams();
+            this.logOnce(
+              `[pumpportal] trade streams refused (PUMPPORTAL_API_KEY missing or funded with less than 0.02 SOL): only launches and migrations will arrive; retrying every ${Math.round(this.tradeRetryMs / 60_000)} min. PumpPortal said: ${msg.message}`,
+            );
+          } else {
+            this.logOnce(`[pumpportal] subscription refused: ${msg.message}`);
+          }
         }
         return;
       case 'error':

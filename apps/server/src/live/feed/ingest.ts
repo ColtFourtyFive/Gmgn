@@ -10,6 +10,17 @@
 // The trader's newTokenBalance is passed as the authoritative post-trade balance.
 // Events are deduplicated by signature (a bounded window), and the World again by
 // (signature, wallet, token), since our own fills arrive from a second source.
+//
+// Units, as checked against mainnet transactions (the pump program's TradeEvent):
+//   - the feed's solAmount for a curve trade is the SOL into / out of the curve. Buyers pay the
+//     curve's fees on top (protocol 0.95% + creator 0.30%), sellers receive it less those fees.
+//     The World books what the wallet paid / received (as for simulated and our own trades), so
+//     curve amounts are converted here; pump.fun's mayhem agent trades fee-free.
+//   - real reserves follow from the virtual ones with fixed offsets (30 SOL, 279.9M tokens) on a
+//     normal curve. A mayhem-mode curve keeps the token offset, but the program moves its virtual
+//     SOL on its own: its real SOL is tracked from the trades' flows instead.
+//   - MigrateV2 moves the completed curve's real SOL less 0.015 SOL, and its 206.9M remaining
+//     tokens, into the canonical PumpSwap pool (part of that SOL as the pool's virtual quote reserve).
 
 import { LIVE_DEXES, LIVE_LAUNCHPADS, type LaunchpadConfig } from '@trenchscope/shared';
 import type { PoolRuntime, TokenState, World } from '../../sim/world';
@@ -24,10 +35,31 @@ export const PUMP_DECIMALS = 6;
 export const PUMP_VIRTUAL_TOKEN_OFFSET = PUMP.virtualTokens - PUMP.curveTokens;
 /** Tokens a completed curve leaves for the pool (supply minus what the curve sold). */
 export const PUMP_POOL_TOKENS = PUMP.totalSupply - PUMP.curveTokens;
+/** Mayhem-mode mints are created with twice the supply (the extra billion goes to the mayhem agent). */
+export const PUMP_MAYHEM_SUPPLY = 2 * PUMP.totalSupply;
+/** pump.fun's mayhem-mode agent: it trades mayhem coins without fees (observed on mainnet). */
+export const PUMP_MAYHEM_AGENT = 'BwWK17cbHxwWBKZkUYvzxLcNQ1YVyaFezduWbtm2de6s';
+/** SOL a migration keeps: the pool gets the completed curve's real SOL less this (MigrateV2 on mainnet). */
+export const PUMP_MIGRATION_FEE_SOL = 0.015;
 /** Below this many real tokens a curve is complete (float noise of the feed's UI amounts). */
 const CURVE_DUST_TOKENS = 1;
 /** Signatures remembered for dedupe. */
 const DEDUPE_WINDOW = 50_000;
+/** Mints whose events are ignored (launches quoted in another mint), remembered at most. */
+const IGNORED_WINDOW = 20_000;
+
+/**
+ * What the wallet paid (buy) or received (sell) for a curve trade that moved `curveSol` through
+ * the curve, at the curve's fee rate (charged on the curve amount, on top for buys).
+ */
+export function walletSol(side: 'buy' | 'sell', curveSol: number, feeRate: number): number {
+  return side === 'buy' ? curveSol * (1 + feeRate) : curveSol * (1 - feeRate);
+}
+
+/** A mayhem-mode coin: its mint holds more than a normal pump.fun supply. */
+export function isMayhemToken(t: Pick<TokenState, 'launchpad' | 'totalSupply'>): boolean {
+  return t.launchpad === PUMP.id && t.totalSupply > PUMP.totalSupply;
+}
 
 /** Real reserves of a pump.fun curve from its virtual reserves (the virtual offsets are fixed per curve). */
 export function pumpCurveFromVirtual(vSol: number, vTokens: number): { virtualNative: number; virtualTokens: number; realNative: number; realTokens: number } {
@@ -63,13 +95,33 @@ export class FeedIngestor {
   readonly stats: IngestStats = { creates: 0, trades: 0, migrations: 0, duplicates: 0, unknownToken: 0, ignored: 0 };
   /** Recent event keys (insertion order = age), for dedupe. */
   private readonly seen = new Set<string>();
+  /** Mints whose feed events must not reach the World (a launch quoted in another mint). */
+  private readonly ignoredMints = new Set<string>();
 
   constructor(
     private readonly world: World,
     private readonly opts: IngestOptions,
   ) {}
 
+  /** Ignore every later event of `mint` (its frames do not carry SOL amounts). */
+  ignoreMint(mint: string): void {
+    this.ignoredMints.delete(mint);
+    this.ignoredMints.add(mint);
+    if (this.ignoredMints.size > IGNORED_WINDOW) {
+      const oldest = this.ignoredMints.values().next().value;
+      if (oldest !== undefined) this.ignoredMints.delete(oldest);
+    }
+  }
+
+  isIgnored(mint: string): boolean {
+    return this.ignoredMints.has(mint);
+  }
+
   apply(e: FeedEvent): IngestResult {
+    if (this.ignoredMints.has(e.mint)) {
+      this.stats.ignored++;
+      return { status: 'ignored', reason: 'not quoted in SOL' };
+    }
     switch (e.kind) {
       case 'create':
         return this.create(e);
@@ -123,6 +175,7 @@ export class FeedIngestor {
     const symbol = e.symbol || e.mint.slice(0, 4).toUpperCase();
     const name = e.name || symbol;
     const { narrative, glyph } = classifyNarrative(name, symbol);
+    const feeRate = e.curveFeeRate ?? PUMP.feeRate;
     const token = this.world.addExternalToken({
       chain: 'sol',
       address: e.mint,
@@ -135,9 +188,9 @@ export class FeedIngestor {
       creator: e.trader,
       createdAt: at,
       decimals: PUMP_DECIMALS,
-      totalSupply: PUMP.totalSupply,
+      totalSupply: e.mayhem ? PUMP_MAYHEM_SUPPLY : PUMP.totalSupply,
       status: 'curve',
-      curve: { ...start, initialRealTokens: PUMP.curveTokens, feeRate: PUMP.feeRate },
+      curve: { ...start, initialRealTokens: PUMP.curveTokens, feeRate },
       pool: null,
       socials: {},
       narrative,
@@ -148,7 +201,7 @@ export class FeedIngestor {
       this.world.recordExternalTrade(token, {
         wallet: e.trader,
         side: 'buy',
-        nativeAmount: e.solAmount,
+        nativeAmount: walletSol('buy', e.solAmount, e.trader === PUMP_MAYHEM_AGENT ? 0 : feeRate),
         tokenAmount: e.initialBuy,
         at,
         txHash: e.signature,
@@ -169,20 +222,29 @@ export class FeedIngestor {
       this.stats.unknownToken++;
       return { status: 'unknown_token', mint: e.mint };
     }
+    const onCurve = !e.pool || e.pool === 'pump';
+    // A curve trade's amounts are SOL only on a SOL-quoted pump.fun curve: a token registered any
+    // other way (another venue, a curve quoted in another mint, loaded on demand) does not take them.
+    if (onCurve && t.launchpad !== PUMP.id) {
+      this.stats.ignored++;
+      return { status: 'ignored', reason: 'not a SOL-quoted pump.fun curve' };
+    }
     if (!this.firstSight(e)) return { status: 'duplicate' };
     const at = this.opts.now();
-    const onCurve = !e.pool || e.pool === 'pump';
     // A PumpSwap trade of a token we still have on its curve: the migration event was missed.
     if (!onCurve && !t.pool && t.launchpad === PUMP.id) this.migrateToPool(t, at);
     if (t.dormant) t.dormant = false;
+    const reserves = this.reservesAfter(t, e, onCurve);
+    const curveTrade = onCurve && !!t.curve && t.status !== 'migrated';
     const trade = this.world.recordExternalTrade(t, {
       wallet: e.trader,
       side: e.side,
-      nativeAmount: e.solAmount,
+      // PumpSwap amounts are taken as sent: no pump-amm trade could be captured to check their fee basis.
+      nativeAmount: curveTrade ? walletSol(e.side, e.solAmount, this.feeRateFor(t, e.trader)) : e.solAmount,
       tokenAmount: e.tokenAmount,
       at,
       txHash: e.signature,
-      ...this.reservesAfter(t, e, onCurve),
+      ...reserves,
       ...(e.newTokenBalance !== undefined ? { walletTokenBalance: e.newTokenBalance } : {}),
     });
     if (!trade) {
@@ -193,10 +255,18 @@ export class FeedIngestor {
     return { status: 'ok', token: t };
   }
 
+  /** The curve's fee rate for a trader (the mayhem agent trades fee-free). */
+  private feeRateFor(t: TokenState, trader: string): number {
+    return trader === PUMP_MAYHEM_AGENT ? 0 : (t.curve?.feeRate ?? PUMP.feeRate);
+  }
+
   /** The reserves a trade reports, in the World's terms. */
   private reservesAfter(t: TokenState, e: TradeEvent, onCurve: boolean): { curve?: ReturnType<typeof pumpCurveFromVirtual>; pool?: { native: number; tokens: number }; priceNative?: number } {
     if (onCurve && t.curve && t.status !== 'migrated' && e.vSolInBondingCurve && e.vTokensInBondingCurve) {
-      return { curve: pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve) };
+      const curve = pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve);
+      // Mayhem curves move their virtual SOL off the constant product: their real SOL is the flows'.
+      if (isMayhemToken(t)) curve.realNative = Math.max(0, t.curve.realNative + (e.side === 'buy' ? e.solAmount : -e.solAmount));
+      return { curve };
     }
     if (!t.pool) return {};
     if (e.solInPool && e.tokensInPool) return { pool: { native: e.solInPool, tokens: e.tokensInPool } };
@@ -221,22 +291,37 @@ export class FeedIngestor {
   }
 
   /**
-   * The completed curve's liquidity moves into its PumpSwap pool: the curve's real SOL against the
-   * tokens the curve never sold, LP burned (pump.fun migrations burn it).
+   * The completed curve's liquidity moves into its PumpSwap pool: the curve's real SOL at completion
+   * less the migration fee, against the 206.9M tokens the curve never sold, LP burned. A normal
+   * curve's completion state follows from its constant product whatever trades were missed (real
+   * SOL 85.005, so 84.990 SOL in the pool on mainnet); a mayhem curve's from its tracked real SOL.
    */
   private migrateToPool(t: TokenState, at: number): void {
     if (t.status === 'curve') this.world.completeCurve(t, at);
-    const realNative = t.curve?.realNative ?? 0;
     const pool: Omit<PoolRuntime, 'createdAt' | 'initialLiquidityUsd'> = {
       address: this.opts.pumpPoolAddress?.(t.address) ?? '',
       dex: PUMPSWAP.name,
       feeRate: PUMPSWAP.feeRate,
-      native: Math.max(realNative - PUMP.migrationFeeNative, 1e-6),
-      tokens: Math.max(1, t.totalSupply - (t.curve?.initialRealTokens ?? PUMP.curveTokens) + Math.max(0, t.curve?.realTokens ?? 0)),
+      native: Math.max(completedCurveSol(t) - Math.max(PUMP.migrationFeeNative, PUMP_MIGRATION_FEE_SOL), 1e-6),
+      tokens: PUMP_POOL_TOKENS,
       lpBurnedRate: 1,
     };
     this.world.migrateExternal(t, pool, at);
   }
+}
+
+/**
+ * Real SOL a pump.fun curve holds once complete (all of its real tokens sold). A normal curve is a
+ * constant product that completes with exactly the virtual token offset left, so this holds from
+ * any earlier state of the curve (trades missed, or the completion already marked by the World,
+ * which zeroes realTokens only). A mayhem curve's is its tracked real SOL.
+ */
+export function completedCurveSol(t: Pick<TokenState, 'curve' | 'launchpad' | 'totalSupply'>): number {
+  const c = t.curve;
+  if (!c) return 0;
+  if (isMayhemToken(t) || !(c.virtualNative > 0 && c.virtualTokens > 0)) return Math.max(0, c.realNative);
+  const virtualSolOffset = c.virtualNative - c.realNative;
+  return Math.max(0, c.realNative, (c.virtualNative * c.virtualTokens) / PUMP_VIRTUAL_TOKEN_OFFSET - virtualSolOffset);
 }
 
 function keyOf(e: FeedEvent): string {

@@ -13,7 +13,7 @@ import { PumpPortalClient, type PumpPortalOptions } from '../src/live/feed/pumpp
 
 const FIX = join(__dirname, 'fixtures', 'pumpportal');
 const lifecycle = JSON.parse(readFileSync(join(FIX, 'lifecycle.json'), 'utf8')) as Record<string, unknown>[];
-const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as { malformed: string[]; subscribedKeys: unknown };
+const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as { malformed: string[] } & Record<string, Record<string, unknown>>;
 
 interface FakeFeed {
   wss: WebSocketServer;
@@ -131,16 +131,72 @@ describe('PumpPortal client', () => {
     await until(() => feed.sockets.length === 1 && feed.received.length >= 2);
     const ws = feed.sockets[0];
     for (const raw of misc.malformed) ws.send(raw);
-    ws.send(JSON.stringify(misc.subscribedKeys));
-    ws.send(JSON.stringify({ message: 'Token trade subscriptions require an API key with at least 0.02 SOL' }));
+    ws.send(JSON.stringify(misc.subscribedMigration));
+    ws.send(JSON.stringify(misc.unsubscribed));
+    ws.send(JSON.stringify(misc.errorInvalidMethod));
     for (const f of lifecycle) ws.send(JSON.stringify(f));
     await until(() => events.length === lifecycle.length - 1);
-    expect(events.map((e) => e.kind)).toEqual(['create', 'trade', 'trade', 'trade', 'migrate', 'trade']);
+    expect(events.map((e) => e.kind)).toEqual(['create', ...Array(10).fill('trade'), 'migrate']);
     expect(c.diag.malformed).toBe(misc.malformed.length);
     expect(c.diag.notices).toBe(3);
-    expect(c.diag.refusals).toBe(1);
+    expect(c.diag.refusals).toBe(0);
+    expect(c.diag.serverErrors).toBe(1);
     expect(c.diag.creates).toBe(1);
+    expect(c.diag.trades).toBe(10);
+    expect(c.diag.tradeStreams).toBe('active');
     expect(c.lastEventAt).not.toBeNull();
+  });
+
+  it('stops sending trade subscriptions once PumpPortal refuses them (no funded key), and retries later', async () => {
+    const feed = await fakeFeed();
+    // PumpPortal without a funded key: every trade subscription draws the refusal notice
+    feed.wss.on('connection', (ws) => {
+      ws.on('message', (raw) => {
+        const m = JSON.parse(String(raw)) as { method: string };
+        if (m.method === 'subscribeTokenTrade' || m.method === 'subscribeAccountTrade') ws.send(JSON.stringify(misc.tradeStreamsRefused));
+      });
+    });
+    const warnings: string[] = [];
+    const { c } = client(feed.url, { tradeRetryMs: 800, log: { warn: (l: string) => warnings.push(l), info: () => {} } });
+    c.subscribeTokenTrades(['mintA']);
+    c.setAccounts(['walletA']);
+    c.start();
+    await until(() => c.diag.tradeStreams === 'refused');
+    const sent = () => feed.received.filter((m) => m.method !== 'subscribeNewToken' && m.method !== 'subscribeMigration');
+    await new Promise((r) => setTimeout(r, 60));
+    const afterRefusal = sent().length;
+    // new launches keep coming: none of them is sent while the streams are refused
+    c.subscribeTokenTrades(['mintB']);
+    c.subscribeTokenTrades(['mintC']);
+    c.unsubscribeTokenTrades(['mintA']);
+    await new Promise((r) => setTimeout(r, 120));
+    expect(sent()).toHaveLength(afterRefusal);
+    expect(warnings.filter((w) => w.includes('trade streams refused'))).toHaveLength(1);
+    expect(warnings[0]).toContain('PUMPPORTAL_API_KEY');
+    // the retry sends the whole wanted set again (and is refused again)
+    await until(() => sent().length > afterRefusal, 4000);
+    expect(sent().slice(afterRefusal)).toContainEqual({ method: 'subscribeTokenTrade', keys: ['mintB', 'mintC'] });
+    expect(c.trackedTokens).toBe(2);
+  });
+
+  it('a refused connection tries the trade streams again after a reconnect, and a trade marks them active', async () => {
+    const feed = await fakeFeed();
+    let refuse = true;
+    feed.wss.on('connection', (ws) => {
+      ws.on('message', (raw) => {
+        const m = JSON.parse(String(raw)) as { method: string };
+        if (m.method === 'subscribeTokenTrade' && refuse) ws.send(JSON.stringify(misc.tradeStreamsRefused));
+      });
+    });
+    const { c } = client(feed.url, { tradeRetryMs: 60_000 });
+    c.subscribeTokenTrades(['mintA']);
+    c.start();
+    await until(() => c.diag.tradeStreams === 'refused');
+    refuse = false; // the key got funded
+    feed.sockets[0].terminate();
+    await until(() => feed.sockets.length === 2 && feed.received.filter((m) => m.method === 'subscribeTokenTrade').length === 2);
+    feed.sockets[1].send(JSON.stringify(lifecycle[2]));
+    await until(() => c.diag.tradeStreams === 'active');
   });
 
   it('reconnects with backoff after the server drops it and re-sends every subscription', async () => {
@@ -197,8 +253,9 @@ describe('PumpPortal client', () => {
     const feed = await fakeFeed({ autoPong: false });
     const { c } = client(feed.url, { pingEveryMs: 40, staleMs: 120 });
     c.start();
-    await until(() => feed.sockets.length >= 2, 5000);
-    expect(c.diag.connects).toBeGreaterThanOrEqual(2);
+    // (wait on the client's own count: the server sees the new socket before the client's 'open')
+    await until(() => feed.sockets.length >= 2 && c.diag.connects >= 2, 5000);
+    expect(c.diag.disconnects).toBeGreaterThanOrEqual(1);
   });
 
   it('stays connected while pongs arrive, even without data', async () => {
