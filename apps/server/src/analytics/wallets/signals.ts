@@ -86,6 +86,17 @@ interface TokSig {
   bundlerAt: number;
   largeAt: number;
   smart: { w: string; t: number }[];
+  /** Market cap at the token's first signal, signals fired in total and per kind (absent before the first). */
+  first?: number;
+  fired?: number;
+  byKind?: Partial<Record<SignalKind, number>>;
+}
+
+/** A token's signal history so far (grouped feed rows). */
+export interface TokenSignalStats {
+  firstTriggerMcUsd: number;
+  timesFired: number;
+  timesFiredByKind: Partial<Record<SignalKind, number>>;
 }
 
 /** Highest market cap since the trigger as a multiple of the market cap at the trigger (>= 1). */
@@ -159,6 +170,11 @@ export class SignalEngine {
 
   emit(t: TokenState, kind: SignalKind, title: string, detail: string, wallets: string[]): StoredSignal {
     const mcap = this.ctx.world.marketCapUsd(t);
+    const ts = this.state(t.address);
+    if (!ts.fired) ts.first = mcap;
+    ts.fired = (ts.fired ?? 0) + 1;
+    const byKind = (ts.byKind ??= {});
+    byKind[kind] = (byKind[kind] ?? 0) + 1;
     this.seq++;
     const s: StoredSignal = {
       id: `sig_${t.chain}_${this.seq.toString(36)}`,
@@ -198,6 +214,13 @@ export class SignalEngine {
   onSignal(listener: (s: Signal) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** First-trigger market cap and fire counts of a token (null before its first signal). */
+  tokenStats(token: string): TokenSignalStats | null {
+    const ts = this.tok.get(token);
+    if (!ts?.fired) return null;
+    return { firstTriggerMcUsd: ts.first ?? 0, timesFired: ts.fired, timesFiredByKind: { ...ts.byKind } };
   }
 
   /** A token's stored signals, newest first. */

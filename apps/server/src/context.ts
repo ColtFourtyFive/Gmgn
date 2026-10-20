@@ -143,7 +143,7 @@ export interface AnalyticsApi {
   walletRisk(w: WalletState): WalletRiskReport;
   leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): LeaderboardRow[];
   feed(chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit: number, viewer: Viewer): FeedItem[];
-  signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[];
+  signals(chain: ChainId, opts: { kind?: string; limit?: number; quality?: boolean; before?: number }): Signal[];
   /** One token's signals newest first (chart markers). */
   tokenSignals(t: TokenState, limit?: number): Signal[];
   /** Every signal fired once the engine is live (never during warmup); returns an unsubscribe. */

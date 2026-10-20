@@ -1339,6 +1339,33 @@ describe('realtime channels', () => {
     expect((pushed[1].data as Signal[])[0].kind).toBe('migration');
   });
 
+  it('carries token-level context for the grouped feed and filters low-quality tokens and by time on request', async () => {
+    const s = mkWallet();
+    s.tags.add('smart');
+    const t = mkToken();
+    buy(s, t, 0.5);
+    const firstMc = world.marketCapUsd(t);
+    world.emit('tokenFlag', t, 'boost');
+    buy(pumper, t, 5);
+    world.emit('tokenFlag', t, 'boost');
+    const [latest] = wa.signals('sol', { limit: 500 }).filter((x) => x.token.address === t.address);
+    expect(latest).toMatchObject({ kind: 'boost', timesFired: 3, timesFiredByKind: { smart_buy: 1, boost: 2 }, lowQuality: false });
+    expect(latest.firstTriggerMcUsd).toBeCloseTo(firstMc, 6);
+    expect(latest.cur).toEqual({ holders: t.holders.size, top10: expect.any(Number), liquidityUsd: world.liquidityUsd(t) });
+
+    // a honeypot fails the quality pre-filter
+    const bscDev = mkWallet('bsc', { native: 100 });
+    const hp = mkToken('bsc', bscDev);
+    hp.isHoneypot = true;
+    world.emit('tokenFlag', hp, 'boost');
+    const all = (await call<Signal[]>('/api/bsc/signals')).body;
+    expect(all.find((x) => x.token.address === hp.address)?.lowQuality).toBe(true);
+    expect((await call<Signal[]>('/api/bsc/signals?quality=1')).body.some((x) => x.token.address === hp.address)).toBe(false);
+    const older = (await call<Signal[]>(`/api/sol/signals?before=${latest.createdAt}`)).body;
+    expect(older.length).toBeGreaterThan(0);
+    expect(older.every((x) => x.createdAt < latest.createdAt)).toBe(true);
+  });
+
   it("serves a token's signals newest first and pushes new ones on its token channel (chart markers)", async () => {
     const s = mkWallet();
     s.tags.add('smart');

@@ -1,19 +1,24 @@
 // Signals (/:chain/signals): live token signals (smart/KOL buys, clusters,
 // whale buys, spikes, ATHs, milestones, migrations, dev/bundler sells …) as
-// cards, newest first, with kind filter chips and a 2x hit-rate summary.
+// cards, newest first, with kind filter chips and a 2x hit-rate summary;
+// grouped per token by default (first-signal MC, times fired, latest), with
+// the quality filter on by default, and Subscribe to get the chosen kinds as
+// in-app notifications (a signal_subscription alert rule).
 
 import { useMemo, useState } from 'react';
 import { CHAINS, formatInt, formatPercent, type ChainId, type Signal, type SignalKind } from '@trenchscope/shared';
-import { Radio, RotateCcw, Target } from 'lucide-react';
+import { BellPlus, Radio, RotateCcw, Target } from 'lucide-react';
 import clsx from 'clsx';
+import { AlertForm, type AlertPrefill } from '@/components/account/alerts/AlertForm';
 import { StatTile } from '@/components/common';
 import { LiveStatus, QuickBuyAmount, useQuickBuyAmount } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
-import { SIGNAL_META, SIGNAL_ORDER, SignalCard, useSignals } from '@/components/signals';
+import { groupSignals, SIGNAL_META, SIGNAL_ORDER, SignalCard, SignalGroupCard, useSignals } from '@/components/signals';
 import { Button, EmptyState, ErrorState, Skeleton, Toggle } from '@/components/ui';
 import { Multiple } from '@/components/wallet';
 import { useIsMobile, useLocalStorage } from '@/hooks';
 import { useChain } from '@/lib/chain';
+import { requireAuth } from '@/store/session';
 
 const PAGE = 60;
 
@@ -102,6 +107,9 @@ function Signals({ chain }: { chain: ChainId }) {
   const [storedKinds, setKinds] = useLocalStorage<SignalKind[]>('ts.signals.kinds', []);
   const kinds = useMemo(() => (Array.isArray(storedKinds) ? storedKinds.filter((k) => k in SIGNAL_META) : []), [storedKinds]);
   const [hitsOnly, setHitsOnly] = useLocalStorage('ts.signals.hitsOnly', false);
+  const [grouped, setGrouped] = useLocalStorage('ts.signals.grouped', true);
+  const [quality, setQuality] = useLocalStorage('ts.signals.quality', true);
+  const [subscribe, setSubscribe] = useState<AlertPrefill | null>(null);
   const [buyAmount, setBuyAmount] = useQuickBuyAmount(chain);
   const [limit, setLimit] = useState(PAGE);
 
@@ -113,8 +121,10 @@ function Signals({ chain }: { chain: ChainId }) {
 
   const filtered = useMemo(() => {
     const set = new Set(kinds);
-    return live.signals.filter((s) => (set.size === 0 || set.has(s.kind)) && (!hitsOnly || s.maxMultiple >= 2));
-  }, [live.signals, kinds, hitsOnly]);
+    return live.signals.filter((s) => (set.size === 0 || set.has(s.kind)) && (!hitsOnly || s.maxMultiple >= 2) && !(quality && s.lowQuality));
+  }, [live.signals, kinds, hitsOnly, quality]);
+  const groups = useMemo(() => (grouped ? groupSignals(filtered) : []), [grouped, filtered]);
+  const shownCount = grouped ? groups.length : filtered.length;
 
   const toggle = (k: SignalKind) => {
     setLimit(PAGE);
@@ -123,7 +133,9 @@ function Signals({ chain }: { chain: ChainId }) {
   const reset = () => {
     setKinds([]);
     setHitsOnly(false);
+    setQuality(false);
   };
+  const openSubscribe = () => requireAuth(() => setSubscribe({ kind: 'signal_subscription', chain, signalKinds: kinds, excludeRisk: quality, repeat: true }));
 
   const headerActions = (
     <>
@@ -152,7 +164,19 @@ function Signals({ chain }: { chain: ChainId }) {
             <KindChip key={k} kind={k} active={kinds.includes(k)} count={counts.get(k) ?? 0} onClick={() => toggle(k)} />
           ))}
         </div>
-        <Toggle size="sm" checked={hitsOnly} onChange={setHitsOnly} label="Only 2x+ hits" className="shrink-0 md:pt-1.5" />
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 md:pt-1.5">
+          <Toggle
+            size="sm"
+            checked={quality}
+            onChange={setQuality}
+            label={<span title="Hide tokens with a rug ratio above 30%, wash trading or a honeypot contract">Quality filter</span>}
+          />
+          <Toggle size="sm" checked={grouped} onChange={setGrouped} label="Group by token" />
+          <Toggle size="sm" checked={hitsOnly} onChange={setHitsOnly} label="Only 2x+ hits" />
+          <Button size="sm" variant="primary" icon={<BellPlus size={13} />} onClick={openSubscribe} title="Get these signals as in-app notifications">
+            Subscribe
+          </Button>
+        </div>
       </div>
 
       {live.error ? (
@@ -163,11 +187,11 @@ function Signals({ chain }: { chain: ChainId }) {
         <CardsSkeleton />
       ) : filtered.length === 0 ? (
         <div className="panel">
-          {kinds.length > 0 || hitsOnly ? (
+          {kinds.length > 0 || hitsOnly || quality ? (
             <EmptyState
               icon={<Target size={18} />}
               title="No signals match"
-              description="Nothing of the selected kinds has fired yet. New signals appear here live."
+              description="No signals match. Try enabling more kinds, or turn the quality filter off. New signals appear here live."
               action={
                 <Button size="sm" variant="outline" icon={<RotateCcw size={13} />} onClick={reset}>
                   Show all signals
@@ -181,17 +205,18 @@ function Signals({ chain }: { chain: ChainId }) {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-live="off">
-            {filtered.slice(0, limit).map((s) => (
-              <SignalCard key={s.id} signal={s} buyAmount={buyAmount} fresh={live.freshIds.has(s.id)} />
-            ))}
+            {grouped
+              ? groups.slice(0, limit).map((g) => <SignalGroupCard key={g.key} group={g} buyAmount={buyAmount} fresh={live.freshIds.has(g.latest.id)} />)
+              : filtered.slice(0, limit).map((s) => <SignalCard key={s.id} signal={s} buyAmount={buyAmount} fresh={live.freshIds.has(s.id)} />)}
           </div>
-          {filtered.length > limit && (
+          {shownCount > limit && (
             <Button variant="outline" className="self-center" onClick={() => setLimit((l) => l + PAGE)}>
-              Show more ({filtered.length - limit})
+              Show more ({shownCount - limit})
             </Button>
           )}
         </>
       )}
+      <AlertForm open={subscribe !== null} onClose={() => setSubscribe(null)} rule={null} chain={chain} prefill={subscribe ?? undefined} />
     </Page>
   );
 }

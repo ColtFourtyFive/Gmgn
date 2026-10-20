@@ -41,6 +41,8 @@ const FeedQuery = z.object({
 const SignalsQuery = z.object({
   kind: z.enum(SIGNAL_KINDS as [string, ...string[]]).optional(),
   limit: Limit,
+  quality: Bool,
+  before: z.coerce.number().finite().optional(),
 });
 const CalloutsQuery = z.object({
   filter: z.enum(['all', 'kol', 'hits']).optional(),
@@ -118,7 +120,7 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
   app.get('/api/:chain/signals', async (req) => {
     const { chain } = parse(ChainParams, req.params);
     const q = parse(SignalsQuery, req.query);
-    return ctx.analytics.signals(chain, { kind: q.kind, limit: q.limit });
+    return ctx.analytics.signals(chain, { kind: q.kind, limit: q.limit, quality: q.quality === '1' || q.quality === 'true', before: q.before });
   });
 
   app.get('/api/:chain/callouts', async (req) => {

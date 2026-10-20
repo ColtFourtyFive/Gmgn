@@ -1,7 +1,10 @@
 // Alert rules: price / market-cap level crossings, 5m price change, smart
 // money buy clusters (evaluated every second), plus trades by a watched wallet
-// and new launches matching a keyword (event driven). One-shot rules disable
-// themselves after firing; repeating rules cool down for a minute.
+// and new launches matching a keyword (event driven), and signal subscriptions
+// (signalSubs.ts: fired signals matched by (chain, kind), a token's matches
+// merged within a minute into one notification, capped per rule per hour).
+// One-shot rules disable themselves after firing; repeating rules cool down
+// for a minute (subscriptions: per token, through the merge window).
 
 import {
   CHAINS,
@@ -13,12 +16,15 @@ import {
   shortAddress,
   type AlertRule,
   type ChainId,
+  type NotificationKind,
+  type Signal,
   type Trade,
 } from '@trenchscope/shared';
 import type { AppContext } from '../context';
 import type { TokenState } from '../sim/world';
 import { badRequest, includesIgnoreCase, normalizeAddress, notFound, parse } from './common';
 import { alertSchema, type AlertInput } from './schemas';
+import { HOUR_MS, SIGNAL_MERGE_MS, matchesSubscription, subscriptionTitle } from './signalSubs';
 
 const MAX_ALERTS = 100;
 const EVALUATE_EVERY_MS = 1000;
@@ -35,6 +41,13 @@ interface AlertRecord {
 export interface StoredAlert {
   accountId: string;
   rule: AlertRule;
+}
+
+/** A subscription's matches on one token waiting for its merge window. */
+interface PendingSignals {
+  record: AlertRecord;
+  token: string;
+  signals: Signal[];
 }
 
 function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
@@ -61,6 +74,14 @@ export class Alerts {
   private readonly smartTokens = new Set<string>();
   /** Smart-money buy timestamps per token watched by a smart_buys rule. */
   private readonly smartBuys = new Map<string, number[]>();
+  /** Enabled signal subscriptions by `${chain}:${kind}` (and `${chain}:*` for rules matching any kind). */
+  private readonly signalRules = new Map<string, AlertRecord[]>();
+  private unsubscribeSignals: (() => void) | null = null;
+  /** `${ruleId}|${token}` -> matches waiting to be sent / when the last notification for it went out. */
+  private readonly pendingSignals = new Map<string, PendingSignals>();
+  private readonly lastSignalNote = new Map<string, number>();
+  /** ruleId -> times of its notifications in the last hour (maxPerHour). */
+  private readonly signalLog = new Map<string, number[]>();
 
   constructor(private readonly ctx: AppContext) {}
 
@@ -124,12 +145,14 @@ export class Alerts {
     }
     if (input.kind === 'wallet_trade' && world.getWallet(wallet!)?.chain !== input.chain) throw notFound('wallet');
     const levels = input.kind === 'price' || input.kind === 'mcap';
+    const subscription = input.kind === 'signal_subscription';
     Object.assign(record.rule, {
       ...input,
-      token: input.kind === 'new_token' ? null : token,
+      token: input.kind === 'new_token' || subscription ? null : token,
       wallet: input.kind === 'wallet_trade' ? wallet : null,
       keyword: input.kind === 'new_token' ? input.keyword || null : null,
       direction: levels ? (input.direction ?? (input.value >= current! ? 'above' : 'below')) : input.direction,
+      signals: subscription ? input.signals : null,
     });
     record.last = levels ? current : null;
   }
@@ -138,14 +161,27 @@ export class Alerts {
     this.byWallet.clear();
     this.newTokenRules.clear();
     this.smartTokens.clear();
+    this.signalRules.clear();
     for (const record of this.records.values()) {
       const { rule } = record;
       if (!rule.enabled) continue;
       if (rule.kind === 'wallet_trade') pushTo(this.byWallet, `${rule.chain}:${rule.wallet}`, record);
       else if (rule.kind === 'new_token') pushTo(this.newTokenRules, rule.chain, record);
       else if (rule.kind === 'smart_buys') this.smartTokens.add(rule.token!);
+      else if (rule.kind === 'signal_subscription' && rule.signals) {
+        const kinds = new Set<string>();
+        for (const g of rule.signals.groups) for (const k of g.kinds.length ? g.kinds : ['*']) kinds.add(k);
+        for (const k of kinds) pushTo(this.signalRules, `${rule.chain}:${k}`, record);
+      }
     }
     for (const token of this.smartBuys.keys()) if (!this.smartTokens.has(token)) this.smartBuys.delete(token);
+    for (const [key, p] of this.pendingSignals) if (!p.record.rule.enabled || this.records.get(p.record.rule.id) !== p.record) this.pendingSignals.delete(key);
+    // Signal DTOs are built for listeners: listen only while a subscription is enabled.
+    if (this.signalRules.size > 0 && !this.unsubscribeSignals) this.unsubscribeSignals = this.ctx.analytics.onSignal((s) => this.onSignal(s));
+    else if (this.signalRules.size === 0 && this.unsubscribeSignals) {
+      this.unsubscribeSignals();
+      this.unsubscribeSignals = null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -155,6 +191,7 @@ export class Alerts {
   evaluate(): void {
     const { world } = this.ctx;
     const now = world.now;
+    this.flushSignals(now);
     for (const [token, times] of this.smartBuys) {
       const fresh = times.filter((t) => now - t < SMART_WINDOW_MS);
       if (fresh.length) this.smartBuys.set(token, fresh);
@@ -221,11 +258,68 @@ export class Alerts {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Signal subscriptions
+  // ---------------------------------------------------------------------------
+
+  /** A fired signal (never during warmup): queue it for every enabled subscription it matches. */
+  private onSignal(signal: Signal): void {
+    if (this.ctx.engine.warming) return;
+    const seen = new Set<AlertRecord>();
+    const candidates = [...(this.signalRules.get(`${signal.chain}:${signal.kind}`) ?? []), ...(this.signalRules.get(`${signal.chain}:*`) ?? [])];
+    let smart: number | null | undefined;
+    const smartHolders = () => {
+      if (smart === undefined) {
+        const t = this.ctx.world.getToken(signal.token.address);
+        smart = t ? this.ctx.analytics.tokenSummary(t).smartDegenCount : null;
+      }
+      return smart;
+    };
+    for (const record of candidates) {
+      if (seen.has(record)) continue;
+      seen.add(record);
+      const { rule } = record;
+      if (!rule.enabled || !rule.signals || !matchesSubscription(rule.signals, signal, { now: this.ctx.world.now, smartHolders })) continue;
+      const key = `${rule.id}|${signal.token.address}`;
+      const pending = this.pendingSignals.get(key);
+      if (pending) pending.signals.push(signal);
+      else this.pendingSignals.set(key, { record, token: signal.token.address, signals: [signal] });
+    }
+  }
+
+  /**
+   * Send what the merge windows allow: a token's first match goes out at the next evaluation, later ones
+   * wait until SIGNAL_MERGE_MS after the last notification for that token and go out together. Past a
+   * rule's maxPerHour, matches are dropped.
+   */
+  private flushSignals(now: number): void {
+    for (const [key, p] of this.pendingSignals) {
+      const { rule } = p.record;
+      if (!rule.enabled || !rule.signals) {
+        this.pendingSignals.delete(key);
+        continue;
+      }
+      if (now - (this.lastSignalNote.get(key) ?? -Infinity) < SIGNAL_MERGE_MS) continue;
+      this.pendingSignals.delete(key);
+      const log = (this.signalLog.get(rule.id) ?? []).filter((t) => now - t < HOUR_MS);
+      this.signalLog.set(rule.id, log);
+      if (log.length >= rule.signals.maxPerHour) continue;
+      log.push(now);
+      this.lastSignalNote.set(key, now);
+      const latest = p.signals[p.signals.length - 1];
+      const extra = p.signals.length > 1 ? ` · ${p.signals.length} signals` : '';
+      const name = rule.signals.name ? ` · ${rule.signals.name}` : '';
+      this.fire(p.record, subscriptionTitle(latest.token.symbol, p.signals), `${latest.detail} · MC ${formatUsd(latest.token.marketCapUsd)}${extra}${name}`, p.token, 'signal');
+    }
+    // forget merge windows long past
+    for (const [key, at] of this.lastSignalNote) if (now - at > SIGNAL_MERGE_MS * 2 && !this.pendingSignals.has(key)) this.lastSignalNote.delete(key);
+  }
+
   private ready(rule: AlertRule): boolean {
     return rule.enabled && (rule.lastTriggeredAt === null || this.ctx.world.now - rule.lastTriggeredAt >= REPEAT_COOLDOWN_MS);
   }
 
-  private fire(record: AlertRecord, title: string, body: string, token: string | null = record.rule.token): void {
+  private fire(record: AlertRecord, title: string, body: string, token: string | null = record.rule.token, kind: NotificationKind = 'alert'): void {
     const { rule } = record;
     rule.lastTriggeredAt = this.ctx.world.now;
     if (!rule.repeat) {
@@ -233,7 +327,7 @@ export class Alerts {
       this.reindex();
     }
     this.ctx.accounts.notify(record.accountId, {
-      kind: 'alert',
+      kind,
       title,
       body: rule.note ? `${body} · ${rule.note}` : body,
       chain: rule.chain,
@@ -253,6 +347,9 @@ export class Alerts {
   restore(stored: StoredAlert[]): void {
     this.records.clear();
     this.smartBuys.clear();
+    this.pendingSignals.clear();
+    this.lastSignalNote.clear();
+    this.signalLog.clear();
     for (const { accountId, rule } of stored) this.records.set(rule.id, { accountId, rule, last: null });
     this.reindex();
   }

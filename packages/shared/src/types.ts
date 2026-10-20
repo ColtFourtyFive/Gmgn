@@ -632,6 +632,52 @@ export interface Signal {
   maxMultiple: number;
   wallets: string[];
   createdAt: number;
+  // Token-level context (PRD §6.12; the server always sets these, optional so clients' fixtures type-check):
+  /** Market cap at the token's first signal of any kind (USD). */
+  firstTriggerMcUsd?: number;
+  /** Signals the token has fired so far, in total and per kind. */
+  timesFired?: number;
+  timesFiredByKind?: Partial<Record<SignalKind, number>>;
+  /** The token now: holders, top-10 share of supply, liquidity (USD). */
+  cur?: { holders: number; top10: number; liquidityUsd: number };
+  /** Fails the quality pre-filter: rug ratio > 0.3, wash trading or honeypot (PRD §8.9). */
+  lowQuality?: boolean;
+}
+
+/**
+ * One AND-group of a signal subscription (a subscription matches when any group does). Bounds are inclusive;
+ * null / absent = open. MC bounds are the token's market cap now, trigger bounds its market cap at the signal.
+ */
+export interface SignalFilterGroup {
+  /** Signal kinds to match; empty = every kind. */
+  kinds: SignalKind[];
+  mcMin?: number | null;
+  mcMax?: number | null;
+  triggerMcMin?: number | null;
+  triggerMcMax?: number | null;
+  minLiquidityUsd?: number | null;
+  minHolders?: number | null;
+  /** Top-10 holders' share of supply (0..1). */
+  maxTop10?: number | null;
+  /** Smart-money wallets holding. */
+  minSmart?: number | null;
+  /** Token age in minutes. */
+  minAgeMin?: number | null;
+  maxAgeMin?: number | null;
+  /** Launchpad ids; empty = any. */
+  launchpads?: string[];
+  /** Skip low-quality tokens (Signal.lowQuality). */
+  excludeRisk: boolean;
+}
+
+/** AlertRule.signals for kind 'signal_subscription' (PRD §9.4). */
+export interface SignalSubscriptionSpec {
+  /** Display name (the rule list and notifications). */
+  name: string;
+  /** OR of AND-groups, 1-5. */
+  groups: SignalFilterGroup[];
+  /** Notifications per hour at most (signals past it are dropped until the hour rolls). */
+  maxPerHour: number;
 }
 
 /** A wallet's public calls (kol_call signals) and how they played out; a hit = maxMultiple >= 2. */
@@ -1180,7 +1226,8 @@ export type AlertKind =
   | 'change' //       token 5m price change exceeds value (pct)
   | 'wallet_trade' // any trade by wallet
   | 'new_token' //    new token matching keyword
-  | 'smart_buys'; //  token gets >= value smart buys within 5m
+  | 'smart_buys' //   token gets >= value smart buys within 5m
+  | 'signal_subscription'; // signals matching AlertRule.signals (in-app notifications)
 
 export interface AlertRule {
   id: string;
@@ -1196,6 +1243,8 @@ export interface AlertRule {
   createdAt: number;
   lastTriggeredAt: number | null;
   note: string;
+  /** signal_subscription rules: what to match (null for other kinds). */
+  signals?: SignalSubscriptionSpec | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1287,6 +1336,7 @@ export type NotificationKind =
   | 'copytrade'
   | 'sniper'
   | 'follow_trade'
+  | 'signal' //   a signal subscription matched
   | 'system';
 
 export interface AppNotification {

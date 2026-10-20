@@ -59,7 +59,7 @@ current `low` tier can fail to land.
 | GET | `/api/:chain/wallets/:address/risk` | | `WalletRiskReport` (risk check, see below) |
 | GET | `/api/:chain/leaderboard` | `tag?` = `smart\|kol\|sniper\|whale\|all`, `period?` (`1d\|7d\|30d`), `sort?` = `pnl\|winRate\|volume\|tokens\|pnlRate`, `order?` = `desc\|asc` (default `desc`), `limit?` | `LeaderboardRow[]` |
 | GET | `/api/:chain/feed` | `kind` = `smart\|kol\|follow\|all` (default `all`), `limit?` | `FeedItem[]` newest first, with `positionEvent` (`follow` 🔒) |
-| GET | `/api/:chain/signals` | `kind?` (`SignalKind`), `limit?` | `Signal[]` newest first |
+| GET | `/api/:chain/signals` | `kind?` (`SignalKind`), `limit?`, `quality?` (`1`: leave out `lowQuality` tokens), `before?` (ms: strictly older) | `Signal[]` newest first (token-level context below) |
 | GET | `/api/:chain/callouts` | `filter?` (`CalloutFilter`: `all\|kol\|hits`, default `all`), `limit?` (default 100, max 500) | `Signal[]` (`kol_call`) newest first |
 | GET | `/api/:chain/narratives` | | `Narrative[]` by heat |
 
@@ -96,6 +96,12 @@ locally; REST responses (search included) include them when a token is presented
   `summary` counts each status and sums the rows' `holdRate` (`holdRateTotal`). Wallets the simulator
   pruned drop out without renumbering.
 - `TokenSecurity.safety` (every summary, list row and detail): see "Safety score" below.
+- Signals (REST, the `signals:<chain>` and token channels, notifications) carry token-level context for the
+  grouped feed: `firstTriggerMcUsd` (market cap at the token's first signal of any kind), `timesFired` /
+  `timesFiredByKind` (signals the token fired so far, kept with the signal engine's per-token state),
+  `cur` (`holders`, `top10` = top-10 share of supply, `liquidityUsd`, from the token's summary at most ~30s old)
+  and `lowQuality` (the PRD §8.9 quality pre-filter: rug ratio > 0.3, wash trading or a honeypot). Always set
+  by the server; optional in the type.
 - `WalletProfile.createdTokenCount` counts the same tokens `/created-tokens` lists (launches the simulator
   has since deleted are left out of both).
 - `WalletPeriodStats` (profile `stats`, leaderboard rows) measures volume the same way in every period:
@@ -240,6 +246,20 @@ and loses the `user` channel).
 | PATCH/DELETE | `/api/sniper/:id` 🔒 | | `SniperTask` / `{ ok: true }` |
 | GET/POST | `/api/alerts` 🔒 | POST body: `Omit<AlertRule,'id'\|'createdAt'\|'lastTriggeredAt'>` | `AlertRule[]` / `AlertRule` |
 | PATCH/DELETE | `/api/alerts/:id` 🔒 | | `AlertRule` / `{ ok: true }` |
+
+Signal subscriptions (`AlertRule.kind: 'signal_subscription'`, PRD §9.4): `signals` =
+`SignalSubscriptionSpec { name (<= 40), groups: SignalFilterGroup[] (1-5), maxPerHour (1-120, default 30) }`;
+`token` / `wallet` are null. A fired signal matches when any group does; inside a group every set bound must
+hold (inclusive, null = open): `kinds` (empty = any), `mcMin` / `mcMax` (market cap now), `triggerMcMin` /
+`triggerMcMax` (market cap at the signal), `minLiquidityUsd`, `minHolders`, `maxTop10` (0..1), `minSmart`
+(smart-money holders), `minAgeMin` / `maxAgeMin` (token age), `launchpads` (ids on the rule's chain, 400
+otherwise), `excludeRisk` (default true: skip `lowQuality` tokens). A bound on a value the server cannot
+read never passes. Rules are indexed by (chain, kind); matching starts once the engine is live (never during
+warmup). Delivery is in-app (`notification` on `user`, `kind: 'signal'`, `token` = the token): a token's
+first match goes out within a second; matches on it within 60s of that notification are merged into the next
+one ("$PEPE: Smart money buy · KOL buy", body = the latest detail, its market cap, "· N signals" when merged,
+and the subscription's name). Past `maxPerHour` notifications in the last hour, matches are dropped. `repeat:
+false` switches the rule off after its first notification, like other alerts.
 
 Sell initials (`/api/trade/initials`): the sell that takes out what the position cost and leaves the rest
 as a free ride. The target is the PnL engine's cost basis of the tokens still held (`costBasisUsd`: average

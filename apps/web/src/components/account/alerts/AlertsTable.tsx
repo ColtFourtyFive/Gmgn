@@ -13,7 +13,7 @@ import { errorMessage } from '@/lib/format';
 import { toast } from '@/store/toasts';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { accountKeys, useTokenMeta, useWalletProfile } from '../queries';
-import { ALERT_KIND } from './meta';
+import { ALERT_KIND, signalFiltersLabel, signalKindsLabel } from './meta';
 
 function TokenCell({ rule }: { rule: AlertRule }) {
   const q = useTokenMeta(rule.chain, rule.token);
@@ -75,6 +75,18 @@ function Condition({ rule }: { rule: AlertRule }) {
           <span className="chip bg-panel-3 text-fg">{rule.keyword ?? 'anything'}</span>
         </span>
       );
+    case 'signal_subscription': {
+      const groups = rule.signals?.groups ?? [];
+      const filters = groups[0] ? signalFiltersLabel(groups[0]) : '';
+      return (
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-fg">{signalKindsLabel(groups)}</span>
+          <span className="truncate text-xs text-muted">
+            {[filters, groups.length > 1 ? `or ${groups.length - 1} more group${groups.length > 2 ? 's' : ''}` : '', `≤ ${rule.signals?.maxPerHour ?? 30}/h`].filter(Boolean).join(' · ')}
+          </span>
+        </span>
+      );
+    }
   }
 }
 
@@ -93,6 +105,7 @@ function Subject({ rule }: { rule: AlertRule }) {
           {meta.subject === 'token' && <TokenCell rule={rule} />}
           {meta.subject === 'wallet' && <WalletCell rule={rule} />}
           {meta.subject === 'keyword' && <span className="text-fg">New launches</span>}
+          {meta.subject === 'signals' && <span className="truncate text-fg">{rule.signals?.name || 'Signals'}</span>}
         </span>
       </span>
     </span>
@@ -219,7 +232,7 @@ export function AlertsTable({ rules, loading, onEdit, onNew }: AlertsTableProps)
     <EmptyState
       icon={<BellPlus size={18} />}
       title="No alerts yet"
-      description="Get notified when a token crosses a price or market cap, pumps or dumps fast, draws smart-money buys, when a wallet trades, or when a matching token launches."
+      description="Get notified when a token crosses a price or market cap, pumps or dumps fast, draws smart-money buys, when a wallet trades, when a matching token launches, or when signals you subscribe to fire."
       action={
         <Button variant="primary" size="sm" icon={<BellPlus size={13} />} onClick={onNew}>
           Create your first alert

@@ -20,6 +20,7 @@ import {
   type SignalKind,
   type TokenPositionRow,
   type TokenRef,
+  type TokenSummary,
   type Trade,
   type WalletCalls,
   type WalletPeriod,
@@ -31,6 +32,7 @@ import {
 } from '@trenchscope/shared';
 import type { AppContext, Viewer } from '../../context';
 import type { PositionState, TokenState, WalletState } from '../../sim/world';
+import { tokenAnalyticsFor } from '../tokens';
 import { viewerLabel, viewerTags } from '../viewer';
 import { EntryWatch, type PendingEntry } from './entries';
 import { DAY_MS, HOUR_MS, median } from './metrics';
@@ -206,6 +208,13 @@ interface Persisted {
 }
 
 const ANON: Viewer = { accountId: null };
+
+/** Rug ratio above this, wash trading or a honeypot: the signal quality pre-filter (PRD §8.9). */
+export const SIGNAL_QUALITY_MAX_RUG = 0.3;
+
+export function isLowQuality(s: Pick<TokenSummary, 'security'>): boolean {
+  return s.security.rugRatio > SIGNAL_QUALITY_MAX_RUG || s.security.isWashTrading || s.security.isHoneypot === true;
+}
 
 function hasFeedTag(tags: readonly WalletTag[]): boolean {
   for (const t of tags) if (FEED_TAGS.includes(t)) return true;
@@ -997,10 +1006,20 @@ export class WalletAnalytics {
   // Signals
   // -------------------------------------------------------------------------
 
+  /** The token's recent summary (holder / risk context of signal rows); null where token analytics is not installed. */
+  private recentSummary(t: TokenState): TokenSummary | null {
+    try {
+      return tokenAnalyticsFor(this.ctx)?.recentSummary(t) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private signalDto(s: StoredSignal): Signal | null {
     const t = this.ctx.world.tokens.get(s.token);
     if (!t) return null;
-    return {
+    const stats = this.signalEngine.tokenStats(s.token);
+    const dto: Signal = {
       id: s.id,
       chain: s.chain,
       kind: s.kind,
@@ -1011,18 +1030,31 @@ export class WalletAnalytics {
       maxMultiple: maxMultipleOf(s),
       wallets: s.wallets,
       createdAt: s.createdAt,
+      firstTriggerMcUsd: stats?.firstTriggerMcUsd ?? s.marketCapAtTrigger,
+      timesFired: stats?.timesFired ?? 1,
+      timesFiredByKind: stats?.timesFiredByKind ?? { [s.kind]: 1 },
     };
+    const sum = this.recentSummary(t);
+    if (sum) {
+      dto.cur = { holders: sum.holderCount, top10: sum.security.top10HolderRate, liquidityUsd: sum.liquidityUsd };
+      dto.lowQuality = isLowQuality(sum);
+    }
+    return dto;
   }
 
-  /** Signals newest first (all kinds: ring of 500 per chain; one kind: ring of 150 per kind). */
-  signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[] {
+  /**
+   * Signals newest first (all kinds: ring of 500 per chain; one kind: ring of 150 per kind). `quality`
+   * leaves out low-quality tokens (Signal.lowQuality); `before` (ms) keeps signals strictly older.
+   */
+  signals(chain: ChainId, opts: { kind?: string; limit?: number; quality?: boolean; before?: number }): Signal[] {
     const kind = SIGNAL_KINDS.includes(opts.kind as SignalKind) ? (opts.kind as SignalKind) : undefined;
     const limit = Math.max(1, Math.min(500, Math.floor(opts.limit ?? 100)));
     const out: Signal[] = [];
     for (const s of this.signalEngine.list(chain, kind, 500)) {
       if (out.length >= limit) break;
+      if (opts.before !== undefined && s.createdAt >= opts.before) continue;
       const dto = this.signalDto(s);
-      if (dto) out.push(dto);
+      if (dto && !(opts.quality && dto.lowQuality)) out.push(dto);
     }
     return out;
   }

@@ -685,11 +685,17 @@ export class TokenAnalytics {
     return v;
   }
 
+  /** The cached summary while at most REF_RISK_MAX_MS old (holder / risk context of feed rows), else a fresh one. */
+  recentSummary = (t: TokenState): TokenSummary => {
+    const { world } = this.ctx;
+    const cached = this.caches.get(t.address)?.summary;
+    return cached && world.now >= cached.at && world.now - cached.at < REF_RISK_MAX_MS ? cached.value : this.summary(t);
+  };
+
   ref = (t: TokenState): TokenRef => {
     const { world } = this.ctx;
     const priceUsd = world.priceUsd(t);
-    const cached = this.caches.get(t.address)?.summary;
-    const security = cached && world.now >= cached.at && world.now - cached.at < REF_RISK_MAX_MS ? cached.value.security : this.summary(t).security;
+    const security = this.recentSummary(t).security;
     return {
       chain: t.chain,
       address: t.address,

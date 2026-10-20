@@ -1,7 +1,7 @@
 // Presentation of AppNotification kinds, shared by the bell and the alerts page.
 
 import type { AppNotification, NotificationKind } from '@trenchscope/shared';
-import { BellRing, CircleCheck, CircleX, Crosshair, Info, Repeat2, Star, type LucideIcon } from 'lucide-react';
+import { BellRing, CircleCheck, CircleX, Crosshair, Info, Radio, Repeat2, Star, type LucideIcon } from 'lucide-react';
 
 export interface NotificationKindMeta {
   label: string;
@@ -17,6 +17,7 @@ export const NOTIFICATION_KIND_META: Record<NotificationKind, NotificationKindMe
   copytrade: { label: 'Copy trade', icon: Repeat2, className: 'text-info' },
   sniper: { label: 'Sniper', icon: Crosshair, className: 'text-accent' },
   follow_trade: { label: 'Followed wallet', icon: Star, className: 'text-info' },
+  signal: { label: 'Signal', icon: Radio, className: 'text-accent' },
   system: { label: 'System', icon: Info, className: 'text-muted' },
 };
 

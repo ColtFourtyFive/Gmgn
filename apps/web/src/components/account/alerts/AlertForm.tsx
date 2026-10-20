@@ -1,9 +1,10 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CHAIN_IDS, CHAINS, type AlertKind, type AlertRule, type ChainId } from '@trenchscope/shared';
+import { CHAIN_IDS, CHAINS, type AlertKind, type AlertRule, type ChainId, type SignalFilterGroup, type SignalKind } from '@trenchscope/shared';
 import { BellPlus, Save } from 'lucide-react';
 import { ChainIcon, Price, Usd } from '@/components/common';
-import { Button, Drawer, Field, focusFirstError, Input, NumberInput, SegmentedControl, Select, Toggle } from '@/components/ui';
+import { SIGNAL_META, SIGNAL_ORDER } from '@/components/signals/meta';
+import { Button, Checkbox, Drawer, Field, focusFirstError, Input, NumberInput, SegmentedControl, Select, Toggle } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { toast } from '@/store/toasts';
 import { addressError, addressPlaceholder, isAddressFor, normalizeAddress } from '../address';
@@ -25,9 +26,53 @@ interface AlertFormState {
   value: number | null;
   repeat: boolean;
   note: string;
+  // signal_subscription (the form edits the first group; others are kept as they are)
+  signalName: string;
+  /** Empty = every kind. */
+  signalKinds: SignalKind[];
+  minLiquidityUsd: number | null;
+  mcMin: number | null;
+  mcMax: number | null;
+  minHolders: number | null;
+  /** Percent (0-100) in the form, a ratio on the rule. */
+  maxTop10Pct: number | null;
+  maxAgeMin: number | null;
+  excludeRisk: boolean;
+  maxPerHour: number | null;
 }
 
-type ErrorKey = 'token' | 'wallet' | 'keyword' | 'value' | 'note' | 'form';
+type ErrorKey = 'token' | 'wallet' | 'keyword' | 'value' | 'note' | 'signalName' | 'mcMax' | 'maxTop10Pct' | 'maxPerHour' | 'form';
+
+const SIGNAL_DEFAULTS = {
+  signalName: '',
+  signalKinds: [] as SignalKind[],
+  minLiquidityUsd: null,
+  mcMin: null,
+  mcMax: null,
+  minHolders: null,
+  maxTop10Pct: null,
+  maxAgeMin: null,
+  excludeRisk: true,
+  maxPerHour: 30,
+};
+
+/** The form's signal fields from a rule's first group. */
+function signalState(rule: AlertRule): Partial<AlertFormState> {
+  const g = rule.signals?.groups[0];
+  if (!rule.signals || !g) return {};
+  return {
+    signalName: rule.signals.name,
+    signalKinds: g.kinds,
+    minLiquidityUsd: g.minLiquidityUsd ?? null,
+    mcMin: g.mcMin ?? null,
+    mcMax: g.mcMax ?? null,
+    minHolders: g.minHolders ?? null,
+    maxTop10Pct: g.maxTop10 !== null && g.maxTop10 !== undefined ? Math.round(g.maxTop10 * 1000) / 10 : null,
+    maxAgeMin: g.maxAgeMin ?? null,
+    excludeRisk: g.excludeRisk,
+    maxPerHour: rule.signals.maxPerHour,
+  };
+}
 type Errors = Partial<Record<ErrorKey, string>>;
 
 function initialState(rule: AlertRule | null, chain: ChainId, prefill?: Partial<AlertFormState>): AlertFormState {
@@ -39,12 +84,14 @@ function initialState(rule: AlertRule | null, chain: ChainId, prefill?: Partial<
       wallet: rule.wallet ?? '',
       keyword: rule.keyword ?? '',
       direction: rule.direction ?? 'above',
-      value: rule.kind === 'wallet_trade' || rule.kind === 'new_token' ? null : rule.value,
+      value: rule.kind === 'wallet_trade' || rule.kind === 'new_token' || rule.kind === 'signal_subscription' ? null : rule.value,
       repeat: rule.repeat,
       note: rule.note,
+      ...SIGNAL_DEFAULTS,
+      ...signalState(rule),
     };
   }
-  return { kind: 'price', chain, token: '', wallet: '', keyword: '', direction: 'above', value: null, repeat: false, note: '', ...prefill };
+  return { kind: 'price', chain, token: '', wallet: '', keyword: '', direction: 'above', value: null, repeat: false, note: '', ...SIGNAL_DEFAULTS, ...prefill };
 }
 
 export interface AlertFormProps {
@@ -54,9 +101,11 @@ export interface AlertFormProps {
   rule: AlertRule | null;
   /** Default chain for new rules. */
   chain: ChainId;
-  /** Prefill for new rules (e.g. ?token= from a token page). */
+  /** Prefill for new rules (e.g. ?token= from a token page, the Signals page's Subscribe). */
   prefill?: Partial<AlertFormState>;
 }
+
+export type AlertPrefill = Partial<AlertFormState>;
 
 const FORM_ID = 'alert-form';
 
@@ -100,6 +149,12 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
       if (!kw) e.keyword = 'Enter a keyword to match in new token names or symbols.';
       else if (kw.length > 32) e.keyword = 'Keep the keyword to 32 characters.';
     }
+    if (m.subject === 'signals') {
+      if (f.signalName.trim().length > 40) e.signalName = 'Keep the name to 40 characters.';
+      if (f.mcMin !== null && f.mcMax !== null && f.mcMin > f.mcMax) e.mcMax = 'Max market cap is below min.';
+      if (f.maxTop10Pct !== null && !(f.maxTop10Pct >= 0 && f.maxTop10Pct <= 100)) e.maxTop10Pct = 'Enter a share between 0 and 100%.';
+      if (!(f.maxPerHour !== null && Number.isInteger(f.maxPerHour) && f.maxPerHour >= 1 && f.maxPerHour <= 120)) e.maxPerHour = 'Enter a whole number from 1 to 120.';
+    }
     if (m.value === 'count') {
       if (!(f.value !== null && Number.isInteger(f.value) && f.value >= 1)) e.value = 'Enter a whole number of buys (1 or more).';
     } else if (m.value !== 'none' && !(f.value !== null && f.value > 0)) {
@@ -120,6 +175,16 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
       return;
     }
     const m = ALERT_KIND[form.kind];
+    const group: SignalFilterGroup = {
+      kinds: form.signalKinds,
+      minLiquidityUsd: form.minLiquidityUsd,
+      mcMin: form.mcMin,
+      mcMax: form.mcMax,
+      minHolders: form.minHolders,
+      maxTop10: form.maxTop10Pct === null ? null : form.maxTop10Pct / 100,
+      maxAgeMin: form.maxAgeMin,
+      excludeRisk: form.excludeRisk,
+    };
     const body: AlertBody = {
       chain: form.chain,
       kind: form.kind,
@@ -131,6 +196,10 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
       repeat: form.repeat,
       enabled: true,
       note: form.note.trim(),
+      signals:
+        m.subject === 'signals'
+          ? { name: form.signalName.trim(), groups: [group, ...(rule?.signals?.groups.slice(1) ?? [])], maxPerHour: form.maxPerHour ?? 30 }
+          : null,
     };
     setPending(true);
     try {
@@ -146,6 +215,7 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
         else if (/wallet/i.test(message)) setErrors({ wallet: `No wallet with this address on ${CHAINS[form.chain].name}.` });
         else setErrors({ form: message });
       } else if (field && ['token', 'wallet', 'keyword', 'value', 'note'].includes(field)) setErrors({ [field]: message });
+      else if (field === 'signals') setErrors({ form: message });
       else setErrors({ form: message });
     } finally {
       setPending(false);
@@ -278,12 +348,64 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
             </>
           )}
 
+          {meta.subject === 'signals' && (
+            <>
+              <Field label="Name (optional)" htmlFor={`${ids}-sname`} error={shown.signalName}>
+                <Input id={`${ids}-sname`} value={form.signalName} onChange={(e) => set('signalName', e.target.value)} maxLength={40} placeholder="e.g. Smart entries" invalid={!!shown.signalName} data-autofocus />
+              </Field>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1 text-xs font-medium text-muted">Signal kinds (none picked = every kind)</legend>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  {SIGNAL_ORDER.map((k) => (
+                    <Checkbox
+                      key={k}
+                      checked={form.signalKinds.includes(k)}
+                      onChange={(on) => set('signalKinds', on ? [...form.signalKinds, k] : form.signalKinds.filter((x) => x !== k))}
+                      label={SIGNAL_META[k].label}
+                    />
+                  ))}
+                </div>
+              </fieldset>
+            </>
+          )}
+
           {meta.subject === 'keyword' && (
             <Field label="Keyword" htmlFor={`${ids}-kw`} error={shown.keyword} hint="Case-insensitive match against new token names and symbols.">
               <Input id={`${ids}-kw`} value={form.keyword} onChange={(e) => set('keyword', e.target.value)} maxLength={32} placeholder="e.g. cat" invalid={!!shown.keyword} data-autofocus />
             </Field>
           )}
         </FormSection>
+
+        {meta.subject === 'signals' && (
+          <FormSection title="Token filters">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Min liquidity (USD)" htmlFor={`${ids}-liq`}>
+                <NumberInput id={`${ids}-liq`} value={form.minLiquidityUsd} onChange={(v) => set('minLiquidityUsd', v)} min={0} step={1000} prefix="$" placeholder="Any" />
+              </Field>
+              <Field label="Min holders" htmlFor={`${ids}-holders`}>
+                <NumberInput id={`${ids}-holders`} value={form.minHolders} onChange={(v) => set('minHolders', v)} min={0} step={10} placeholder="Any" />
+              </Field>
+              <Field label="Market cap min (USD)" htmlFor={`${ids}-mcmin`}>
+                <NumberInput id={`${ids}-mcmin`} value={form.mcMin} onChange={(v) => set('mcMin', v)} min={0} step={10_000} prefix="$" placeholder="Any" invalid={!!shown.mcMax} />
+              </Field>
+              <Field label="Market cap max (USD)" htmlFor={`${ids}-mcmax`} error={shown.mcMax}>
+                <NumberInput id={`${ids}-mcmax`} value={form.mcMax} onChange={(v) => set('mcMax', v)} min={0} step={10_000} prefix="$" placeholder="Any" invalid={!!shown.mcMax} />
+              </Field>
+              <Field label="Max top-10 share" htmlFor={`${ids}-top10`} error={shown.maxTop10Pct}>
+                <NumberInput id={`${ids}-top10`} value={form.maxTop10Pct} onChange={(v) => set('maxTop10Pct', v)} min={0} max={100} step={5} suffix="%" placeholder="Any" invalid={!!shown.maxTop10Pct} />
+              </Field>
+              <Field label="Max token age (minutes)" htmlFor={`${ids}-age`}>
+                <NumberInput id={`${ids}-age`} value={form.maxAgeMin} onChange={(v) => set('maxAgeMin', v)} min={0} step={30} placeholder="Any" />
+              </Field>
+            </div>
+            <Toggle
+              checked={form.excludeRisk}
+              onChange={(v) => set('excludeRisk', v)}
+              label="Skip low-quality tokens"
+              description="Leaves out tokens with a rug ratio above 30%, wash trading or a honeypot contract."
+            />
+          </FormSection>
+        )}
 
         {(meta.directional || meta.value !== 'none') && (
           <FormSection title="Condition">
@@ -315,8 +437,19 @@ function AlertDrawer({ onClose, rule, chain: defaultChain, prefill }: AlertFormP
             checked={form.repeat}
             onChange={(v) => set('repeat', v)}
             label="Repeat"
-            description={form.repeat ? 'Keeps firing, at most once a minute.' : 'Fires once, then switches itself off.'}
+            description={
+              form.repeat
+                ? meta.subject === 'signals'
+                  ? 'Keeps notifying; a token’s signals within a minute arrive together.'
+                  : 'Keeps firing, at most once a minute.'
+                : 'Fires once, then switches itself off.'
+            }
           />
+          {meta.subject === 'signals' && (
+            <Field label="At most per hour" htmlFor={`${ids}-perhour`} error={shown.maxPerHour} hint="Signals past the limit are skipped until the hour rolls over.">
+              <NumberInput id={`${ids}-perhour`} value={form.maxPerHour} onChange={(v) => set('maxPerHour', v)} min={1} max={120} step={5} presets={[10, 30, 60]} invalid={!!shown.maxPerHour} />
+            </Field>
+          )}
           <Field label="Note (optional)" htmlFor={`${ids}-note`} error={shown.note} hint={`${form.note.length}/140 · added to the notification`}>
             <Input id={`${ids}-note`} value={form.note} onChange={(e) => set('note', e.target.value)} maxLength={140} placeholder="Why you set this alert" invalid={!!shown.note} />
           </Field>

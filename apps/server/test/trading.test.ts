@@ -13,6 +13,8 @@ import {
   type PortfolioSummary,
   type Quote,
   type SellInitialsQuote,
+  type Signal,
+  type SignalFilterGroup,
   type SniperTask,
   type SwapReceipt,
   type SwapRequest,
@@ -24,6 +26,7 @@ import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
 import type { AnalyticsApi } from '../src/context';
 import type { PositionState, TokenState, WalletState } from '../src/sim/world';
 import { Trading } from '../src/trading';
+import { HOUR_MS, matchesGroup, matchesSubscription } from '../src/trading/signalSubs';
 import { SNIPE_DELAY_MS } from '../src/trading/sniper';
 
 let built: BuiltApp;
@@ -1178,6 +1181,86 @@ describe('alerts', () => {
     pumpTo(token, whale(), price(token) * 1.3);
     trading().alerts.evaluate();
     expect(notifications(user)[0].title).toMatch(new RegExp(`^\\$${token.symbol} \\+\\d+(\\.\\d+)?% in 5m$`));
+  });
+
+  it('signal subscriptions: matching signals notify in-app, a token merges within a minute, capped per hour', async () => {
+    const user = await signIn();
+    const sub = (signals: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'signal_subscription', repeat: true, signals, ...extra } });
+    const created = await sub({ name: 'Smart entries', groups: [{ kinds: ['smart_buy'], excludeRisk: false }] });
+    expect(created.status).toBe(200);
+    expect(created.body).toMatchObject({ kind: 'signal_subscription', token: null, signals: { name: 'Smart entries', maxPerHour: 30, groups: [{ kinds: ['smart_buy'], minLiquidityUsd: null, excludeRisk: false }] } });
+    // a kol_buy subscription whose liquidity floor no token meets
+    await sub({ groups: [{ kinds: ['kol_buy'], minLiquidityUsd: 1e12 }] });
+
+    const smart = () => world().createWallet('sol', 'smart', { native: 100, tags: ['smart'] });
+    const kol = world().createWallet('sol', 'kol', { native: 100, tags: ['kol'], label: 'Caller' });
+    const signalNotes = () => notifications(user).filter((n) => n.kind === 'signal');
+    const { token } = launch({ devBuy: 1 });
+
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().executeSwap(kol, token, 'buy', 0.5);
+    trading().alerts.evaluate();
+    expect(signalNotes().map((n) => [n.title, n.token, n.chain])).toEqual([[`$${token.symbol}: Smart money buy`, token.address, 'sol']]);
+    expect(signalNotes()[0].body).toMatch(/· Smart entries$/);
+
+    // two more within the minute: held, then sent together once it has passed
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().executeSwap(smart(), token, 'buy', 0.5);
+    world().now += 30_000;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(1);
+    world().now += 31_000;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(2);
+    expect(signalNotes()[0].body).toMatch(/· 2 signals · Smart entries$/);
+
+    // maxPerHour: a third token in the hour is dropped
+    const capped = await sub({ groups: [{ kinds: ['smart_buy'], excludeRisk: false }], maxPerHour: 1 });
+    await call('PATCH', `/api/alerts/${created.body.id}`, { auth: user.auth, body: { enabled: false } });
+    for (const t of [launch({ devBuy: 1 }).token, launch({ devBuy: 1 }).token]) {
+      world().executeSwap(smart(), t, 'buy', 0.5);
+      trading().alerts.evaluate();
+    }
+    expect(signalNotes()).toHaveLength(3);
+    const rule = (await call<AlertRule[]>('GET', '/api/alerts', { auth: user.auth })).body.find((r) => r.id === capped.body.id)!;
+    expect(rule.lastTriggeredAt).toBe(world().now);
+
+    // nothing while history fast-forwards
+    built.ctx.engine.warming = true;
+    world().executeSwap(smart(), launch({ devBuy: 1 }).token, 'buy', 0.5);
+    built.ctx.engine.warming = false;
+    world().now += HOUR_MS;
+    trading().alerts.evaluate();
+    expect(signalNotes()).toHaveLength(3);
+  });
+
+  it('signal subscriptions: match on group filters and validate them', async () => {
+    const user = await signIn();
+    const create = (signals: unknown) => call<AlertRule>('POST', '/api/alerts', { auth: user.auth, body: { chain: 'sol', kind: 'signal_subscription', signals } });
+    expect((await create(null)).status).toBe(400);
+    expect((await create({ groups: [] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: ['nope'] }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], mcMin: 10, mcMax: 5 }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], launchpads: ['fourpad'] }] })).status).toBe(400);
+    expect((await create({ groups: [{ kinds: [], launchpads: ['moonpit'] }] })).status).toBe(200);
+
+    const base = { id: 's', chain: 'sol', kind: 'smart_buy', title: 'Smart money buy', detail: '', marketCapAtTrigger: 8_000, maxMultiple: 1, wallets: [], createdAt: 0 };
+    const token = { chain: 'sol', address: 'T', symbol: 'T', marketCapUsd: 10_000, liquidityUsd: 6_000, launchpad: 'moonpit', createdAt: -30 * 60_000 };
+    const s = { ...base, token, cur: { holders: 40, top10: 0.25, liquidityUsd: 6_000 }, lowQuality: false } as unknown as Signal;
+    const c = { now: 0, smartHolders: () => 2 };
+    const g = (over: Partial<SignalFilterGroup>): SignalFilterGroup => ({ kinds: [], excludeRisk: true, ...over });
+    expect(matchesGroup(g({}), s, c)).toBe(true);
+    expect(matchesGroup(g({ kinds: ['kol_buy'] }), s, c)).toBe(false);
+    expect(matchesGroup(g({ mcMin: 20_000 }), s, c)).toBe(false);
+    expect(matchesGroup(g({ triggerMcMax: 5_000 }), s, c)).toBe(false);
+    expect(matchesGroup(g({ minLiquidityUsd: 5_000, minHolders: 40, maxTop10: 0.3, minAgeMin: 10, maxAgeMin: 60, minSmart: 2, launchpads: ['moonpit'] }), s, c)).toBe(true);
+    expect(matchesGroup(g({ minSmart: 3 }), s, c)).toBe(false);
+    expect(matchesGroup(g({}), { ...s, lowQuality: true }, c)).toBe(false);
+    expect(matchesGroup(g({ excludeRisk: false }), { ...s, lowQuality: true }, c)).toBe(true);
+    // unknown holder data never passes a bound on it
+    expect(matchesGroup(g({ minHolders: 1 }), { ...s, cur: undefined }, c)).toBe(false);
+    expect(matchesSubscription({ name: '', maxPerHour: 30, groups: [g({ kinds: ['kol_buy'] }), g({ kinds: ['smart_buy'] })] }, s, c)).toBe(true);
   });
 
   it('validates alert references', async () => {
