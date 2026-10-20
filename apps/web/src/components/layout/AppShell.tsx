@@ -6,16 +6,24 @@ import { chainFromPath } from '@/hooks/useActiveChain';
 import { useClockSync } from '@/hooks/useMeta';
 import { useThemeSync } from '@/hooks/useTheme';
 import { TRADING_QUERY_KEYS, useUserChannel } from '@/hooks/useUserChannel';
+import { useDock } from '@/store/dock';
 import { useSession } from '@/store/session';
 import { useUi } from '@/store/ui';
 import { AuthModal } from './AuthModal';
 import { CommandPalette } from './CommandPalette';
+import { InstantDock } from './InstantDock';
 import { MobileNavDrawer, MobileTabBar, SearchSheet } from './MobileNav';
+import { tokenRoute } from './nav';
 import { PageErrorBoundary } from './PageErrorBoundary';
 import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
+import { Tour } from './Tour';
 
-/** Keep the preferred chain in sync with `:chain` routes; reset per-page overlays on navigation. */
+/**
+ * Keep the preferred chain in sync with `:chain` routes, remember the last
+ * token page (the Instant trade dock's target elsewhere) and reset per-page
+ * overlays on navigation.
+ */
 function useRouteEffects(main: RefObject<HTMLElement>, pathname: string): void {
   const routeChain = chainFromPath(pathname);
   useEffect(() => {
@@ -27,6 +35,9 @@ function useRouteEffects(main: RefObject<HTMLElement>, pathname: string): void {
     ui.setMobileNavOpen(false);
     ui.setSearchOpen(false);
     ui.setPaletteOpen(false);
+    useDock.getState().setSheetOpen(false);
+    const token = tokenRoute(pathname);
+    if (token) useDock.getState().setLastToken(token);
   }, [pathname, main]);
 }
 
@@ -45,8 +56,8 @@ function useAuthQueryReset(): void {
 
 /**
  * Application frame: top bar, scrollable main area, desktop status bar,
- * phone tab bar + drawers, auth modal, command palette (Ctrl/Cmd+K) and
- * toasts. Also mounts the private
+ * phone tab bar + drawers, auth modal, command palette (Ctrl/Cmd+K), the
+ * Instant trade dock, the onboarding tour and toasts. Also mounts the private
  * user channel, theme/clock sync. `<main>` is the scroll container and fills
  * the remaining height, so pages can use `h-full` for terminal layouts. A
  * page that throws while rendering is contained by PageErrorBoundary.
@@ -78,6 +89,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <SearchSheet />
       <AuthModal />
       <CommandPalette />
+      <InstantDock />
+      <Tour />
       <Toaster />
     </div>
   );

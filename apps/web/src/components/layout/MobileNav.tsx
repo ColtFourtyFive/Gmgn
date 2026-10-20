@@ -1,12 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LogIn, LogOut, Menu as MenuIcon, Plus, UserPlus } from 'lucide-react';
+import { Compass, LogIn, LogOut, Menu as MenuIcon, Plus, UserPlus, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { Native, SimBanner, WalletAvatar } from '@/components/common';
 import { Button, Drawer, Toggle } from '@/components/ui';
 import { useActiveChain } from '@/hooks/useActiveChain';
 import { useTheme } from '@/hooks/useTheme';
+import { useDock } from '@/store/dock';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
+import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 import { useDeposit } from './AccountControls';
 import { ChainPicker } from './ChainSwitcher';
@@ -41,7 +43,7 @@ export function MobileTabBar({ className }: { className?: string }) {
   );
 }
 
-/** "More" sheet on phones: chain picker, every section, account links, theme. */
+/** "More" sheet on phones: chain picker, every section, Instant trade, account links, theme, the tour. */
 export function MobileNavDrawer() {
   const open = useUi((s) => s.mobileNavOpen);
   const close = () => useUi.getState().setMobileNavOpen(false);
@@ -73,6 +75,29 @@ export function MobileNavDrawer() {
           </Link>
         ))}
       </nav>
+
+      <div className="grid grid-cols-2 gap-1.5">
+        <Button
+          variant="soft"
+          icon={<Zap size={14} />}
+          onClick={() => {
+            close();
+            useDock.getState().setSheetOpen(true);
+          }}
+        >
+          Instant trade
+        </Button>
+        <Button
+          variant="soft"
+          icon={<Compass size={14} />}
+          onClick={() => {
+            close();
+            startTour();
+          }}
+        >
+          Take the tour
+        </Button>
+      </div>
 
       {account ? (
         <section className="flex flex-col gap-2 rounded border border-line bg-panel-2 p-3">

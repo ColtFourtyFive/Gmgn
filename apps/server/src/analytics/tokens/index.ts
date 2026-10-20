@@ -30,6 +30,8 @@ import {
   type ChainId,
   type DevInfo,
   type DevToken,
+  type EarlyBuyer,
+  type EarlyBuyersResponse,
   type Narrative,
   type Position,
   type SearchResult,
@@ -49,7 +51,7 @@ import {
   type WindowStats,
 } from '@trenchscope/shared';
 import type { AppContext, Viewer } from '../../context';
-import type { TokenState, WalletState } from '../../sim/world';
+import { DUST_RATE, type TokenState, type WalletState } from '../../sim/world';
 import { matchIdentityFilters, matchTokenFilters, needsSummary } from '../filters';
 import { viewerLabel, viewerTags } from '../viewer';
 import { TokenChannels } from './channels';
@@ -68,13 +70,14 @@ import {
   isRugged,
   riskLevelOf,
   rugRatio,
+  safetyScore,
   scanHolders,
   type DevAggregate,
   type HolderScan,
   type RugInputs,
 } from './security';
 import { computeWindowsCached, priceChangeAt, repriceWindows, volumeIn, WINDOW_MS, type WindowsBase, type WindowsSnapshot } from './stats';
-import { backfillTrack, flowSince, newTrack, pruneTrack, recordTrade, tombstone, type TokenTrack } from './track';
+import { backfillEarly, backfillTrack, flowSince, newTrack, pruneTrack, recordTrade, tombstone, type TokenTrack } from './track';
 
 export const SUMMARY_MIN_MS = 1000;
 export const SUMMARY_MAX_MS = 5000;
@@ -504,8 +507,12 @@ export class TokenAnalytics {
       isWashTrading: w1h.swaps >= 20 && w1h.volumeUsd > 0 && wash1h >= 0.3 * w1h.volumeUsd,
     };
     const rug = rugRatio(this.rugInputs(t, s, base, scan, priceUsd, now));
-    const sec: Omit<TokenSecurity, 'checks'> = { ...base, rugRatio: rug, riskLevel: riskLevelOf(rug, base.isHoneypot) };
-    return { ...sec, checks: buildChecks({ security: sec, chain: t.chain, onCurve: t.status !== 'migrated', smartDegenCount: smartCount }) };
+    const sec: Omit<TokenSecurity, 'checks' | 'safety'> = { ...base, rugRatio: rug, riskLevel: riskLevelOf(rug, base.isHoneypot) };
+    return {
+      ...sec,
+      checks: buildChecks({ security: sec, chain: t.chain, onCurve: t.status !== 'migrated', smartDegenCount: smartCount }),
+      safety: safetyScore({ chain: t.chain, security: sec, holderCount: scan.holderCount }),
+    };
   }
 
   /** Observable inputs of the rug ratio (exported shape lets tests evaluate the model). */
@@ -1079,6 +1086,50 @@ export class TokenAnalytics {
     return out;
   };
 
+  /**
+   * The token's first buyers (tracked at trade time, at most EARLY_BUYERS_LIMIT) with their bags
+   * now. Status compares the balance with the wallet's first buy (see EarlyBuyer.status).
+   */
+  earlyBuyers = (t: TokenState, viewer: Viewer): EarlyBuyersResponse => {
+    const { world } = this.ctx;
+    const s = this.trackOf(t);
+    const cohorts = new Cohorts(world, t, s);
+    const priceUsd = world.priceUsd(t);
+    const dust = t.totalSupply * DUST_RATE;
+    const summary: EarlyBuyersResponse['summary'] = { holding: 0, soldPart: 0, soldAll: 0, added: 0, holdRateTotal: 0 };
+    const buyers: EarlyBuyer[] = [];
+    for (let i = 0; i < s.earlyBuyers.length; i++) {
+      const a = s.earlyBuyers[i];
+      const w = world.wallets.get(a);
+      const p = w?.positions.get(t.address);
+      if (!w || !p || p.firstBuyAt === null) continue;
+      const first = s.earlyTokens[i];
+      const status = p.balance <= dust ? 'sold_all' : p.balance < first * (1 - 1e-9) ? 'sold_part' : p.balance > first * (1 + 1e-9) ? 'added' : 'holding';
+      if (status === 'sold_all') summary.soldAll++;
+      else if (status === 'sold_part') summary.soldPart++;
+      else if (status === 'added') summary.added++;
+      else summary.holding++;
+      const holdRate = p.balance / t.totalSupply;
+      summary.holdRateTotal += holdRate;
+      buyers.push({
+        rank: i + 1,
+        wallet: a,
+        walletTags: viewerTags(this.ctx, viewer, t.chain, a, mergeTags(cohorts.tags(a, w), this.walletTagsOf(w))),
+        walletLabel: viewerLabel(this.ctx, viewer, t.chain, a, w.label),
+        firstBuyAt: p.firstBuyAt,
+        block: world.blockAt(t.chain, p.firstBuyAt),
+        boughtUsd: p.boughtUsd,
+        boughtTokens: p.boughtTokens,
+        balance: p.balance,
+        holdRate,
+        status,
+        realizedPnlUsd: p.realizedPnlUsd,
+        unrealizedPnlUsd: p.balance > 0 ? p.balance * priceUsd - p.costBasisUsd : 0,
+      });
+    }
+    return { buyers, summary };
+  };
+
   // -------------------------------------------------------------------------
   // Lists
   // -------------------------------------------------------------------------
@@ -1091,6 +1142,8 @@ export class TokenAnalytics {
     return matchIdentityFilters(
       {
         chain: t.chain,
+        address: t.address,
+        creator: t.creator,
         symbol: t.symbol,
         name: t.name,
         launchpad: t.launchpad,
@@ -1415,7 +1468,17 @@ export class TokenAnalytics {
     const d = data as { v?: number; tracks?: TokenTrack[] } | null;
     if (!d || d.v !== 1 || !Array.isArray(d.tracks)) return;
     this.tracks.clear();
-    for (const s of d.tracks) if (s && typeof s.address === 'string') this.tracks.set(s.address, s);
+    for (const s of d.tracks) {
+      if (!s || typeof s.address !== 'string') continue;
+      // Tracks saved before early buyers were tracked rebuild them from the world.
+      if (!Array.isArray(s.earlyBuyers)) {
+        const t = this.ctx.world.tokens.get(s.address);
+        s.earlyBuyers = [];
+        s.earlyTokens = [];
+        if (t && !s.gone) backfillEarly(this.ctx.world, s, t);
+      }
+      this.tracks.set(s.address, s);
+    }
     this.caches.clear();
     this.devAggs.clear();
     this.narrativeCache.clear();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computePosition } from '@/components/ui/Floating';
-import { activeSection, NAV_ITEMS, switchChainPath } from './nav';
+import { activeSection, NAV_ITEMS, switchChainPath, tokenRoute } from './nav';
 
 describe('chain switching', () => {
   it('keeps the section when switching chains', () => {
@@ -30,6 +30,14 @@ describe('chain switching', () => {
     expect(activeSection('/sol/new-pairs')).toBe('new-pairs');
     expect(activeSection('/watchlist')).toBe('watchlist');
     expect(activeSection('/')).toBeNull();
+  });
+
+  it('reads the token of a token page', () => {
+    expect(tokenRoute('/sol/token/AbC123')).toEqual({ chain: 'sol', address: 'AbC123' });
+    expect(tokenRoute('/base/token/0xAb/')).toEqual({ chain: 'base', address: '0xAb' });
+    expect(tokenRoute('/sol/address/AbC123')).toBeNull();
+    expect(tokenRoute('/xyz/token/AbC123')).toBeNull();
+    expect(tokenRoute('/sol/token')).toBeNull();
   });
 });
 

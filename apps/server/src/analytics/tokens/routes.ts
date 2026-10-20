@@ -1,14 +1,15 @@
 // REST routes for token-side analytics (see docs/API.md "Market data").
 // Query params are validated with zod; JSON-encoded `filters` are parsed and
-// validated strictly. 400 on bad params, 404 for unknown tokens or a token
-// requested under the wrong chain.
+// validated strictly. The list routes also take their params as a POST JSON
+// body (filters as an object) for exclusion lists too long for a URL. 400 on
+// bad params, 404 for unknown tokens or a token requested under the wrong chain.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { RESOLUTIONS, STAT_WINDOWS, isChainId, type ChainId, type Resolution, type StatWindow, type TrendingSort } from '@trenchscope/shared';
+import { RESOLUTIONS, STAT_WINDOWS, isChainId, type ChainId, type Resolution, type StatWindow, type TokenFilters, type TrendingSort } from '@trenchscope/shared';
 import { HttpError, viewerOf, type AppContext } from '../../context';
 import type { TokenState } from '../../sim/world';
-import { FilterParseError, parseTokenFiltersParam, parseTrenchesFiltersParam } from '../filters';
+import { FilterParseError, parseTokenFiltersParam, parseTrenchesFiltersParam, validateTokenFilters, validateTrenchesFilters } from '../filters';
 import { TRADER_SORTS, TRADE_FILTERS, tokenAnalyticsFor, type TokenAnalytics } from './index';
 
 const WALLET_TAG_FILTERS = ['all', 'smart', 'kol', 'sniper', 'bundler', 'insider', 'dev', 'whale', 'fresh', 'bot', 'sandwich', 'top_holder', 'following', 'you'] as const;
@@ -22,18 +23,24 @@ const intParam = (lo: number, hi: number) =>
     .min(lo)
     .transform((v) => Math.min(v, hi))
     .optional();
+/** JSON-body twin of intParam (no string coercion). */
+const intField = (lo: number, hi: number) =>
+  z
+    .number()
+    .int()
+    .min(lo)
+    .transform((v) => Math.min(v, hi))
+    .optional();
 const order = z.enum(['asc', 'desc']).optional();
+const trendingBase = { window: z.enum(STAT_WINDOWS as [string, ...string[]]).optional(), sort: z.enum(TRENDING_SORTS).optional(), order };
 
 const schemas = {
   trenches: z.object({ filters: z.string().optional(), limit: intParam(1, 100) }),
-  trending: z.object({
-    window: z.enum(STAT_WINDOWS as [string, ...string[]]).optional(),
-    sort: z.enum(TRENDING_SORTS).optional(),
-    order,
-    filters: z.string().optional(),
-    limit: intParam(1, 100),
-  }),
+  trending: z.object({ ...trendingBase, filters: z.string().optional(), limit: intParam(1, 100) }),
   newPairs: z.object({ filters: z.string().optional(), limit: intParam(1, 100) }),
+  trenchesBody: z.object({ filters: z.unknown().optional(), limit: intField(1, 100) }),
+  trendingBody: z.object({ ...trendingBase, filters: z.unknown().optional(), limit: intField(1, 100) }),
+  newPairsBody: z.object({ filters: z.unknown().optional(), limit: intField(1, 100) }),
   candles: z.object({ resolution: z.enum(RESOLUTIONS as [string, ...string[]]).optional(), limit: intParam(1, 2000) }),
   trades: z.object({
     filter: z.enum(TRADE_FILTERS as [string, ...string[]]).optional(),
@@ -56,10 +63,18 @@ type ChainParams = { chain: string };
 type TokenParams = { chain: string; address: string };
 
 function parseQuery<T>(schema: z.ZodType<T>, req: FastifyRequest): T {
-  const r = schema.safeParse(req.query ?? {});
+  return parseInput(schema, req.query, 'query');
+}
+
+function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest): T {
+  return parseInput(schema, req.body, 'body');
+}
+
+function parseInput<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
+  const r = schema.safeParse(value ?? {});
   if (!r.success) {
     const i = r.error.issues[0];
-    throw new HttpError(400, i ? `invalid ${i.path.join('.') || 'query'}: ${i.message}` : 'invalid query', 'bad_request');
+    throw new HttpError(400, i ? `invalid ${i.path.join('.') || what}: ${i.message}` : `invalid ${what}`, 'bad_request');
   }
   return r.data;
 }
@@ -92,32 +107,43 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
     return t;
   };
 
+  const trending = (chain: ChainId, q: z.infer<typeof schemas.trendingBody>, filters: TokenFilters | undefined) =>
+    ta().trending({ chain, window: (q.window ?? '1h') as StatWindow, sort: q.sort as TrendingSort | undefined, order: q.order, filters, limit: q.limit });
+
   app.get<{ Params: ChainParams }>('/api/:chain/trenches', async (req) => {
     const chain = parseChain(req.params.chain);
     const q = parseQuery(schemas.trenches, req);
-    const filters = withFilters(() => parseTrenchesFiltersParam(q.filters));
-    return ta().trenches({ chain, filters, limit: q.limit });
+    return ta().trenches({ chain, filters: withFilters(() => parseTrenchesFiltersParam(q.filters)), limit: q.limit });
+  });
+
+  app.post<{ Params: ChainParams }>('/api/:chain/trenches', async (req) => {
+    const chain = parseChain(req.params.chain);
+    const b = parseBody(schemas.trenchesBody, req);
+    return ta().trenches({ chain, filters: withFilters(() => validateTrenchesFilters(b.filters)), limit: b.limit });
   });
 
   app.get<{ Params: ChainParams }>('/api/:chain/trending', async (req) => {
     const chain = parseChain(req.params.chain);
     const q = parseQuery(schemas.trending, req);
-    const filters = withFilters(() => parseTokenFiltersParam(q.filters));
-    return ta().trending({
-      chain,
-      window: (q.window ?? '1h') as StatWindow,
-      sort: q.sort as TrendingSort | undefined,
-      order: q.order,
-      filters,
-      limit: q.limit,
-    });
+    return trending(chain, q, withFilters(() => parseTokenFiltersParam(q.filters)));
+  });
+
+  app.post<{ Params: ChainParams }>('/api/:chain/trending', async (req) => {
+    const chain = parseChain(req.params.chain);
+    const b = parseBody(schemas.trendingBody, req);
+    return trending(chain, b, withFilters(() => validateTokenFilters(b.filters)));
   });
 
   app.get<{ Params: ChainParams }>('/api/:chain/new-pairs', async (req) => {
     const chain = parseChain(req.params.chain);
     const q = parseQuery(schemas.newPairs, req);
-    const filters = withFilters(() => parseTokenFiltersParam(q.filters));
-    return ta().newPairs(chain, filters, q.limit);
+    return ta().newPairs(chain, withFilters(() => parseTokenFiltersParam(q.filters)), q.limit);
+  });
+
+  app.post<{ Params: ChainParams }>('/api/:chain/new-pairs', async (req) => {
+    const chain = parseChain(req.params.chain);
+    const b = parseBody(schemas.newPairsBody, req);
+    return ta().newPairs(chain, withFilters(() => validateTokenFilters(b.filters)), b.limit);
   });
 
   app.get<{ Params: ChainParams }>('/api/:chain/narratives', async (req) => {
@@ -156,6 +182,10 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
     const t = tokenOf(req.params);
     const q = parseQuery(schemas.topTraders, req);
     return ta().topTraders(t, q, viewerOf(ctx, req));
+  });
+
+  app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/early-buyers', async (req) => {
+    return ta().earlyBuyers(tokenOf(req.params), viewerOf(ctx, req));
   });
 
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/dev', async (req) => {

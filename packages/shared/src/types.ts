@@ -124,6 +124,34 @@ export interface TokenSecurity {
   riskLevel: RiskLevel;
   /** Pre-rendered checklist for the audit panel. */
   checks: SecurityCheck[];
+  /**
+   * Explainable 0-100 safety score derived from the fields above (formula in docs/API.md).
+   * The server always sets it; optional so securities built client-side still type-check.
+   */
+  safety?: SafetyScore;
+}
+
+/** safe >= 70, caution 40-69, danger < 40 (or a hard gate); unknown when coverage < 0.5. */
+export type SafetyBand = 'safe' | 'caution' | 'danger' | 'unknown';
+
+/** One deduction behind a safety score. */
+export interface SafetyReason {
+  /** The SecurityCheck key it comes from (mint, freeze, honeypot, top10, rug, ...), or 'unverified'. */
+  key: string;
+  label: string;
+  /** Points this reason takes off the score (deduction plus any cap it set). */
+  impact: number;
+  level: 'warn' | 'bad';
+}
+
+export interface SafetyScore {
+  /** 0..100, higher = safer. */
+  score: number;
+  band: SafetyBand;
+  /** Share of the applicable checks with known data (0..1). */
+  coverage: number;
+  /** Largest impact first, at most 6. */
+  reasons: SafetyReason[];
 }
 
 export interface SecurityCheck {
@@ -371,6 +399,47 @@ export interface Position {
 export interface TokenPositionRow extends Position {
   /** Lightweight token info for portfolio/wallet holdings tables. */
   tokenInfo: TokenRef;
+  /**
+   * Portfolio rows only: 'main' = the account's chain wallet, 'bundle' = a bundle wallet of one of
+   * its launches (same token, separate wallet).
+   */
+  walletRole?: 'main' | 'bundle';
+}
+
+/** Status of an early buyer's bag against its first buy. */
+export type EarlyBuyerStatus = 'holding' | 'added' | 'sold_part' | 'sold_all';
+
+/** First buyers of a token tracked per token (GMGN "first 70 buyers"). */
+export const EARLY_BUYERS_LIMIT = 70;
+
+export interface EarlyBuyer {
+  /** 1 = first buyer. */
+  rank: number;
+  wallet: string;
+  walletTags: WalletTag[];
+  walletLabel: string | null;
+  firstBuyAt: number;
+  /** Block / slot of the first buy. */
+  block: number;
+  /** Totals over every buy of the wallet (USD incl. fees / tokens). */
+  boughtUsd: number;
+  boughtTokens: number;
+  balance: number;
+  holdRate: number;
+  /**
+   * sold_all: holds ~nothing; sold_part: holds less than its first buy; added: holds more than its
+   * first buy; holding: otherwise.
+   */
+  status: EarlyBuyerStatus;
+  realizedPnlUsd: number;
+  unrealizedPnlUsd: number;
+}
+
+export interface EarlyBuyersResponse {
+  /** By rank (first buy order), at most EARLY_BUYERS_LIMIT. */
+  buyers: EarlyBuyer[];
+  /** Status counts, and the early buyers' combined share of supply still held. */
+  summary: { holding: number; soldPart: number; soldAll: number; added: number; holdRateTotal: number };
 }
 
 export interface TokenRef {
@@ -490,7 +559,15 @@ export interface FeedItem {
   isFirstBuy: boolean;
   /** Is this sell closing the whole position. */
   isClose: boolean;
+  /** What the trade did to the wallet's position (set by wallet feeds/activity and portfolio activity). */
+  positionEvent?: PositionEvent;
 }
+
+/**
+ * open = first buy, or a buy re-entering after a close; add = a buy while holding;
+ * reduce = a partial sell; close = a sell down to ~0.
+ */
+export type PositionEvent = 'open' | 'add' | 'reduce' | 'close';
 
 export type SignalKind =
   | 'price_spike'
@@ -566,6 +643,10 @@ export interface TokenFilters {
   /** Search within name/symbol. */
   keyword?: string;
   excludeKeywords?: string[];
+  /** Hide these token addresses (max 500; clients merge the user's blacklist in). */
+  excludeAddresses?: string[];
+  /** Hide tokens created by these wallets (max 500). */
+  excludeCreators?: string[];
   /** Age in minutes. */
   ageMinutes?: Range;
   marketCapUsd?: Range;
@@ -909,7 +990,50 @@ export interface WatchlistItem {
   chain: ChainId;
   address: string;
   addedAt: number;
+  /** Groups the item is filed under (WatchlistGroup ids); none = only the implicit "All". */
+  groupIds?: string[];
+  /** Private note, at most WATCHLIST_LIMITS.noteMaxLength characters. */
+  note?: string;
 }
+
+/** A user-defined watchlist group; "All" is implicit and never stored. */
+export interface WatchlistGroup {
+  id: string;
+  name: string;
+  /** #rrggbb */
+  color?: string;
+  /** 0-based position in the group bar. */
+  order: number;
+}
+
+export const WATCHLIST_LIMITS = { maxGroups: 20, groupNameMaxLength: 24, noteMaxLength: 140 };
+
+/** GET /api/watchlist */
+export interface WatchlistResponse {
+  items: WatchlistItem[];
+  /** Summaries of the items' tokens that still exist. */
+  tokens: TokenSummary[];
+  /** Ordered by `order`. */
+  groups: WatchlistGroup[];
+}
+
+export type BlacklistKind = 'token' | 'creator' | 'keyword';
+
+export interface BlacklistEntry {
+  chain: ChainId;
+  address: string;
+  addedAt: number;
+}
+
+/** Hidden tokens, dev wallets and name keywords (newest first); lists apply them via TokenFilters exclusions. */
+export interface Blacklist {
+  tokens: BlacklistEntry[];
+  creators: BlacklistEntry[];
+  /** Lower-cased, without a leading "$". */
+  keywords: string[];
+}
+
+export const BLACKLIST_LIMITS = { tokens: 500, creators: 500, keywords: 50, keywordMaxLength: 32 };
 
 export interface CopyTradeTask {
   id: string;
@@ -1129,12 +1253,23 @@ export interface ChainMarketInfo {
   chain: ChainId;
   nativeUsd: number;
   nativeChange24h: number;
-  /** Simulated network priority fee suggestion (native). */
+  /** Simulated network priority fee suggestion (native), scaled with congestion. */
   priorityFee: { low: number; medium: number; high: number };
   tokensTracked: number;
   launches1h: number;
   migrations1h: number;
   volume24hUsd: number;
+  /** Network load; always set by the server. */
+  congestion?: ChainCongestion;
+}
+
+/** normal < 0.4 <= busy < 0.7 <= congested. */
+export type CongestionLabel = 'normal' | 'busy' | 'congested';
+
+export interface ChainCongestion {
+  /** 0..1 */
+  level: number;
+  label: CongestionLabel;
 }
 
 export interface MetaResponse {

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { CHAIN_IDS, CHAINS, formatUsd, shortAddress, type SearchResult } from '@trenchscope/shared';
-import { ArrowRight, CornerDownLeft, History, LogIn, LogOut, Moon, Plus, Search, Settings, Sun, UserPlus, X, type LucideIcon } from 'lucide-react';
+import { ArrowRight, Compass, CornerDownLeft, History, LogIn, LogOut, Moon, Plus, Search, Settings, Sun, UserPlus, X, Zap, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon, Pct, Price, TokenAvatar, WalletAvatar, WalletTags } from '@/components/common';
 import { IconButton, Kbd, Modal, Spinner } from '@/components/ui';
@@ -14,7 +14,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { requireAuth, useSession } from '@/store/session';
+import { useDock } from '@/store/dock';
 import { toast } from '@/store/toasts';
+import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 import { useDeposit } from './AccountControls';
 import { useSwitchChain } from './ChainSwitcher';
@@ -112,6 +114,18 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
       { id: 'action:settings', group: 'Actions', title: 'Open settings', keywords: ['preferences', 'presets', 'slippage', 'hotkeys'], run: go(routes.settings()) },
       icon(Settings),
     );
+    add(
+      {
+        id: 'action:dock',
+        group: 'Actions',
+        title: 'Instant trade & positions',
+        subtitle: 'Toggle the quick trade dock (I)',
+        keywords: ['dock', 'quick buy', 'quick sell', 'positions', 'panel'],
+        run: () => useDock.getState().toggle(),
+      },
+      icon(Zap),
+    );
+    add({ id: 'action:tour', group: 'Actions', title: 'Take the tour', keywords: ['onboarding', 'help', 'guide', 'tutorial', 'walkthrough'], run: startTour }, icon(Compass));
     const next = theme === 'dark' ? 'light' : 'dark';
     add(
       { id: 'action:theme', group: 'Actions', title: `Switch to ${next} theme`, keywords: ['theme', 'appearance', 'dark mode', 'light mode'], run: toggle },

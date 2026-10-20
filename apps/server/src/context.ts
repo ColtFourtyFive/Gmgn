@@ -149,6 +149,8 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** Extra response headers, e.g. retry-after on a 429. */
+    public headers?: Record<string, string>,
   ) {
     super(message);
   }
@@ -178,7 +180,10 @@ export function viewerOf(ctx: AppContext, req: FastifyRequest): Viewer {
 }
 
 export function sendError(reply: FastifyReply, err: unknown): FastifyReply {
-  if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, code: err.code });
+  if (err instanceof HttpError) {
+    if (err.headers) reply.headers(err.headers);
+    return reply.status(err.status).send({ error: err.message, code: err.code });
+  }
   const message = err instanceof Error ? err.message : 'internal error';
   return reply.status(500).send({ error: message });
 }

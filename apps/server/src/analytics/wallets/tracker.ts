@@ -5,8 +5,8 @@
 // windows, the recent-activity ring, and counters for sniper / sandwich /
 // average-buy classification. Period stats and the style read from here.
 
-import type { ChainId, Trade, WalletPeriod, WalletPeriodStats, WalletStyle } from '@trenchscope/shared';
-import type { PositionState, TokenState, WalletState, World } from '../../sim/world';
+import type { ChainId, PositionEvent, Trade, WalletPeriod, WalletPeriodStats, WalletStyle } from '@trenchscope/shared';
+import { DUST_RATE, type PositionState, type TokenState, type WalletState, type World } from '../../sim/world';
 import {
   DAY_MS,
   HOUR_MS,
@@ -55,6 +55,18 @@ export interface ActEntry {
   isClose: boolean;
   /** Global sequence for stable ordering of same-timestamp trades. */
   seq: number;
+}
+
+/**
+ * What a trade did to the maker's position, read off the trade itself: makerHoldRate is the share
+ * held after it, so a buy whose pre-trade balance was dust opens (first buy or re-entry) and a sell
+ * that leaves dust closes.
+ */
+export function positionEventOf(trade: Trade, totalSupply: number): PositionEvent {
+  const after = trade.makerHoldRate * totalSupply;
+  const dust = totalSupply * DUST_RATE;
+  if (trade.side === 'buy') return after - trade.tokenAmount <= dust ? 'open' : 'add';
+  return after <= dust ? 'close' : 'reduce';
 }
 
 /** Per (wallet, token) record. */

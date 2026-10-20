@@ -12,10 +12,11 @@
 //              or funded by the same private wallet as >= 2 other buyers whose
 //              first buy landed within EARLY_WINDOW_MS of launch
 // Plus dev behaviour (peak, sells, early sells, re-buys), round-trip (wash)
-// volume, holder in/out flows per minute, and last-known identity fields so
-// dev histories survive the simulator deleting old dormant tokens.
+// volume, holder in/out flows per minute, the first EARLY_BUYERS_LIMIT buyers
+// with the size of their first buy, and last-known identity fields so dev
+// histories survive the simulator deleting old dormant tokens.
 
-import type { ChainId, Side, TokenStatus, Trade } from '@trenchscope/shared';
+import { EARLY_BUYERS_LIMIT, type ChainId, type Side, type TokenStatus, type Trade } from '@trenchscope/shared';
 import { DUST_RATE, type TokenState, type WalletState, type World } from '../../sim/world';
 
 export const SNIPER_BLOCKS = 3;
@@ -75,6 +76,9 @@ export interface TokenTrack {
   insiders: Set<string>;
   /** Early buyers grouped by private funder. */
   earlyFunders: Map<string, string[]>;
+  /** First distinct buyers in buy order (at most EARLY_BUYERS_LIMIT) and the tokens each got in that first buy. */
+  earlyBuyers: string[];
+  earlyTokens: number[];
 
   /** Cumulative traded volume (USD). */
   volumeUsd: number;
@@ -131,6 +135,8 @@ export function newTrack(world: World, t: TokenState): TokenTrack {
     snipers: new Set(),
     insiders: new Set(),
     earlyFunders: new Map(),
+    earlyBuyers: [],
+    earlyTokens: [],
     volumeUsd: 0,
     devBuys: 0,
     devPeak: 0,
@@ -204,6 +210,12 @@ export function recordTrade(world: World, s: TokenTrack, trade: Trade, t: TokenS
     if (bal > s.devPeak) s.devPeak = bal;
   }
 
+  // pos.buys === 1 marks a first buy; the includes() guards a buy a back-fill already counted.
+  if (trade.side === 'buy' && pos?.buys === 1 && s.earlyBuyers.length < EARLY_BUYERS_LIMIT && !s.earlyBuyers.includes(a)) {
+    s.earlyBuyers.push(a);
+    s.earlyTokens.push(trade.tokenAmount);
+  }
+
   if (trade.side === 'buy' && a !== t.creator) {
     const db = trade.block - s.createBlock;
     if (db <= 0) s.bundlers.add(a);
@@ -272,6 +284,27 @@ export function backfillTrack(world: World, s: TokenTrack, t: TokenState, count:
   }
   const bal = devGroupBalance(world, t);
   if (bal > s.devPeak) s.devPeak = bal;
+  backfillEarly(world, s, t);
+}
+
+/**
+ * Rebuild the early-buyer list from the token's trader set: its insertion order is first-trade
+ * order, and a wallet's first trade is its first buy. First-buy sizes come from the trade ring
+ * where it reaches back to that buy, else from the wallet's average buy.
+ */
+export function backfillEarly(world: World, s: TokenTrack, t: TokenState): void {
+  s.earlyBuyers = [];
+  s.earlyTokens = [];
+  const ringStart = t.trades.length > 0 ? t.trades[0].timestamp : Infinity;
+  const firstInRing = new Map<string, number>();
+  for (const tr of t.trades) if (tr.side === 'buy' && !firstInRing.has(tr.wallet)) firstInRing.set(tr.wallet, tr.tokenAmount);
+  for (const a of t.traders) {
+    if (s.earlyBuyers.length >= EARLY_BUYERS_LIMIT) break;
+    const p = world.wallets.get(a)?.positions.get(t.address);
+    if (!p || p.firstBuyAt === null) continue;
+    s.earlyBuyers.push(a);
+    s.earlyTokens.push(p.firstBuyAt >= ringStart ? (firstInRing.get(a) ?? p.boughtTokens / p.buys) : p.boughtTokens / p.buys);
+  }
 }
 
 /** Drop round-trip memory older than the wash window and flows older than 24h. */
@@ -291,6 +324,8 @@ export function pruneTrack(s: TokenTrack, now: number): void {
 // Safe because gone tracks are read-only: trackOf() replaces a gone track before any write path
 // (recordTrade, backfill, cohorts, prune) can reach it.
 const GONE_SET: Set<string> = new Set();
+const GONE_LIST: string[] = [];
+const GONE_NUMS: number[] = [];
 const GONE_FUNDERS: Map<string, string[]> = new Map();
 const GONE_LAST: Map<string, LastTrade> = new Map();
 const GONE_FLOWS: FlowBucket[] = [];
@@ -302,6 +337,8 @@ export function tombstone(s: TokenTrack): void {
   s.snipers = GONE_SET;
   s.insiders = GONE_SET;
   s.earlyFunders = GONE_FUNDERS;
+  s.earlyBuyers = GONE_LIST;
+  s.earlyTokens = GONE_NUMS;
   s.lastTrade = GONE_LAST;
   s.flows = GONE_FLOWS;
 }

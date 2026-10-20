@@ -1,8 +1,9 @@
 // lightweight-charts glue: theme colors from CSS tokens, local-time shift,
-// tiny-price formatting and the trade-marker aggregation.
+// unit (price / MC) and currency (USD / native) scaling, tiny-price
+// formatting and the trade-marker aggregation.
 
 import type { SeriesMarker, UTCTimestamp } from 'lightweight-charts';
-import { formatPrice, formatSmall, formatUsd, RESOLUTION_SECONDS, type Candle, type Resolution, type Trade, type WalletTag } from '@trenchscope/shared';
+import { formatCompact, formatPrice, formatSmall, formatUsd, RESOLUTION_SECONDS, type Candle, type Resolution, type Trade, type WalletTag } from '@trenchscope/shared';
 import { classifyTrade, markerPriority, MARKER_CLASSES, withViewerTags, type MarkerClass } from './model';
 import type { ChartUnit } from './store';
 
@@ -44,24 +45,40 @@ export interface Bar {
   close: number;
 }
 
-export function toBar(c: Candle, unit: ChartUnit, supply: number): Bar {
+/** Chart currency: USD, or the chain's native asset (SOL, BNB, ETH). */
+export type ChartCurrency = 'usd' | 'native';
+
+/**
+ * Multiplier from a candle's USD price to the chart value: × supply for
+ * market cap, ÷ the native asset's USD price for native units. Candles carry
+ * no per-bucket native price, so native bars use the native price current
+ * when they were drawn — close to "native price at bucket time" (TK-C3) over
+ * a chart's span, since the native asset moves far less than the token.
+ */
+export function chartScale(unit: ChartUnit, currency: ChartCurrency, supply: number, nativeUsd: number): number {
   const k = unit === 'mcap' ? supply : 1;
-  return { time: toChartTime(c.time), open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k };
+  return currency === 'native' && nativeUsd > 0 ? k / nativeUsd : k;
 }
 
-/** Axis / crosshair label for a value in the chart unit. */
-export function formatAxis(value: number, unit: ChartUnit): string {
+export function toBar(c: Candle, scale: number): Bar {
+  return { time: toChartTime(c.time), open: c.open * scale, high: c.high * scale, low: c.low * scale, close: c.close * scale };
+}
+
+/** Axis / crosshair label for a value in the chart unit and currency (native values carry no symbol: the toolbar shows it). */
+export function formatAxis(value: number, unit: ChartUnit, currency: ChartCurrency = 'usd'): string {
   // Prices and market caps are never negative; the scale margins can still show values below 0.
   if (!Number.isFinite(value) || value < 0) return '';
+  if (currency === 'native') return unit === 'mcap' ? formatCompact(value, 2) : formatSmall(value, 4);
   if (unit === 'mcap') return formatUsd(value, 2);
   const abs = Math.abs(value);
   if (abs > 0 && abs < 1) return `$${formatSmall(value, 4)}`;
   return formatPrice(value, 4);
 }
 
-/** Smallest price step the scale should resolve (prices can be 1e-9). */
-export function minMoveFor(unit: ChartUnit): number {
-  return unit === 'mcap' ? 0.01 : 1e-12;
+/** Smallest price step the scale should resolve (USD prices can be 1e-9, native ones 1e-12). */
+export function minMoveFor(unit: ChartUnit, currency: ChartCurrency = 'usd'): number {
+  if (unit === 'mcap') return 0.01;
+  return currency === 'native' ? 1e-15 : 1e-12;
 }
 
 export interface MarkerColors {

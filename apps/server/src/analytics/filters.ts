@@ -6,6 +6,8 @@
 //   - volumeUsd / swaps / priceChange are evaluated on the list's window
 //     (Trenches + New Pairs use 24h, Trending uses the requested window)
 //   - all *Rate fields are 0..1 fractions, priceChange is a ratio (0.25 = +25%)
+//   - excludeAddresses / excludeCreators hide exact token / creator addresses
+//     (EVM addresses compare lower-cased); clients merge the user's blacklist in
 
 import { z } from 'zod';
 import type { ChainId, Range, StatWindow, TokenFilters, TokenSummary, TrenchesColumn } from '@trenchscope/shared';
@@ -24,6 +26,12 @@ const bound = z
 export const rangeSchema = z.object({ min: bound, max: bound }).strict();
 
 const shortString = z.string().max(100);
+/** Max entries per exclusion list (a whole blacklist fits). */
+export const MAX_EXCLUDED = 500;
+const addressList = z
+  .array(z.string().min(1).max(100))
+  .max(MAX_EXCLUDED)
+  .transform((list) => list.map((a) => (/^0x/i.test(a) ? a.toLowerCase() : a)));
 
 /** Strict schema: unknown keys are rejected (silently ignoring a misspelt filter is worse than a 400). */
 export const tokenFiltersSchema = z
@@ -31,6 +39,8 @@ export const tokenFiltersSchema = z
     launchpads: z.array(z.string().max(40)).max(50).optional(),
     keyword: shortString.optional(),
     excludeKeywords: z.array(shortString).max(50).optional(),
+    excludeAddresses: addressList.optional(),
+    excludeCreators: addressList.optional(),
     ageMinutes: rangeSchema.optional(),
     marketCapUsd: rangeSchema.optional(),
     liquidityUsd: rangeSchema.optional(),
@@ -100,9 +110,12 @@ export function validateTrenchesFilters(value: unknown): Partial<Record<Trenches
   return r.data as Partial<Record<TrenchesColumn, TokenFilters>>;
 }
 
+/** Longest JSON `filters` query param; larger exclusion lists go in a POST body or a WS sub. */
+export const MAX_FILTERS_PARAM = 64 * 1024;
+
 function decodeJson(raw: string | undefined): unknown {
   if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 8192) throw new FilterParseError('filters too long');
+  if (raw.length > MAX_FILTERS_PARAM) throw new FilterParseError('filters too long');
   try {
     return JSON.parse(raw);
   } catch {
@@ -159,6 +172,8 @@ function normKeyword(k: string): string {
  */
 export interface IdentitySubject {
   chain: ChainId;
+  address: string;
+  creator: string;
   symbol: string;
   name: string;
   launchpad: string;
@@ -172,8 +187,18 @@ export interface IdentitySubject {
   isCopycat: boolean;
 }
 
+/** Exclusion lists as sets, built once per (parsed, hence reused) filter array. */
+const excludedSets = new WeakMap<string[], Set<string>>();
+function excluded(list: string[], value: string): boolean {
+  let set = excludedSets.get(list);
+  if (!set) excludedSets.set(list, (set = new Set(list)));
+  return set.has(value);
+}
+
 export function matchIdentityFilters(s: IdentitySubject, f: TokenFilters | undefined, now: number): boolean {
   if (!f) return true;
+  if (f.excludeAddresses && f.excludeAddresses.length > 0 && excluded(f.excludeAddresses, s.address)) return false;
+  if (f.excludeCreators && f.excludeCreators.length > 0 && excluded(f.excludeCreators, s.creator)) return false;
   if (f.launchpads && f.launchpads.length > 0 && !f.launchpads.includes(s.launchpad)) return false;
   if (f.keyword !== undefined) {
     const k = normKeyword(f.keyword);

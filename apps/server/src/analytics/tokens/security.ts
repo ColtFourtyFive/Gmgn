@@ -9,6 +9,9 @@ import type {
   DevToken,
   HolderTagStats,
   RiskLevel,
+  SafetyBand,
+  SafetyReason,
+  SafetyScore,
   SecurityCheck,
   TokenSecurity,
   WalletTag,
@@ -598,6 +601,168 @@ export function buildChecks({ security: s, chain, onCurve, smartDegenCount }: Ch
   // Drop undefined hints so payloads stay compact.
   for (const c of checks) if (c.hint === undefined) delete c.hint;
   return checks;
+}
+
+// ---------------------------------------------------------------------------
+// Safety score (PRD 8.6.1: the contract and holder sections)
+// ---------------------------------------------------------------------------
+
+type ReasonLevel = SafetyReason['level'];
+/** [threshold, points, level]: the first tier whose threshold the value exceeds applies (one tier per field). */
+type Tiers = readonly (readonly [number, number, ReasonLevel])[];
+
+interface Deduction {
+  key: string;
+  label: string;
+  points: number;
+  level: ReasonLevel;
+}
+
+interface Cap {
+  key: string;
+  label: string;
+  cap: number;
+}
+
+export const SAFETY_WEIGHTS = { contract: 0.5625, holders: 0.4375 } as const;
+const TAX_TIERS: Tiers = [[0.1, 25, 'bad'], [0.05, 10, 'warn']];
+const TOP10_TIERS: Tiers = [[0.5, 25, 'bad'], [0.3, 14, 'warn'], [0.2, 6, 'warn']];
+const DEV_TIERS: Tiers = [[0.05, 20, 'bad'], [0.02, 10, 'warn']];
+const BUNDLER_TIERS: Tiers = [[0.3, 20, 'bad'], [0.15, 10, 'warn'], [0.05, 4, 'warn']];
+const SNIPER_TIERS: Tiers = [[0.15, 15, 'bad'], [0.05, 6, 'warn']];
+const INSIDER_TIERS: Tiers = [[0.05, 12, 'bad'], [0.01, 5, 'warn']];
+const BOT_TIERS: Tiers = [[0.7, 12, 'bad'], [0.5, 6, 'warn']];
+const FRESH_TIERS: Tiers = [[0.5, 8, 'warn']];
+/** Holder-based checks, unknown while nobody holds the token. */
+const HOLDER_CHECKS = 7;
+const MAX_REASONS = 6;
+
+export interface SafetyInputs {
+  chain: ChainId;
+  security: Omit<TokenSecurity, 'checks' | 'safety'>;
+  /** Wallets holding the token now. */
+  holderCount: number;
+}
+
+/**
+ * Safety score 0..100 (higher = safer), deterministic and explained by its reasons:
+ *
+ *   score = 100 - 0.5625 * min(100, contract) - 0.4375 * min(100, holders), then capped
+ *
+ * (the PRD weights for a token without the price section: memecoins rarely have the 8 x 15m
+ * candles it needs). Within a field only the worst tier applies.
+ *
+ *   CONTRACT                                   HOLDERS
+ *   SOL mint authority active     25 bad       top 10 hold > 50 / 30 / 20%        25 bad / 14 / 6
+ *   SOL freeze authority active   20 bad       dev holds > 5 / 2%                 20 bad / 10
+ *   EVM source not verified       15 bad       bundler volume > 30 / 15 / 5%      20 bad / 10 / 4
+ *   EVM owner not renounced        8           snipers hold > 15 / 5%             15 bad / 6
+ *   max tax > 10 / 5%             25 bad / 10  insiders hold > 5 / 1%             12 bad / 5
+ *   migrated, LP burned < 95%     12 bad       bots > 70 / 50% of holders         12 bad / 6
+ *                                              fresh wallets > 50% of holders      8
+ *                                              wash trading                       10 bad
+ *
+ * Caps (the lowest applies): honeypot 0, SOL mint or freeze authority active 25 (both hard gates:
+ * band danger), rugRatio >= 0.5 59, >= 0.3 79, EVM honeypot or verification unknown 79, EVM pool
+ * LP < 95% burned 79. A reason's impact is its points x section weight (scaled down if a section
+ * passes 100), plus the points a binding cap removed, so impacts add up to 100 - score (before
+ * rounding, unless the score floors at 0).
+ * Coverage = known / applicable checks: SOL mint + freeze or EVM honeypot + source + owner, tax,
+ * LP once migrated, the 7 holder checks (known once anyone holds), wash trading and the rug ratio.
+ * Band: a hard gate -> danger; coverage < 0.5 -> unknown; else >= 70 safe, >= 40 caution, danger.
+ */
+export function safetyScore({ chain, security: s, holderCount }: SafetyInputs): SafetyScore {
+  const contract: Deduction[] = [];
+  const holders: Deduction[] = [];
+  const caps: Cap[] = [];
+  let known = 0;
+  let applicable = 0;
+  const check = (isKnown: boolean): boolean => {
+    applicable++;
+    if (isKnown) known++;
+    return isKnown;
+  };
+  const tiered = (into: Deduction[], key: string, label: string, value: number, tiers: Tiers) => {
+    const hit = tiers.find(([threshold]) => value > threshold);
+    if (hit) into.push({ key, label, points: hit[1], level: hit[2] });
+  };
+
+  if (chain === 'sol') {
+    if (check(s.renouncedMint !== null) && !s.renouncedMint) {
+      contract.push({ key: 'mint', label: 'Mint authority active', points: 25, level: 'bad' });
+      caps.push({ key: 'mint', label: 'Mint authority active', cap: 25 });
+    }
+    if (check(s.renouncedFreeze !== null) && !s.renouncedFreeze) {
+      contract.push({ key: 'freeze', label: 'Freeze authority active', points: 20, level: 'bad' });
+      caps.push({ key: 'freeze', label: 'Freeze authority active', cap: 25 });
+    }
+  } else {
+    const unverified: Cap = { key: 'unverified', label: 'Contract checks incomplete', cap: 79 };
+    if (!check(s.isHoneypot !== null)) caps.push(unverified);
+    else if (s.isHoneypot) caps.push({ key: 'honeypot', label: 'Honeypot: sells are blocked', cap: 0 });
+    if (!check(s.isOpenSource !== null)) caps.push(unverified);
+    else if (!s.isOpenSource) contract.push({ key: 'open_source', label: 'Contract not verified', points: 15, level: 'bad' });
+    if (check(s.isRenounced !== null) && !s.isRenounced) contract.push({ key: 'renounced', label: 'Ownership not renounced', points: 8, level: 'warn' });
+  }
+  check(true);
+  const maxTax = Math.max(s.buyTax, s.sellTax);
+  tiered(contract, 'tax', `Tax ${pct(maxTax)}`, maxTax, TAX_TIERS);
+  // LP only exists once migrated (curve tokens skip the check rather than count it unknown).
+  if (s.lpBurnedRate !== null && check(true) && s.lpBurnedRate < 0.95) {
+    const label = `Only ${pct(s.lpBurnedRate)} of LP burned`;
+    contract.push({ key: 'lp', label, points: 12, level: 'bad' });
+    if (chain !== 'sol') caps.push({ key: 'lp', label, cap: 79 });
+  }
+
+  if (holderCount > 0) {
+    applicable += HOLDER_CHECKS;
+    known += HOLDER_CHECKS;
+    tiered(holders, 'top10', `Top 10 hold ${pct(s.top10HolderRate)}`, s.top10HolderRate, TOP10_TIERS);
+    tiered(holders, 'dev', `Dev holds ${pct(s.devHoldRate)}`, s.devHoldRate, DEV_TIERS);
+    tiered(holders, 'bundlers', `Bundlers ${pct(s.bundlerRate)} of volume`, s.bundlerRate, BUNDLER_TIERS);
+    tiered(holders, 'snipers', `Snipers hold ${pct(s.sniperHoldRate)}`, s.sniperHoldRate, SNIPER_TIERS);
+    tiered(holders, 'insiders', `Insiders hold ${pct(s.insiderHoldRate)}`, s.insiderHoldRate, INSIDER_TIERS);
+    tiered(holders, 'bots', `Bots are ${pct(s.botDegenRate)} of holders`, s.botDegenRate, BOT_TIERS);
+    tiered(holders, 'fresh', `Fresh wallets are ${pct(s.freshWalletRate)} of holders`, s.freshWalletRate, FRESH_TIERS);
+  } else applicable += HOLDER_CHECKS;
+  check(true);
+  if (s.isWashTrading) holders.push({ key: 'wash', label: 'Wash trading', points: 10, level: 'bad' });
+  check(true);
+  if (s.rugRatio >= 0.5) caps.push({ key: 'rug', label: `Rug risk ${pct(s.rugRatio)}`, cap: 59 });
+  else if (s.rugRatio >= 0.3) caps.push({ key: 'rug', label: `Rug risk ${pct(s.rugRatio)}`, cap: 79 });
+
+  const reasons = new Map<string, SafetyReason>();
+  const add = (key: string, label: string, impact: number, level: ReasonLevel) => {
+    const r = reasons.get(key);
+    if (!r) reasons.set(key, { key, label, impact, level });
+    else {
+      r.impact += impact;
+      if (level === 'bad') r.level = 'bad';
+    }
+  };
+  const deduct = (list: Deduction[], weight: number): number => {
+    const sum = list.reduce((a, d) => a + d.points, 0);
+    const scale = sum > 100 ? (weight * 100) / sum : weight;
+    for (const d of list) add(d.key, d.label, d.points * scale, d.level);
+    return sum * scale;
+  };
+  let score = Math.max(0, 100 - deduct(contract, SAFETY_WEIGHTS.contract) - deduct(holders, SAFETY_WEIGHTS.holders));
+  let binding: Cap | null = null;
+  for (const c of caps) if (!binding || c.cap < binding.cap) binding = c;
+  if (binding && binding.cap < score) {
+    add(binding.key, binding.label, score - binding.cap, 'bad');
+    score = binding.cap;
+  }
+  score = Math.round(score);
+  const coverage = applicable > 0 ? Math.round((known / applicable) * 100) / 100 : 0;
+  const gated = caps.some((c) => c.cap <= 25);
+  const band: SafetyBand = gated ? 'danger' : coverage < 0.5 ? 'unknown' : score >= 70 ? 'safe' : score >= 40 ? 'caution' : 'danger';
+  const list = [...reasons.values()]
+    .map((r) => ({ ...r, impact: Math.round(r.impact * 10) / 10 }))
+    .filter((r) => r.impact > 0)
+    .sort((a, b) => b.impact - a.impact || a.key.localeCompare(b.key))
+    .slice(0, MAX_REASONS);
+  return { score, band, coverage, reasons: list };
 }
 
 export { devGroupBalance };

@@ -47,6 +47,12 @@ export function activeSection(pathname: string): string | null {
   return (isChainId(parts[0]) ? parts[1] : parts[0]) ?? null;
 }
 
+/** Token page of a pathname: "/sol/token/AbC" -> { chain: 'sol', address: 'AbC' }, else null. */
+export function tokenRoute(pathname: string): { chain: ChainId; address: string } | null {
+  const [chain, section, address] = pathname.split('/').filter(Boolean);
+  return isChainId(chain) && section === 'token' && address ? { chain, address: decodeURIComponent(address) } : null;
+}
+
 /**
  * Where the chain switcher goes: same section on the new chain
  * (/sol/trending -> /bsc/trending); token/address pages fall back to the

@@ -44,6 +44,7 @@ export function QuickBuyButton({ chain, token, symbol, amount, size = 'xs', vari
   return (
     <button
       type="button"
+      data-quick-buy
       onClick={onClick}
       disabled={pending}
       aria-busy={pending || undefined}

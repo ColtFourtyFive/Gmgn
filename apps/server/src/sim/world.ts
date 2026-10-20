@@ -30,6 +30,7 @@ import {
   type WalletTag,
   type WindowStats,
 } from '@trenchscope/shared';
+import { CONGESTION_BASE } from './congestion';
 import { Rng, base58Address, evmAddress, txHash } from './rng';
 
 // ---------------------------------------------------------------------------
@@ -209,6 +210,8 @@ export interface ChainRuntime {
   nativeHistory: { t: number; usd: number }[];
   launches: number[];
   migrations: number[];
+  /** Network load 0..1 (sim/congestion.ts), advanced by the market module. */
+  congestion: number;
 }
 
 export interface SwapOptions {
@@ -312,7 +315,7 @@ export class World extends EventEmitter {
     this.walletsByArchetype = {} as Record<ChainId, Map<Archetype, string[]>>;
     for (const id of CHAIN_IDS) {
       const usd = CHAINS[id].nativeUsdStart;
-      this.chains[id] = { id, nativeUsd: usd, nativeUsdOpen24h: usd, nativeHistory: [{ t: now, usd }], launches: [], migrations: [] };
+      this.chains[id] = { id, nativeUsd: usd, nativeUsdOpen24h: usd, nativeHistory: [{ t: now, usd }], launches: [], migrations: [], congestion: CONGESTION_BASE };
       this.tokensByChain[id] = [];
       this.walletsByArchetype[id] = new Map();
     }
@@ -1019,6 +1022,8 @@ export class World extends EventEmitter {
     w.tradeTotal = s.tradeTotal;
     w.rng.setState(s.rng);
     w.chains = s.chains;
+    // snapshots saved before the congestion model start calm
+    for (const id of CHAIN_IDS) w.chains[id].congestion ??= CONGESTION_BASE;
     w.tokensByChain = s.tokensByChain;
     for (const t of s.tokens) w.tokens.set(t.address, t);
     for (const wal of s.wallets) {

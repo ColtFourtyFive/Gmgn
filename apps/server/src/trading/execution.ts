@@ -2,9 +2,10 @@
 // per-request overrides), prices the trade (platform + network fees, manual or
 // auto slippage), waits a simulated confirmation latency, then executes
 // against the World ledger with minOut enforced, so price moves during the
-// latency produce real slippage failures. Public-mempool trades with
-// noticeable price impact can get sandwiched. Every fill is fanned out to the
-// user channel, the balance push and the rewards volume.
+// latency produce real slippage failures. Network congestion (sim/congestion.ts)
+// stretches the latency and, while congested, makes low priority bids expire.
+// Public-mempool trades with noticeable price impact can get sandwiched. Every
+// fill is fanned out to the user channel, the balance push and the rewards volume.
 
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
@@ -26,6 +27,8 @@ import {
   type TradePreset,
 } from '@trenchscope/shared';
 import { HttpError, type AppContext } from '../context';
+import { CONGESTED_LEVEL, congestionLabel, priorityFeeTiers } from '../sim/congestion';
+import type { Rng } from '../sim/rng';
 import type { SwapOutcome, TokenState, WalletState } from '../sim/world';
 import { HOUR_MS, assertAmount, balanceOf, normalizeAddress, notFound } from './common';
 
@@ -39,6 +42,7 @@ const LATENCY = { min: 120, max: 600, antiMevExtra: 150 };
 /** Sandwich bots only bother with public-mempool pool trades that move the price this much. */
 const MEV_MIN_IMPACT = 0.01;
 const MEV_MAX_CHANCE = 0.6;
+export const TX_EXPIRED = 'transaction expired: priority fee too low for current congestion';
 
 export type TradeSource = Order['source'];
 
@@ -121,6 +125,30 @@ function failedReceipt(error: string, latencyMs: number, quote?: Quote): SwapRec
 /** Network cost of one swap under a preset: base fee + priority fee (+ the builder tip on the anti-MEV route). */
 export function networkFeeOf(chain: ChainId, preset: TradePreset): number {
   return CHAINS[chain].baseNetworkFee + preset.priorityFee + (preset.antiMev ? preset.tip : 0);
+}
+
+/** What a preset bids for block space: its priority fee, plus the builder tip on the anti-MEV route. */
+function priorityBid(preset: TradePreset): number {
+  return preset.priorityFee + (preset.antiMev ? preset.tip : 0);
+}
+
+/**
+ * Simulated confirmation latency: 120-600ms (+150ms anti-MEV), stretched by congestion
+ * x (1 + 3 * max(0, level - 0.2) * w), where w = 1 for a bid below the suggested medium fee,
+ * 0.5 below the high fee and 0.25 at or above it.
+ */
+export function landingLatencyMs(rng: Rng, chain: ChainId, preset: TradePreset, level: number): number {
+  const tiers = priorityFeeTiers(chain, level);
+  const bid = priorityBid(preset);
+  const weight = bid >= tiers.high ? 0.25 : bid >= tiers.medium ? 0.5 : 1;
+  const base = rng.int(LATENCY.min, LATENCY.max) + (preset.antiMev ? LATENCY.antiMevExtra : 0);
+  return Math.round(base * (1 + 3 * Math.max(0, level - 0.2) * weight));
+}
+
+/** While congested, a bid below the suggested low fee fails to land with p = 0.25 + (level - 0.7) (25-55%). */
+export function expiresUnderCongestion(rng: Rng, chain: ChainId, preset: TradePreset, level: number): boolean {
+  if (congestionLabel(level) !== 'congested' || priorityBid(preset) >= priorityFeeTiers(chain, level).low) return false;
+  return rng.chance(0.25 + (level - CONGESTED_LEVEL));
 }
 
 /** Fixed latency from TRADE_LATENCY_MS (tests use 0), or null for the simulated random latency. */
@@ -301,10 +329,14 @@ export class Executor {
       }
     }
 
-    const latencyMs = this.fixedLatencyMs ?? world.rng.int(LATENCY.min, LATENCY.max) + (preset.antiMev ? LATENCY.antiMevExtra : 0);
+    const latencyMs = this.fixedLatencyMs ?? landingLatencyMs(world.rng, token.chain, preset, world.chains[token.chain].congestion);
     await sleep(latencyMs);
     const aborted = opts.guard?.() ?? null;
     if (aborted) return { receipt: failedReceipt(aborted, latencyMs, quote), aborted };
+    // an expired transaction never lands, so it costs nothing
+    if (expiresUnderCongestion(world.rng, token.chain, preset, world.chains[token.chain].congestion)) {
+      return { receipt: failedReceipt(TX_EXPIRED, latencyMs, quote), aborted: null };
+    }
 
     const outcome = world.executeSwap(wallet, token, side, quote.amountIn, {
       platformFeeRate: PLATFORM_FEE_RATE,

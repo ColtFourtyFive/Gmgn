@@ -224,6 +224,7 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
   const input = (
     <div
       ref={wrapRef}
+      data-tour={variant === 'bar' ? 'search' : undefined}
       className={clsx('input-group', variant === 'sheet' && '!h-10 text-base', focused && variant === 'bar' && 'bg-panel', className)}
       onClick={() => inputRef.current?.focus()}
     >

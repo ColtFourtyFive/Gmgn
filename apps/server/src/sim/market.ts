@@ -11,6 +11,7 @@
 
 import { CHAINS, CHAIN_IDS, type ChainId, type Trade } from '@trenchscope/shared';
 import type { AppContext } from '../context';
+import { newCongestionModel, stepCongestion, type CongestionModel } from './congestion';
 import type { TokenState, WalletState, World } from './world';
 import { NARRATIVES, ctoSocials } from './names';
 import { addBump, evalPath, hasUpside, isBadFate, isGoodFate, planCrash, planMigrated, planRevival, simOf, type TokenSim } from './behaviors/fate';
@@ -59,6 +60,8 @@ interface ChainState {
   cyclePeriodMs: number;
   /** Narrative log-heat (NARRATIVES order), mean-reverting: drives the meta rotation. */
   heat: number[];
+  /** Network congestion model (its level is published on world.chains). */
+  congestion: CongestionModel;
 }
 
 export interface ChainSimStats {
@@ -124,7 +127,7 @@ export class MarketSim {
     });
     CHAIN_IDS.forEach((c, i) => {
       this.active[c] = [];
-      this.chains[c] = { cyclePhase: i * 1.7, cyclePeriodMs: (50 + 10 * i) * MIN, heat: NARRATIVES.map(() => 0) };
+      this.chains[c] = { cyclePhase: i * 1.7, cyclePeriodMs: (50 + 10 * i) * MIN, heat: NARRATIVES.map(() => 0), congestion: newCongestionModel(0) };
       this.stats[c] = emptyStats();
     });
   }
@@ -146,6 +149,7 @@ export class MarketSim {
         cyclePhase: rng.float(0, 2 * Math.PI),
         cyclePeriodMs: rng.float(40, 90) * MIN,
         heat: NARRATIVES.map(() => rng.normal(0, 0.6)),
+        congestion: newCongestionModel(this.stats[c].trades),
       };
     }
   }
@@ -160,6 +164,7 @@ export class MarketSim {
       this.scheduler.restore(snap.scheduler);
       this.chains = snap.chains;
       this.stats = snap.stats;
+      for (const c of CHAIN_IDS) this.chains[c].congestion ??= newCongestionModel(this.stats[c].trades);
     }
     this.roster.rebuild();
     // a world saved before the market simulator existed has no agents yet
@@ -182,7 +187,9 @@ export class MarketSim {
     for (let a = this.scheduler.popDue(now); a; a = this.scheduler.popDue(now)) this.runAction(a, now);
     for (const chain of CHAIN_IDS) {
       const c = this.chains[chain];
-      const rate = CHAINS[chain].launchesPerMinute * (1 + 0.2 * Math.sin((2 * Math.PI * (now - this.world.startedAt)) / c.cyclePeriodMs + c.cyclePhase));
+      // a launch rush (see sim/congestion.ts) brings a wave of new launches with it
+      const rushBoost = 1 + 2 * c.congestion.rush;
+      const rate = rushBoost * CHAINS[chain].launchesPerMinute * (1 + 0.2 * Math.sin((2 * Math.PI * (now - this.world.startedAt)) / c.cyclePeriodMs + c.cyclePhase));
       const n = this.world.rng.poisson((rate * dtMs) / MIN);
       for (let i = 0; i < n; i++) this.launch(chain);
       const list = this.active[chain];
@@ -667,6 +674,7 @@ export class MarketSim {
 
     for (const chain of CHAIN_IDS) {
       const scale = CHAIN_SCALE[chain];
+      world.chains[chain].congestion = stepCongestion(this.chains[chain].congestion, rng, dt, this.stats[chain].trades);
       const heat = this.chains[chain].heat;
       for (let i = 0; i < heat.length; i++) heat[i] += (-heat[i] * dt) / 2400 + 0.0173 * Math.sqrt(dt) * rng.normal();
       for (const t of this.active[chain]) {

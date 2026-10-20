@@ -54,6 +54,7 @@ import {
   perDayRate,
   periodStart,
   periodStats,
+  positionEventOf,
   type ActEntry,
   type PeriodCalc,
   type WalletTrackData,
@@ -640,7 +641,13 @@ export class WalletAnalytics {
   private feedItem(e: ActEntry, viewer: Viewer): FeedItem | null {
     const t = this.ctx.world.tokens.get(e.trade.token);
     if (!t) return null;
-    return { trade: this.viewTrade(e.trade, viewer), token: this.ref(t), isFirstBuy: e.isFirstBuy, isClose: e.isClose };
+    return {
+      trade: this.viewTrade(e.trade, viewer),
+      token: this.ref(t),
+      isFirstBuy: e.isFirstBuy,
+      isClose: e.isClose,
+      positionEvent: positionEventOf(e.trade, t.totalSupply),
+    };
   }
 
   /** Recent trades of the wallet, newest first (ring of 100; 1000 for user wallets). */

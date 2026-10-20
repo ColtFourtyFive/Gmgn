@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ChainId } from '@trenchscope/shared';
-import { ChevronDown, LogOut, Moon, Plus, Sun, UserPlus } from 'lucide-react';
+import { ChevronDown, Compass, LogOut, Moon, Plus, Sun, UserPlus } from 'lucide-react';
 import clsx from 'clsx';
 import { ChainIcon, Native, WalletAvatar } from '@/components/common';
 import { Button, IconButton, Menu, Popover, Skeleton, Spinner } from '@/components/ui';
@@ -11,6 +11,7 @@ import { routes } from '@/lib/chain';
 import { errorMessage, formatNativeFor } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
+import { startTour } from '@/store/tour';
 import { ACCOUNT_ITEMS } from './nav';
 
 /** Top up the paper wallet via the faucet, with toasts. */
@@ -118,6 +119,7 @@ export function AccountMenu() {
                 ? [{ key: 'register', label: 'Register account', icon: <UserPlus size={14} />, onSelect: () => useSession.getState().promptAuth(true) }]
                 : []),
               ...ACCOUNT_ITEMS.map((it) => ({ key: it.key, label: it.label, icon: <it.icon size={14} />, onSelect: () => navigate(it.href) })),
+              { key: 'tour', label: 'Take the tour', icon: <Compass size={14} />, onSelect: startTour },
               { key: 'signout', label: 'Sign out', icon: <LogOut size={14} />, danger: true, onSelect: () => void signOut() },
             ]}
           />

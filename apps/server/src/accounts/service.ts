@@ -4,14 +4,19 @@
 
 import { randomBytes } from 'node:crypto';
 import {
+  BLACKLIST_LIMITS,
   CHAINS,
   CHAIN_IDS,
+  WATCHLIST_LIMITS,
   formatNative,
   formatUsd,
   shortAddress,
   type Account,
   type AppNotification,
   type AuthResponse,
+  type Blacklist,
+  type BlacklistEntry,
+  type BlacklistKind,
   type ChainId,
   type FollowedWallet,
   type RewardsSummary,
@@ -19,7 +24,9 @@ import {
   type Trade,
   type UserSettings,
   type UserWallet,
+  type WatchlistGroup,
   type WatchlistItem,
+  type WatchlistResponse,
 } from '@trenchscope/shared';
 import { HttpError, type AccountsApi, type AppContext } from '../context';
 import type { WalletState } from '../sim/world';
@@ -73,6 +80,9 @@ interface AccountRecord {
   follows: Map<string, StoredFollow>;
   /** Newest first. */
   watchlist: WatchlistItem[];
+  /** Ordered by `order` (0..n-1); "All" is implicit. */
+  watchlistGroups: WatchlistGroup[];
+  blacklist: Blacklist;
   /** Ring buffer, oldest first. */
   notifications: AppNotification[];
   rewards: RewardsCounters;
@@ -95,9 +105,24 @@ export interface FollowInput {
   notify?: boolean;
 }
 
+export interface WatchlistItemPatch {
+  groupIds?: string[];
+  /** Blank removes the note. */
+  note?: string;
+}
+
+export interface WatchlistGroupPatch {
+  name?: string;
+  /** null removes the color. */
+  color?: string | null;
+  /** New 0-based position; the other groups shift around it. */
+  order?: number;
+}
+
 export type FaucetResult = { ok: true; wallet: UserWallet } | { ok: false; retryAfterSeconds: number };
 
 const walletKey = (chain: ChainId, address: string) => `${chain}:${address}`;
+const emptyBlacklist = (): Blacklist => ({ tokens: [], creators: [], keywords: [] });
 const notFound = (what: string) => new HttpError(404, `${what} not found`, 'not_found');
 const isAmount = (v: number) => Number.isFinite(v) && v >= 0;
 
@@ -112,6 +137,10 @@ function removeFromSetMap(map: Map<string, Set<string>>, key: string, value: str
   if (!set) return;
   set.delete(value);
   if (set.size === 0) map.delete(key);
+}
+
+function copyItem(item: WatchlistItem): WatchlistItem {
+  return item.groupIds ? { ...item, groupIds: [...item.groupIds] } : { ...item };
 }
 
 function isSnapshot(data: unknown): data is AccountsSnapshot {
@@ -239,7 +268,7 @@ export class Accounts implements AccountsApi {
     if (!entry || now - entry.since >= LOGIN_ATTEMPT_WINDOW_MS) this.loginAttempts.set(accountId, (entry = { count: 0, since: now }));
     if (entry.count >= MAX_LOGIN_ATTEMPTS) {
       const seconds = Math.ceil((entry.since + LOGIN_ATTEMPT_WINDOW_MS - now) / 1000);
-      throw new HttpError(429, `too many sign-in attempts, try again in ${seconds}s`, 'rate_limited');
+      throw new HttpError(429, `too many sign-in attempts, try again in ${seconds}s`, 'rate_limited', { 'retry-after': String(seconds) });
     }
     entry.count++;
   }
@@ -270,6 +299,8 @@ export class Accounts implements AccountsApi {
       wallets,
       follows: new Map(),
       watchlist: [],
+      watchlistGroups: [],
+      blacklist: emptyBlacklist(),
       notifications: [],
       rewards: emptyRewards(),
       faucetClaims: {},
@@ -508,11 +539,11 @@ export class Accounts implements AccountsApi {
   // ---------------------------------------------------------------------------
 
   watchlist(accountId: string): WatchlistItem[] {
-    return this.records.get(accountId)?.watchlist.map((item) => ({ ...item })) ?? [];
+    return this.records.get(accountId)?.watchlist.map(copyItem) ?? [];
   }
 
-  /** Watchlist items plus summaries of the tokens that still exist. */
-  watchlistView(accountId: string): { items: WatchlistItem[]; tokens: TokenSummary[] } {
+  /** Watchlist items, summaries of the tokens that still exist, and the groups. */
+  watchlistView(accountId: string): WatchlistResponse {
     const items = this.watchlist(accountId);
     const tokens: TokenSummary[] = [];
     for (const item of items) {
@@ -524,19 +555,44 @@ export class Accounts implements AccountsApi {
         // Summaries are best effort; the items alone still render a usable list.
       }
     }
-    return { items, tokens };
+    return { items, tokens, groups: this.watchlistGroups(accountId) };
   }
 
-  addToWatchlist(accountId: string, chain: ChainId, address: string): WatchlistItem {
+  /** Add a token; adding one already listed applies `patch` to it instead. */
+  addToWatchlist(accountId: string, chain: ChainId, address: string, patch: WatchlistItemPatch = {}): WatchlistItem {
     const record = this.record(accountId);
     const existing = record.watchlist.find((i) => i.chain === chain && i.address === address);
-    if (existing) return { ...existing };
+    if (existing) return this.patchItem(record, existing, patch);
     const token = this.ctx.world.getToken(address);
     if (!token || token.chain !== chain) throw notFound('token');
     if (record.watchlist.length >= MAX_WATCHLIST) throw new HttpError(400, `watchlist is full (max ${MAX_WATCHLIST})`, 'limit_reached');
     const item: WatchlistItem = { chain, address, addedAt: this.ctx.world.now };
+    this.patchItem(record, item, patch);
     record.watchlist.unshift(item);
-    return { ...item };
+    return copyItem(item);
+  }
+
+  updateWatchlistItem(accountId: string, chain: ChainId, address: string, patch: WatchlistItemPatch): WatchlistItem {
+    const record = this.record(accountId);
+    const item = record.watchlist.find((i) => i.chain === chain && i.address === address);
+    if (!item) throw notFound('watchlist item');
+    return this.patchItem(record, item, patch);
+  }
+
+  /** Empty group lists and blank notes are stored as absent fields. */
+  private patchItem(record: AccountRecord, item: WatchlistItem, patch: WatchlistItemPatch): WatchlistItem {
+    if (patch.groupIds !== undefined) {
+      const ids = [...new Set(patch.groupIds)];
+      const unknown = ids.find((id) => !record.watchlistGroups.some((g) => g.id === id));
+      if (unknown) throw new HttpError(400, `groupIds: unknown group ${unknown}`, 'invalid_input');
+      if (ids.length) item.groupIds = ids;
+      else delete item.groupIds;
+    }
+    if (patch.note !== undefined) {
+      if (patch.note) item.note = patch.note;
+      else delete item.note;
+    }
+    return copyItem(item);
   }
 
   removeFromWatchlist(accountId: string, chain: ChainId, address: string): void {
@@ -544,6 +600,110 @@ export class Accounts implements AccountsApi {
     const index = list.findIndex((i) => i.chain === chain && i.address === address);
     if (index < 0) throw notFound('watchlist item');
     list.splice(index, 1);
+  }
+
+  watchlistGroups(accountId: string): WatchlistGroup[] {
+    return this.record(accountId).watchlistGroups.map((g) => ({ ...g }));
+  }
+
+  createWatchlistGroup(accountId: string, input: { name: string; color?: string }): WatchlistGroup {
+    const record = this.record(accountId);
+    const groups = record.watchlistGroups;
+    if (groups.length >= WATCHLIST_LIMITS.maxGroups) throw new HttpError(400, `at most ${WATCHLIST_LIMITS.maxGroups} watchlist groups`, 'limit_reached');
+    this.assertGroupName(record, input.name, null);
+    const group: WatchlistGroup = { id: this.ctx.world.nextId('wlg'), name: input.name, order: groups.length };
+    if (input.color) group.color = input.color;
+    groups.push(group);
+    return { ...group };
+  }
+
+  updateWatchlistGroup(accountId: string, id: string, patch: WatchlistGroupPatch): WatchlistGroup {
+    const record = this.record(accountId);
+    const groups = record.watchlistGroups;
+    const index = groups.findIndex((g) => g.id === id);
+    if (index < 0) throw notFound('watchlist group');
+    const group = groups[index];
+    if (patch.name !== undefined) {
+      this.assertGroupName(record, patch.name, id);
+      group.name = patch.name;
+    }
+    if (patch.color === null) delete group.color;
+    else if (patch.color !== undefined) group.color = patch.color;
+    if (patch.order !== undefined) {
+      groups.splice(index, 1);
+      groups.splice(Math.min(patch.order, groups.length), 0, group);
+      groups.forEach((g, i) => (g.order = i));
+    }
+    return { ...group };
+  }
+
+  /** Delete a group; its items stay in the watchlist (under "All"). */
+  deleteWatchlistGroup(accountId: string, id: string): void {
+    const record = this.record(accountId);
+    const index = record.watchlistGroups.findIndex((g) => g.id === id);
+    if (index < 0) throw notFound('watchlist group');
+    record.watchlistGroups.splice(index, 1);
+    record.watchlistGroups.forEach((g, i) => (g.order = i));
+    for (const item of record.watchlist) if (item.groupIds?.includes(id)) this.patchItem(record, item, { groupIds: item.groupIds.filter((g) => g !== id) });
+  }
+
+  private assertGroupName(record: AccountRecord, name: string, selfId: string | null): void {
+    const lower = name.toLowerCase();
+    if (lower === 'all') throw new HttpError(400, 'name: "All" is the built-in group', 'invalid_input');
+    if (record.watchlistGroups.some((g) => g.id !== selfId && g.name.toLowerCase() === lower)) {
+      throw new HttpError(409, 'a watchlist group with this name already exists', 'duplicate');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Blacklist (hidden tokens / creators / keywords; lists apply it through TokenFilters)
+  // ---------------------------------------------------------------------------
+
+  blacklist(accountId: string): Blacklist {
+    const b = this.record(accountId).blacklist;
+    return { tokens: b.tokens.map((e) => ({ ...e })), creators: b.creators.map((e) => ({ ...e })), keywords: [...b.keywords] };
+  }
+
+  /**
+   * Add a token / creator (`value` = address on `chain`, which must exist there) or a keyword
+   * (already normalized). Re-adding an entry is a no-op. Returns the updated blacklist.
+   */
+  addToBlacklist(accountId: string, kind: BlacklistKind, value: string, chain?: ChainId): Blacklist {
+    const record = this.record(accountId);
+    const b = record.blacklist;
+    if (kind === 'keyword') {
+      if (!b.keywords.includes(value)) {
+        if (b.keywords.length >= BLACKLIST_LIMITS.keywords) throw new HttpError(400, `at most ${BLACKLIST_LIMITS.keywords} blacklisted keywords`, 'limit_reached');
+        b.keywords.unshift(value);
+      }
+      return this.blacklist(accountId);
+    }
+    if (!chain) throw new HttpError(400, `chain: required for ${kind}s`, 'invalid_input');
+    const list = kind === 'token' ? b.tokens : b.creators;
+    if (list.some((e) => e.chain === chain && e.address === value)) return this.blacklist(accountId);
+    const { world } = this.ctx;
+    if (kind === 'token' ? world.getToken(value)?.chain !== chain : world.getWallet(value)?.chain !== chain) throw notFound(kind === 'token' ? 'token' : 'wallet');
+    if (list.length >= BLACKLIST_LIMITS[`${kind}s`]) throw new HttpError(400, `at most ${BLACKLIST_LIMITS[`${kind}s`]} blacklisted ${kind}s`, 'limit_reached');
+    const entry: BlacklistEntry = { chain, address: value, addedAt: world.now };
+    list.unshift(entry);
+    return this.blacklist(accountId);
+  }
+
+  /** Remove an entry (tokens / creators on any chain unless `chain` is given). 404 when nothing matched. */
+  removeFromBlacklist(accountId: string, kind: BlacklistKind, value: string, chain?: ChainId): Blacklist {
+    const b = this.record(accountId).blacklist;
+    let removed: boolean;
+    if (kind === 'keyword') {
+      removed = b.keywords.includes(value);
+      b.keywords = b.keywords.filter((k) => k !== value);
+    } else {
+      const key = kind === 'token' ? 'tokens' : 'creators';
+      const kept = b[key].filter((e) => e.address !== value || (chain !== undefined && e.chain !== chain));
+      removed = kept.length !== b[key].length;
+      b[key] = kept;
+    }
+    if (!removed) throw notFound('blacklist entry');
+    return this.blacklist(accountId);
   }
 
   // ---------------------------------------------------------------------------
@@ -656,6 +816,9 @@ export class Accounts implements AccountsApi {
         ...stored,
         settings: normalizeSettings(stored.settings),
         rewards: { ...emptyRewards(), ...stored.rewards },
+        // absent in snapshots saved before watchlist groups and the blacklist existed
+        watchlistGroups: stored.watchlistGroups ?? [],
+        blacklist: stored.blacklist ?? emptyBlacklist(),
         follows: new Map(stored.follows.map((f) => [walletKey(f.chain, f.address), f])),
       });
     }

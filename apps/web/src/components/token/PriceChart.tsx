@@ -1,7 +1,9 @@
 // Candlestick chart (lightweight-charts 4.2): REST history per resolution,
-// live `candle` updates from the page feed, Price/MCap unit, trade markers by
-// wallet class, migration marker and price lines for the viewer's average
-// buy price and open orders.
+// live `candle` updates from the page feed, Price/MCap unit, USD/native
+// currency (remembered in localStorage; native divides by the chain's native
+// USD price when the bars are drawn, see chartScale), trade markers by wallet
+// class, migration marker and price lines for the viewer's average buy price
+// and open orders.
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -17,18 +19,19 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
-import { formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Resolution, type TokenDetail } from '@trenchscope/shared';
+import { CHAINS, formatCompact, formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Resolution, type TokenDetail } from '@trenchscope/shared';
 import { CandlestickChart, Eye, MoveHorizontal } from 'lucide-react';
 import clsx from 'clsx';
 import { withSubscript, WALLET_TAG_META } from '@/components/common';
 import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Select, Skeleton } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { useUi } from '@/store/ui';
 import { useViewerTags } from '@/components/discovery';
 import { useTokenFeed } from './feed';
-import { buildMarkers, cssColor, formatAxis, minMoveFor, safeLocale, toBar, toChartTime, type Bar } from './chartUtils';
+import { buildMarkers, chartScale, cssColor, formatAxis, minMoveFor, safeLocale, toBar, toChartTime, type Bar, type ChartCurrency } from './chartUtils';
 import { DEFAULT_MARKER_CLASSES, MARKER_CLASSES, type MarkerClass } from './model';
 import { tokenKeys, useChartUnit, useOnReconnect } from './queries';
 import type { ChartUnit } from './store';
@@ -52,6 +55,9 @@ const UNIT_ITEMS: { value: ChartUnit; label: string }[] = [
   { value: 'price', label: 'Price' },
   { value: 'mcap', label: 'MCap' },
 ];
+
+/** Redraw native bars once the native price drifts this much from the one they were drawn at. */
+const NATIVE_REDRAW_DRIFT = 0.005;
 
 interface Legend {
   bar: Bar;
@@ -83,6 +89,9 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   const { chain, address } = token;
   const supply = token.totalSupply;
   const [unit, setUnit] = useChartUnit();
+  const [storedCurrency, setCurrency] = useLocalStorage<ChartCurrency>('ts.token.currency', useDisplaySettings().currency);
+  const currency: ChartCurrency = storedCurrency === 'native' ? 'native' : 'usd';
+  const nativeSymbol = CHAINS[chain].nativeSymbol;
   const theme = useUi((s) => s.theme);
   const feed = useTokenFeed();
   const signedIn = useSession((s) => !!s.token);
@@ -102,12 +111,14 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   /** Live candles that arrived before the history for their resolution. */
   const pendingRef = useRef<Candle[]>([]);
   const loadedRef = useRef(false);
-  const unitRef = useRef(unit);
-  unitRef.current = unit;
   const resRef = useRef(resolution);
   resRef.current = resolution;
-  const supplyRef = useRef(supply);
-  supplyRef.current = supply;
+  /** Scale wanted now (unit, currency, supply, native price) and the one the bars on the chart use. */
+  const targetScale = chartScale(unit, currency, supply, token.nativeUsd);
+  const targetScaleRef = useRef(targetScale);
+  targetScaleRef.current = targetScale;
+  const [scale, setScale] = useState(targetScale);
+  const scaleRef = useRef(scale);
   /** Bumped whenever bars are (re)written so markers and lines follow. */
   const [dataVersion, setDataVersion] = useState(0);
   const [legend, setLegend] = useState<Legend | null>(null);
@@ -139,10 +150,13 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     const vol = volumeRef.current;
     if (!series || !vol) return;
     const raw = rawRef.current;
-    series.setData(raw.map((c) => toBar(c, unitRef.current, supplyRef.current)));
+    const k = targetScaleRef.current;
+    scaleRef.current = k;
+    setScale(k);
+    series.setData(raw.map((c) => toBar(c, k)));
     vol.setData(raw.map(volumeBar));
     const last = raw[raw.length - 1];
-    setLastLegend(last ? { bar: toBar(last, unitRef.current, supplyRef.current), volume: last.volume } : null);
+    setLastLegend(last ? { bar: toBar(last, k), volume: last.volume } : null);
     setDataVersion((v) => v + 1);
   };
 
@@ -163,7 +177,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     if (last && c.time < last.time) return;
     if (last && c.time === last.time) raw[raw.length - 1] = c;
     else raw.push(c);
-    const bar = toBar(c, unitRef.current, supplyRef.current);
+    const bar = toBar(c, scaleRef.current);
     candleRef.current?.update(bar);
     volumeRef.current?.update(volumeBar(c));
     setLastLegend({ bar, volume: c.volume });
@@ -230,12 +244,18 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // Unit: axis format + rescale every bar.
+  // Unit / currency: axis format + rescale every bar.
   useEffect(() => {
-    candleRef.current?.applyOptions({ priceFormat: { type: 'custom', minMove: minMoveFor(unit), formatter: (p: number) => formatAxis(p, unit) } });
+    candleRef.current?.applyOptions({ priceFormat: { type: 'custom', minMove: minMoveFor(unit, currency), formatter: (p: number) => formatAxis(p, unit, currency) } });
     if (loadedRef.current) writeAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unit]);
+  }, [unit, currency]);
+
+  // Native bars follow the native price once it drifts noticeably (or the supply changes).
+  useEffect(() => {
+    if (loadedRef.current && Math.abs(targetScale / scaleRef.current - 1) > NATIVE_REDRAW_DRIFT) writeAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetScale]);
 
   // Seconds on the time axis for sub-minute resolutions; reset state on resolution change.
   useEffect(() => {
@@ -316,7 +336,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     for (const l of linesRef.current) series.removePriceLine(l);
     linesRef.current = lineSpecs.map((s) =>
       series.createPriceLine({
-        price: unit === 'mcap' ? s.price * supply : s.price,
+        price: s.price * scale,
         color: cssColor(s.tone, 0.85),
         lineWidth: 1,
         lineStyle: s.style,
@@ -324,7 +344,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
         title: s.title,
       }),
     );
-  }, [lineSpecs, unit, supply, theme]);
+  }, [lineSpecs, scale, theme]);
 
   const toggleClass = (cls: MarkerClass, on: boolean) => setClassList((prev) => (on ? [...new Set([...prev, cls])] : prev.filter((c) => c !== cls)));
 
@@ -341,6 +361,16 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
           <Select size="sm" value={resolution} onChange={onResolutionChange} options={RES_ITEMS} className="w-[72px]" aria-label="Candle resolution" />
         )}
         <SegmentedControl size="sm" value={unit} onChange={setUnit} items={UNIT_ITEMS} aria-label="Chart unit" />
+        <SegmentedControl
+          size="sm"
+          value={currency}
+          onChange={setCurrency}
+          items={[
+            { value: 'usd', label: 'USD', title: 'Values in US dollars' },
+            { value: 'native', label: nativeSymbol, title: `Values in ${nativeSymbol} at the current ${nativeSymbol} price` },
+          ]}
+          aria-label="Chart currency"
+        />
         <span className="flex-1" />
         <Popover
           placement="bottom-end"
@@ -386,19 +416,19 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
         {shown && (
           <div className="pointer-events-none absolute left-2 right-[84px] top-1.5 z-[2] flex flex-wrap items-center gap-x-2 text-2xs text-muted">
             <span>
-              O <span className="num text-fg">{withSubscript(formatAxis(shown.bar.open, unit))}</span>
+              O <span className="num text-fg">{withSubscript(formatAxis(shown.bar.open, unit, currency))}</span>
             </span>
             <span>
-              H <span className="num text-fg">{withSubscript(formatAxis(shown.bar.high, unit))}</span>
+              H <span className="num text-fg">{withSubscript(formatAxis(shown.bar.high, unit, currency))}</span>
             </span>
             <span>
-              L <span className="num text-fg">{withSubscript(formatAxis(shown.bar.low, unit))}</span>
+              L <span className="num text-fg">{withSubscript(formatAxis(shown.bar.low, unit, currency))}</span>
             </span>
             <span>
-              C <span className={clsx('num', change !== null && change < 0 ? 'text-down' : 'text-up')}>{withSubscript(formatAxis(shown.bar.close, unit))}</span>
+              C <span className={clsx('num', change !== null && change < 0 ? 'text-down' : 'text-up')}>{withSubscript(formatAxis(shown.bar.close, unit, currency))}</span>
             </span>
             <span>
-              V <span className="num text-fg">{formatUsd(shown.volume)}</span>
+              V <span className="num text-fg">{currency === 'native' ? `${formatCompact(shown.volume / token.nativeUsd)} ${nativeSymbol}` : formatUsd(shown.volume)}</span>
             </span>
           </div>
         )}

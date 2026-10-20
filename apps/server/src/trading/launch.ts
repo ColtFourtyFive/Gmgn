@@ -23,7 +23,7 @@ import {
 } from '@trenchscope/shared';
 import { HttpError, type AppContext } from '../context';
 import { DEFAULT_LAUNCH_GLYPH, LAUNCH_GLYPHS, RESERVED_TICKERS, seedString } from '../sim/names';
-import type { TokenState } from '../sim/world';
+import type { TokenState, WalletState } from '../sim/world';
 import { HOUR_MS, badRequest, balanceOf } from './common';
 import { networkFeeOf, type Executor, type Ticket } from './execution';
 import { LAUNCH_LIMITS, type LaunchInput } from './schemas';
@@ -167,6 +167,19 @@ export class Launches {
     }
   }
 
+  /** The account's bundle wallets on a chain: those funded for the launches of its chain wallet. */
+  bundleWallets(accountId: string, chain: ChainId): WalletState[] {
+    const { world, accounts } = this.ctx;
+    const wallets: WalletState[] = [];
+    for (const address of accounts.walletFor(accountId, chain).createdTokens) {
+      for (const bundler of world.getToken(address)?.bundlers ?? []) {
+        const wallet = world.getWallet(bundler);
+        if (wallet?.accountId === accountId) wallets.push(wallet);
+      }
+    }
+    return wallets;
+  }
+
   /** The account's launch times within the last hour (sim time), to append to; 429 once the hour is full. */
   private launchesWithinHour(accountId: string): number[] {
     const now = this.ctx.world.now;
@@ -179,7 +192,7 @@ export class Launches {
     if (!times) this.recent.set(accountId, (times = []));
     if (times.length >= LAUNCHES_PER_HOUR) {
       const seconds = Math.ceil((times[0] + HOUR_MS - now) / 1000);
-      throw new HttpError(429, `at most ${LAUNCHES_PER_HOUR} launches per hour; try again in ${seconds}s`, 'rate_limited');
+      throw new HttpError(429, `at most ${LAUNCHES_PER_HOUR} launches per hour; try again in ${seconds}s`, 'rate_limited', { 'retry-after': String(seconds) });
     }
     return times;
   }

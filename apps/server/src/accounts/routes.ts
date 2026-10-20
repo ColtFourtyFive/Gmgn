@@ -2,7 +2,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CHAINS, isChainId, type ChainId } from '@trenchscope/shared';
+import { BLACKLIST_LIMITS, CHAINS, WATCHLIST_LIMITS, isChainId, type BlacklistKind, type ChainId } from '@trenchscope/shared';
 import { HttpError, bearerToken, optionalAccount, requireAccount, type AppContext } from '../context';
 import { Accounts, MAX_NOTIFICATIONS } from './service';
 import { settingsPatchSchema } from './settings';
@@ -45,6 +45,41 @@ const notificationsQuery = z.object({
 });
 const markReadBody = z.object({ ids: z.array(z.string()).max(MAX_NOTIFICATIONS).optional() }).default({});
 
+/** Control, zero-width, bidi and line / paragraph separator characters. */
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+const visibleText = (max: number, what: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, `${what} must be at most ${max} characters`)
+    .refine((s) => !INVISIBLE.test(s), `${what} contains control or invisible characters`);
+const groupName = visibleText(WATCHLIST_LIMITS.groupNameMaxLength, 'name').pipe(z.string().min(1, 'name is required'));
+const groupColor = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'color must be #rrggbb')
+  .transform((c) => c.toLowerCase());
+const groupBody = z.object({ name: groupName, color: groupColor.optional() });
+const groupPatch = z.object({ name: groupName.optional(), color: groupColor.nullable().optional(), order: z.number().int().min(0).optional() });
+const watchPatch = z.object({
+  groupIds: z.array(z.string().min(1).max(40)).max(WATCHLIST_LIMITS.maxGroups).optional(),
+  note: visibleText(WATCHLIST_LIMITS.noteMaxLength, 'note').optional(),
+});
+const watchBody = walletRef.merge(watchPatch);
+
+const blacklistKind = z.enum(['token', 'creator', 'keyword']);
+const blacklistBody = z.object({ kind: blacklistKind, chain: chain.optional(), value: z.string() });
+const blacklistRef = z.object({ kind: blacklistKind, value: z.string() });
+const blacklistQuery = z.object({ chain: chain.optional() });
+/** Keywords are stored lower-cased without a leading "$" (how list filters match them). */
+const keyword = z.object({
+  value: z
+    .string()
+    .refine((k) => !INVISIBLE.test(k), 'keyword contains control or invisible characters')
+    .transform((k) => k.trim().replace(/^\$/, '').trim().toLowerCase())
+    .pipe(z.string().min(1, 'keyword is required').max(BLACKLIST_LIMITS.keywordMaxLength, `keyword must be at most ${BLACKLIST_LIMITS.keywordMaxLength} characters`)),
+});
+const blacklistAddress = z.object({ value: address });
+
 /** Validate input; failures become 400s naming the offending field. */
 function parse<S extends z.ZodTypeAny>(schema: S, value: unknown): z.output<S> {
   const result = schema.safeParse(value);
@@ -62,6 +97,13 @@ function normalizeAddress(chain: ChainId, address: string): string {
 function parseWalletRef(value: unknown): { chain: ChainId; address: string } {
   const ref = parse(walletRef, value);
   return { chain: ref.chain, address: normalizeAddress(ref.chain, ref.address) };
+}
+
+/** A blacklist value in stored form: a normalized keyword, or an address (lower-cased when EVM-style). */
+function blacklistValue(kind: BlacklistKind, value: string): string {
+  if (kind === 'keyword') return parse(keyword, { value }).value;
+  const raw = parse(blacklistAddress, { value }).value;
+  return /^0x/i.test(raw) ? raw.toLowerCase() : raw;
 }
 
 export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
@@ -145,8 +187,32 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
 
   app.post('/api/watchlist', async (req) => {
     const id = auth(req);
-    const ref = parseWalletRef(req.body);
-    return accounts.addToWatchlist(id, ref.chain, ref.address);
+    const { chain, address, ...patch } = parse(watchBody, req.body);
+    return accounts.addToWatchlist(id, chain, normalizeAddress(chain, address), patch);
+  });
+
+  // Static `groups` routes win over the `:chain/:address` ones in the router.
+  app.get('/api/watchlist/groups', async (req) => accounts.watchlistGroups(auth(req)));
+
+  app.post('/api/watchlist/groups', async (req) => {
+    const id = auth(req);
+    return accounts.createWatchlistGroup(id, parse(groupBody, req.body));
+  });
+
+  app.patch('/api/watchlist/groups/:id', async (req) => {
+    const id = auth(req);
+    return accounts.updateWatchlistGroup(id, (req.params as { id: string }).id, parse(groupPatch.default({}), req.body));
+  });
+
+  app.delete('/api/watchlist/groups/:id', async (req) => {
+    accounts.deleteWatchlistGroup(auth(req), (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  app.patch('/api/watchlist/:chain/:address', async (req) => {
+    const id = auth(req);
+    const ref = parseWalletRef(req.params);
+    return accounts.updateWatchlistItem(id, ref.chain, ref.address, parse(watchPatch.default({}), req.body));
   });
 
   app.delete('/api/watchlist/:chain/:address', async (req) => {
@@ -154,6 +220,22 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
     const ref = parseWalletRef(req.params);
     accounts.removeFromWatchlist(id, ref.chain, ref.address);
     return { ok: true };
+  });
+
+  // ---- blacklist ----
+
+  app.get('/api/blacklist', async (req) => accounts.blacklist(auth(req)));
+
+  app.post('/api/blacklist', async (req) => {
+    const id = auth(req);
+    const body = parse(blacklistBody, req.body);
+    return accounts.addToBlacklist(id, body.kind, blacklistValue(body.kind, body.value), body.chain);
+  });
+
+  app.delete('/api/blacklist/:kind/:value', async (req) => {
+    const id = auth(req);
+    const ref = parse(blacklistRef, req.params);
+    return accounts.removeFromBlacklist(id, ref.kind, blacklistValue(ref.kind, ref.value), parse(blacklistQuery, req.query).chain);
   });
 
   // ---- notifications & rewards ----

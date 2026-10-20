@@ -1,9 +1,10 @@
-import { Search } from 'lucide-react';
+import { Command, Search, Zap } from 'lucide-react';
 import { IconButton } from '@/components/ui';
 import { useActiveChain } from '@/hooks/useActiveChain';
-import { useHotkeys } from '@/hooks/useHotkeys';
+import { MOD_KEY, useHotkeys } from '@/hooks/useHotkeys';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useDisplaySettings } from '@/hooks/useSettings';
+import { useDock } from '@/store/dock';
 import { useUi } from '@/store/ui';
 import { AccountMenu, BalancePill, ThemeToggle } from './AccountControls';
 import { ChainSwitcher } from './ChainSwitcher';
@@ -13,8 +14,10 @@ import { NotificationsBell } from './NotificationsBell';
 import { Omnibox } from './Omnibox';
 
 /**
- * App header. ≥lg: inline omnibox; md..lg: search button; <md: compact
- * controls only (sections live in the bottom tab bar + drawer).
+ * App header. ≥lg: inline omnibox (with the ⌘K palette hint); below lg:
+ * search and command palette buttons; <md: compact controls only (sections
+ * live in the bottom tab bar + drawer). ≥md also toggles the Instant trade
+ * dock (phones open it from the menu).
  */
 export function TopBar() {
   const chain = useActiveChain();
@@ -22,6 +25,7 @@ export function TopBar() {
   const wide = useBreakpoint('lg');
   const xl = useBreakpoint('xl');
   const { hotkeys } = useDisplaySettings();
+  const dockOpen = useDock((s) => s.open && !s.collapsed);
   const openSearch = () => useUi.getState().setSearchOpen(true);
   useHotkeys({ '/': openSearch }, { enabled: !wide && hotkeys });
 
@@ -32,11 +36,29 @@ export function TopBar() {
       {wide ? (
         <Omnibox className="w-[clamp(200px,18vw,300px)] shrink-0" />
       ) : (
-        <IconButton label="Search (/)" icon={<Search size={16} />} onClick={openSearch} />
+        <div data-tour="search" className="flex shrink-0 items-center">
+          <IconButton label="Search (/)" icon={<Search size={16} />} onClick={openSearch} />
+          <IconButton
+            label={`Command palette (${MOD_KEY}+K)`}
+            icon={<Command size={15} />}
+            aria-keyshortcuts="Control+K Meta+K"
+            onClick={() => useUi.getState().setPaletteOpen(true)}
+          />
+        </div>
       )}
       <ChainSwitcher compact={!desktop} />
       <BalancePill chain={chain} compact={!desktop} />
       <div className="flex shrink-0 items-center gap-1">
+        {desktop && (
+          <IconButton
+            data-tour="dock"
+            label="Instant trade & positions (I)"
+            icon={<Zap size={16} />}
+            active={dockOpen}
+            aria-keyshortcuts="I"
+            onClick={() => useDock.getState().toggle()}
+          />
+        )}
         <NotificationsBell />
         {desktop && <ThemeToggle />}
         <AccountMenu />
