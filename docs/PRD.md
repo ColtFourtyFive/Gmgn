@@ -2239,3 +2239,31 @@ The last 2 versions of Chrome, Edge, Firefox and Safari (desktop and iOS). No IE
 | WS | `serverT` in pong; `convergence:<chain>` channel; `seq` + list deltas, `tickers:<chain>`, `inflow:…`, `status` (P1) | P0 / P1 |
 | New REST | `GET /api/:chain/convergence`; `GET /api/:chain/tokens/:address/series` (P1); `GET /api/:chain/inflow` (P1); `GET /api/status/landing` (P1); `POST /api/share` + `GET /api/share/:id` (P1); `GET/POST/DELETE /api/blacklist`; `GET/DELETE /api/consents` | mixed |
 
+
+---
+
+## Appendix F: v1 implementation status
+
+Status of the §13.1 P0 scope in the current build. ✅ shipped · ◐ partial (gap noted) · ⏳ deferred.
+
+| # | P0 item | Status | Notes |
+|---|---|---|---|
+| 1 | Market simulator | ✅ | 4 chains, 8 launchpads, curve → TrenchSwap graduation with burned LP, 12 wallet archetypes with hidden fates, congestion + launch rushes, boosts/CTO, determinism, compact v8 snapshots, warm-up. ⏳ scenario presets and ground-truth export (realism is reported by `scripts/sim-report.ts` and classifier evals in tests). |
+| 2 | Data-provider interfaces | ◐ | The `World` ledger + events is the provider boundary (see ARCHITECTURE "Swapping in real data"); every page carries the simulated-market notice. ⏳ explicit provider interfaces and per-field provenance badges. |
+| 3 | Global shell | ✅ | Nav, chain selector, omnibox (paste address → navigate), command palette, wallet pill + faucet, notification bell, status bar with chain tickers and congestion, simulated-market badge, Instant Trade / Positions dock, dark + light, guest quick start, onboarding tour, PWA manifest. |
+| 4 | Trenches | ✅ | Three lifecycle columns, full cards (risk chips, safety, dev record, copycat/CTO/boost/dev-sold badges, quick buy), per-column filters + presets, risk thresholds, pause on hover, hotkeys, 1 s realtime, blacklist merge. |
+| 5 | Trending, New Pairs | ✅ | Windows, server sorts, filters, initial liquidity. |
+| 6 | Token page | ✅ | Header, stats windows, bonding block, chart (price/MCap, USD/native, 8 resolutions, wallet-class markers, avg-cost and order lines), trade panel (market/limit/auto, presets, exit plans, quote + cost preview, safety gate), Safety & Audit, holder structure, early buyers, dev, pool cards, Activity/Holders/Top traders/Position/Orders/Dev tokens tabs. ◐ signal markers on the chart and "sell initials". |
+| 7 | Wallet page | ✅ | PnL card + daily calendar, analysis (style, speed, badges, copy score), distribution, Recent PnL/Holdings/Activity/Created tokens/Calls tabs, Follow/Copy/Share. ◐ phishing risk check. |
+| 8 | Leaderboard | ✅ | Smart/KOL/sniper/whale/all, 1D/7D/30D, sort + order, Follow/Copy. |
+| 9 | Monitor | ✅ | Smart/KOL/Following/All feeds with position events, noise filters, pause, smart-money convergence panel, following manager with import/export. |
+| 10 | Signals | ✅ | 13 kinds, filters, hit stats, call-outs page with caller ranking. ◐ grouped feed and in-app signal subscriptions (alerts cover smart-buy counts). |
+| 11 | Trading engine | ✅ | Quote/swap with idempotency, presets, fee tiers, auto slippage, anti-MEV, simulated latency/landing failures/sandwiches, limit, TP/SL/trailing exit plans, dev-sell, migration buy/sell, risk gate, lifecycle events. |
+| 12 | Copy trade | ✅ | Fixed/ratio sizing with per-token cap, mirror sells or exit plan, filters, auto-pause after 3 failures. |
+| 13 | Portfolio, Watchlist | ✅ | Positions (incl. launch bundle wallets), orders, history, activity, equity curve, faucet; watchlist with groups and notes. ◐ portfolio daily calendar (on wallet page). |
+| 14 | Alerts & notifications | ✅ | Price/MC/change/wallet/new-token/smart-buy rules, inbox, toasts with levels. ⏳ holding alerts, signal subscriptions, digests. |
+| 15 | Analytics | ✅ | Holder universe, tri-state security, token labels and chips, creator rug history, global tags, wallet metrics, safety score + rug ratio, window stats + makers, heat score, signal engine, PnL engine; classifier quality measured in tests. |
+| 16 | Settings | ✅ | Account, trading presets, quick amounts, display, risk thresholds, hotkeys, blacklist. ⏳ notification matrix, automation consent records, languages beyond English. |
+| 17 | Non-functional | ✅ | Realtime WS with resubscribe, subscript-zero formatting, theme tokens, responsive layouts, accessibility checks (axe) in E2E, auth + rate limits + CSP + input sanitisation, determinism and persistence tests, Playwright E2E suite. |
+
+Beyond P0, v1 also ships these P1/P2 items: token launch with bundle wallets, PnL share cards, command palette, narratives, rewards & referrals, wallet copy scores and style titles, follow import/export, call-outs.
