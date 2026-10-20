@@ -849,6 +849,63 @@ one launchpad, by the dev's first buy. a correlation, not a signal.
 
 - KS-07 (AMBER, S-1). Correlation, not a strategy. Never "buy when the dev buys": that's advice, and an invitation to get bundled.
 
+
+### 8.1 Built bonus bench (video, ready to swap in)
+
+Five extra clips were built in the rebuild. None is scheduled; use them as swap-ins (a weekend slot, a slot whose gate fails, or quote-reply ammo during the week) and on L+3 onward. Same rules as §1: one original post per slot, alt text from `x/posts/alt/<ref>.txt`, re-measure after any edit.
+
+**B1 · `pov-dev-woke`** (8 s loop, AI, no product) · **46 / 280**
+
+```text
+pov: you aped and the dev wallet just woke up.
+```
+
+- Pure meme: AI label burned in, no product, so no RISK. Pattern 1 in `research/VIRAL_FORMATS.md`.
+
+**B2 · `pov-exit`** (6 s loop, AI + a product card) · **179 / 280**
+
+```text
+pov: the dev sold. your exit fired right after.
+
+after, not before. nobody's psychic.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
+```
+
+- SC-41 (dev-sell exit, reacts after the dev's sell). Never "before the dev" (MNC-17). **Gate K-2**, like D5-P2.
+
+**B3 · `pov-larpers`** (7 s loop, AI + a tags card) · **123 / 280**
+
+```text
+the timeline vs. the wallets.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
+```
+
+- The CT hook in picture form. The card shows the real tag chips and the tagline only.
+
+**B4 · `species-montage`** (11.5 s, AI, cut to a beat) · **125 / 280**
+
+```text
+the field guide, in 11 seconds.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
+```
+
+- Ends on "five chains. one scope." and the chain list: **gate C-0** (use a four-chain re-cut if a chain isn't in the launch build). Best after Day 5, once all four species teasers have run.
+
+**B5 · `peek-bundle-check`** (25 s screen walkthrough, demo data) · **261 / 280**
+
+```text
+is this launch bundled? the 10-second check:
+
+the audit. the holder chips. holders filtered to bundlers, then "funded by". then try to buy, and read why it asks first.
+
+memecoins are extremely risky. most go to zero. only trade what you can afford to lose. nfa.
+```
+
+- SC-21 (bundler = bought in the creation block), SC-49 (funded by, one hop), SC-08 (the risk prompt on the trade panel). A good L+1 to L+3 receipts post, or the reply to "how do I check if it's bundled?".
+
 ---
 
 ## 9. Assets
@@ -902,7 +959,7 @@ The trailer keeps only 1.8–2.4 s of each clip. These teasers run the full 5 s 
 | `peek-audit` | D6-P3 | 1080 × 1350 | New capture (FB-07): the audit panel of a high-risk demo token, checklist and rug ratio, with red insider, sniper and bundler rows (their hints are hover tooltips: show at most one, e.g. Bundlers, or none) | Callout `reference, not a guarantee` (on the risk level / rug ratio) · DEMO | **READY** (`x/posts/peek-audit.png`) |
 | `peek-risk` | D7-P1 | 1200 × 1200 | New capture (FB-08): trade panel → Market buy on a high-risk demo token, the "High-risk token" dialog with the box unticked | Callout `it asks first` (on "Buy anyway") · DEMO | **READY** (`x/posts/peek-risk.png`) |
 | `dict-kol` | D7-P3 | 1080 × 1350 | Card + `chips/kol.png`. Only if F-2 is ticked | `kol` · `a wallet labelled as belonging to someone with a following.` · `the tag says who bought. not why they're posting.` · footer `high risk · nfa` | **READY** (`x/posts/dict-kol.png`) (gated on F-2) |
-| `teaser-soon` | D7-P4 | 1920 × 1080, ~13.5 s | Existing clips `c02` (periscope rising) then `c13` (empty desk, lamp on, periscope eyepiece hanging) + an end card | 0.0 s `everyone in the trenches is larping.` · 5.0 s `the wallets aren't.` · 10.0–13.5 s end slate: mark reveal → stacked lockup (`brand/logo/lockup-stacked-dark.svg`) + `see who's really buying.` + `soon.` (amber), as SCRIPT §13.2. Nothing else: no re-typeset wordmark, chain list, date, weekday or time · `AI-generated` (exact case, corner-label plate, top-right) on the AI section. Under decision (b) (D7-P4), `soon.` is dropped | **READY** (`x/posts/teaser-soon.mp4`) (skipped if the launch gate passes first) |
+| `teaser-soon` | D7-P4 | 1920 × 1080, ~13.5 s | As built: the new `n3` keyframe (the larpers: paper crowns, cardboard yacht, a periscope watching) with a slow push, then `c02` (periscope rising), then the end slate; the v4 voice take reads both lines | 0.0 s `everyone in the trenches is larping.` · 5.0 s `the wallets aren't.` · 10.0–13.5 s end slate: mark reveal → stacked lockup (`brand/logo/lockup-stacked-dark.svg`) + `see who's really buying.` + `soon.` (amber), as SCRIPT §13.2. Nothing else: no re-typeset wordmark, chain list, date, weekday or time · `AI-generated` (exact case, corner-label plate, top-right) on the AI section. Under decision (b) (D7-P4), `soon.` is dropped | **READY** (`x/posts/teaser-soon.mp4`) (skipped if the launch gate passes first) |
 | `dict-whale` | R5 | 1080 × 1350 | Card + `chips/whale.png` | `whale` · `$100k+ native balance or $10k+ average buy` · footer `high risk · nfa` | **READY** (`x/posts/dict-whale.png`) |
 | `peek-monitor` | R6 | 1600 × 900 | New capture (FB-15): `/sol/monitor`, smart-money and followed-wallet trades, the rug-risk filter, the "Hot by smart money" panel. KOL rows and filters out of frame | Callout `hot = 2+ smart wallets in 30 minutes` · DEMO | **READY** (`x/posts/peek-monitor.png`) |
 

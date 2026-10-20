@@ -1,11 +1,12 @@
 // Launch-day screen recordings that need a real dev dump (LAUNCH_DAY §10): launch-10 (QT-1, real speed) and launch-13
 // (L1-A rug autopsy, mint to floor). Marketing capture mode on the local demo market; nothing trades.
-// Opens fresh launches as they appear (up to 4 at once; one that hasn't doubled by 75 s is dropped, each its own 1920x1080 page on 1 s candles) and records each from
-// its first seconds: a 4 fps timelapse to disk for the whole life, plus a full-rate 40 s ring buffer. When the dev sells
-// (the dev_sell signal for that token) it records until 10 s after the full dump (at most 30 s) and keeps both; a launch with no dev sell in 8 minutes is
-// dropped. Stops after two dumps, or 40 minutes. Token events (trades with wallet tags) are saved for the captions.
-// Output: video/app-footage/watch-<n>-lapse.mp4 (timelapse frames on their real timestamps) and watch-<n>-rt.mp4,
-// meta in screens/live/watch.json.
+// Scripted rugs pump first, so it opens launches that pass ~$11K inside their first 100 s (up to 4 at once, each its own
+// 1920x1080 page on 1 s candles, whose chart shows the life from mint) and records from that moment: a 4 fps timelapse
+// to disk plus a full-rate 40 s ring buffer. After a dev sell it records until 10 s past the full dump (30 s at most);
+// a launch with no dev sell in 10 minutes is dropped. WATCH_FULL=1 keeps only full dumps. Stops after WATCH_WANT takes
+// (default 2) or 40 minutes. Trades with wallet tags are saved for the captions.
+// Output: video/app-footage/watch-<symbol>-lapse.mp4 (frames on their real timestamps) and watch-<symbol>-rt.mp4,
+// appended to screens/live/watch.json.
 // Usage: [WATCH_WANT=n] [WATCH_FULL=1] node capture_watch.mjs scratch_dir
 import { createRequire } from 'module';
 import fs from 'fs';
@@ -34,8 +35,7 @@ const WANT = Number(process.env.WATCH_WANT || 2);
 const FULL = process.env.WATCH_FULL === '1';
 const MAX_LIFE = 10 * 60_000;
 const SLOTS = 4;
-// Scripted rugs pump first: a launch that hasn't doubled by 75 s is dropped to free its slot.
-const PUMP_BY = 75, PUMP_X = 2;
+const PUMP_MC = 11_000;
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, colorScheme: 'dark' });
@@ -124,7 +124,9 @@ async function finish(w, keep) {
 while (done < WANT && Date.now() - t0 < 40 * 60_000) {
   if (watching.size < SLOTS) {
     const tr = await api('/api/sol/trenches?limit=50');
-    const fresh = tr.new.filter((x) => !seen.has(x.address) && Date.now() - x.createdAt < 12_000)
+    // Scripted rugs pump first: start on a launch that has passed ~2x a fresh launch's cap inside its first 100 s.
+    // The 1 s chart still shows its whole life from mint; the recording catches the dump.
+    const fresh = [...tr.new, ...tr.almost].filter((x) => !seen.has(x.address) && Date.now() - x.createdAt < 100_000 && x.marketCapUsd >= PUMP_MC)
       .sort((a, b) => b.createdAt - a.createdAt);
     for (const t of fresh.slice(0, SLOTS - watching.size)) { seen.add(t.address); await watch(t); }
   }
@@ -134,7 +136,6 @@ while (done < WANT && Date.now() - t0 < 40 * 60_000) {
   for (const w of [...watching.values()]) {
     const mc = mcs.get(w.t.address);
     if (mc) w.peak = Math.max(w.peak, mc);
-    if (!w.devSellAt && Date.now() / 1000 - w.t.createdAt / 1000 > PUMP_BY && w.peak < PUMP_X * w.mc0) { console.log('no pump', w.n, w.t.symbol); await finish(w, false); }
   }
   for (const w of [...watching.values()]) {
     // A partial dev sell may be followed by the full dump: wait up to 30 s for "sold all", then 10 s past it.
