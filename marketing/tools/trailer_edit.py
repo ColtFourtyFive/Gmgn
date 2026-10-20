@@ -27,7 +27,8 @@ GATE = f"{APP}/trailer-gate.mp4"
 # The audit panel is static before the dialog dims the page, so shot 8 uses a real frame at t=0.3 s.
 GATE_STILL = f"{APP}/trailer-gate-t0.3.png"
 gate_blur_dialog = [[1790, 286, 116, 48], [2040, 922, 220, 48]]
-gate_blur_toast = [[3300, 128, 180, 44], [3200, 168, 700, 64], [3560, 600, 220, 90]]
+# The two ticker words in the fill toast ("Bought XXX" / "N XXX for ...").
+gate_blur_toast = [[3290, 136, 100, 34], [3308, 176, 86, 32]]
 
 segments = [
     ai(1),                                                                                     # 0.0  whale
@@ -42,7 +43,7 @@ segments = [
     {"src": f"{OV}/s9-card.png", "still": True, "dur": 1.2},                                   # 18.6 card
     {"src": GATE, "start": 1.1, "end": 1.6, "crop": [2600, 100, 1240, 698], "blur": [[3560, 548, 220, 80]]},                   # 19.8 quote preview
     {"src": GATE, "start": 3.75, "end": 6.05, "crop": [840, 260, 1920, 1080], "blur": gate_blur_dialog},  # 20.3 dialog, tick, click
-    {"src": GATE, "start": 6.35, "end": 7.75, "crop": [2600, 100, 1240, 698], "blur": gate_blur_toast},   # 22.6 fill toast
+    {"src": GATE, "start": 6.95, "end": 8.35, "crop": [2880, 80, 960, 540], "zoom": [1.0, 1.04], "blur": gate_blur_toast},  # 22.6 fill toast
     ai(11),                                                                                    # 24.0 the rug
     {"src": f"{APP}/{rug_clip}.mp4", "start": 0.2, "end": 3.2, "crop": [0, 330, 2400, 1350], "zoom": [1.0, 1.05]},  # 25.8 rug in the sim
     ai(13),                                                                                    # 28.8 respawn
@@ -75,7 +76,7 @@ overlays += [
     o("s6-card", 11.55, 13.1), o("s6-sub", 11.8, 13.1),
     o("s7-card", 13.35, 15.5), o("s7-sub", 13.6, 15.5),
     o("simbug-l", 15.6, 18.6, 0.01), o("s8-cap", 15.8, 18.5),
-    o("simbug", 19.8, 24.0, 0.01), o("s10-card", 20.0, 23.9), o("s10-sub", 20.3, 23.9),
+    o("simbug", 19.8, 24.0, 0.01), o("s10-card", 20.0, 22.55), o("s10-sub", 20.3, 22.55),
     o("s11-cap", 24.2, 25.7),
     o("simbug", 25.8, 28.8, 0.01), o("s12-red", 26.2, 27.0, 0.05), o("s12-cap", 27.1, 28.7),
     o("s13-a", 28.9, 31.1), o("s13-b", 30.0, 31.1), o("s13-note", 30.0, 31.1),

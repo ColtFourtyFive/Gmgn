@@ -78,7 +78,9 @@ def species(name, latin, tag, top=BAR + 40, left=200):
 
 def species_left(lines, latin, tag, top=BAR + 30, left=80, size=78):
     name = "<br>".join(html.escape(l) for l in lines)
-    return page(f'<div style="position:absolute;left:{left}px;top:{top}px;max-width:640px">'
+    # Left scrim so the column reads over busy app UI.
+    scrim = '<div style="position:absolute;left:0;top:0;bottom:0;width:820px;background:linear-gradient(90deg,rgba(10,12,16,.9) 0,rgba(10,12,16,.75) 520px,rgba(10,12,16,0) 820px)"></div>'
+    return page(f'{scrim}<div style="position:absolute;left:{left}px;top:{top}px;max-width:640px">'
                 f'<div class="mono" style="font-style:italic;font-weight:500;font-size:26px;color:#8C94A3;margin-bottom:12px">{html.escape(latin)}</div>'
                 f'<div style="font-weight:900;font-size:{size}px;letter-spacing:-.03em;line-height:.98;text-shadow:0 4px 30px rgba(0,0,0,.85)">{name}</div>'
                 f'<img src="file://{CHIPS}/{tag}.png" style="height:76px;margin-top:18px"></div>')
@@ -139,7 +141,7 @@ OVERLAYS = {
     "simbug-l": simbug_left(),
     "aitag": ai_tag(),
     "s1-hook": big_caption("everything out here\nwants your *bag.*", size=84),
-    "s1-label": label("FIELD GUIDE TO THE TRENCHES · EP.01"),
+    "s1-label": label("FIELD GUIDE TO THE TRENCHES · EP.01", y=(BAR - 30) // 2),
     "s1-reticle": reticle(885, 262, 240),
     "s1-chip": chip_at("whale", 1025, 226),
     "s2-cap": big_caption("so we built a *scope.*", size=88),
