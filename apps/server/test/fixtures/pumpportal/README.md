@@ -25,8 +25,9 @@ unverified until a funded key is available.
 
 Facts the captures and the chain showed (see `src/live/feed/messages.ts` and `ingest.ts`):
 
-- About a quarter of pump.fun launches are quoted in another mint (PUMP, CARDS, other coins); the
-  frame does not say so. Their curve account does (`quoteMint`).
+- A quarter to nearly half of pump.fun launches (24-46% over the day's captures) are quoted in
+  another mint (PUMP, CARDS, other coins); the frame does not say so. Their curve account does
+  (`quoteMint`).
 - Mayhem-mode mints (`is_mayhem_mode: true`) have a 2B supply; the mayhem agent
   `BwWK17cbHxwWBKZkUYvzxLcNQ1YVyaFezduWbtm2de6s` trades them without fees, and the curve moves its
   virtual SOL off the constant product (the 279.9M virtual token offset still holds).

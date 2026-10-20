@@ -25,8 +25,8 @@
 // Caveats the live feed showed:
 //   - bondingCurveKey is wrong for some mayhem-mode launches (it names the mayhem agent's wallet):
 //     derive the curve from the mint instead (bondingCurvePda), never trust this field.
-//   - pump.fun curves may be quoted in another mint (the PUMP token, CARDS, ...: about a quarter of
-//     launches). The frame does not say so and its SOL fields then hold the program's legacy shadow
+//   - pump.fun curves may be quoted in another mint (the PUMP token, CARDS, ...: 24-46% of launches
+//     in the captures). The frame does not say so and its SOL fields then hold the program's legacy shadow
 //     values (30 SOL virtual), not real SOL: the quote mint has to be read from the curve account.
 //   - mayhem-mode mints (is_mayhem_mode) have a 2B supply; marketCapSol still assumes 1B.
 // Other launchpads (pool 'bonk') send solInPool / tokensInPool and no name / symbol / uri; those

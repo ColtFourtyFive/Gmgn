@@ -1,6 +1,7 @@
 // Launch verification: a pump.fun create frame does not say what its curve is
-// quoted in, and about a quarter of launches are quoted in another mint (the
-// PUMP token, CARDS, other pump coins...). For those PumpPortal's SOL fields hold
+// quoted in, and a quarter to nearly half of launches are quoted in another mint
+// (24-46% over the captures of 2026-10-20: the PUMP token, CARDS, other pump
+// coins...). For those PumpPortal's SOL fields hold
 // the program's legacy shadow values (30 SOL virtual), not SOL, so booking them
 // would show made-up prices, market caps and dev buys. Each launch is therefore
 // held until its bonding-curve account (derived from the mint: the frame's
