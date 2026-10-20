@@ -8,6 +8,8 @@ import { PositionTab } from '@/components/token/tabs/PositionTab';
 import { DEFAULT_DISPLAY, DEFAULT_TRADE } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { useSession } from '@/store/session';
+import { enterLive, leaveLive } from '@/testing/live';
+import { LIVE_ACK_KEY } from './LiveTradeAck';
 import { QuickBuyButton } from './QuickBuyButton';
 import { useQuickTrade } from './useQuickTrade';
 
@@ -67,7 +69,8 @@ describe('"Confirm trades" on one-click trades', () => {
       </div>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Buy 0.5 SOL of PEPE' }));
-    expect(await screen.findByRole('dialog', { name: 'Buy 0.5 SOL of PEPE?' })).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'Buy 0.5 SOL of PEPE?' });
+    expect(dialog.textContent).toContain('Market buy with preset P2. Paper trade — no real funds.');
     expect(swap).not.toHaveBeenCalled();
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Buy' })));
@@ -76,6 +79,27 @@ describe('"Confirm trades" on one-click trades', () => {
     // Clicks in the portaled dialog do not reach the row (it would open the token page).
     expect(rowClick).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('live: the dialog says the order uses real funds', async () => {
+    enterLive();
+    localStorage.setItem(LIVE_ACK_KEY, '1');
+    try {
+      signIn(true);
+      wrap(<QuickBuyButton chain="sol" token="TokA" symbol="PEPE" amount={0.5} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Buy 0.5 SOL of PEPE' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Buy 0.5 SOL of PEPE?' });
+      expect(dialog.textContent).toContain('Market buy with preset P2. Executes on Solana mainnet with real funds.');
+      cleanup();
+
+      vi.mocked(api.token).mockResolvedValue(tokenDetail({ riskLevel: 'high' }));
+      wrap(<QuickBuyButton chain="sol" token="TokA" symbol="PEPE" amount={0.5} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Buy 0.5 SOL of PEPE' }));
+      const risky = await screen.findByRole('dialog', { name: 'High-risk token: PEPE' });
+      expect(risky.textContent).toContain('Buy 0.5 SOL with preset P2. Automated security checks flagged this token. This trade uses real funds on Solana mainnet.');
+    } finally {
+      leaveLive();
+    }
   });
 
   it('the ⚡ quick buy runs at once with the setting off', async () => {
@@ -133,6 +157,7 @@ describe('safety gates on one-click trades', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Buy 0.5 SOL of PEPE' }));
     const dialog = await screen.findByRole('dialog', { name: 'High-risk token: PEPE' });
     expect(dialog.textContent).toContain('High risk level — rug ratio 40%');
+    expect(dialog.textContent).toContain('Buy 0.5 SOL with preset P2. Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.');
     const buy = screen.getByRole('button', { name: 'Buy anyway' });
     expect(buy.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(buy);

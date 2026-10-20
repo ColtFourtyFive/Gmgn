@@ -14,6 +14,7 @@ import { FlashValue, Pct, StatTile, Usd } from '@/components/common';
 import { LiveWalletPanel } from '@/components/funds/LiveWalletPanel';
 import { Page, PageHeader } from '@/components/layout';
 import { ErrorState, Panel, SegmentedControl, Skeleton, Spinner, Tabs } from '@/components/ui';
+import { useCopy } from '@/copy';
 import { serverNow, useIsLive, useIsMobile } from '@/hooks';
 import { api } from '@/lib/api';
 
@@ -30,7 +31,7 @@ export default function PortfolioPage() {
   const scope = parseScope(params.get('chain'));
   const tabParam = params.get('tab') as PortfolioTab | null;
   const tab: PortfolioTab = tabParam && TABS.includes(tabParam) ? tabParam : 'positions';
-  const live = useIsLive();
+  const text = useCopy();
 
   const setParam = (key: string, value: string | null) =>
     setParams(
@@ -47,7 +48,7 @@ export default function PortfolioPage() {
     <Page className="max-w-[1680px]">
       <PageHeader
         title="Portfolio"
-        subtitle={live ? 'Wallet, deposits and withdrawals, positions, orders and trade history' : 'Paper wallets, positions, orders and trade history'}
+        subtitle={text('portfolio.subtitle')}
         icon={<Wallet size={16} />}
         actions={signedIn ? <ChainFilter value={scope} onChange={(v) => setParam('chain', v === 'all' ? null : v)} className="hidden sm:inline-flex" /> : undefined}
       />
@@ -57,12 +58,8 @@ export default function PortfolioPage() {
       )}
       <AccountGate
         icon={<Wallet size={22} />}
-        title={live ? 'Track your portfolio' : 'Track your paper portfolio'}
-        description={
-          live
-            ? 'Sign in to see your wallets, deposits and withdrawals, open positions, PnL and every trade.'
-            : 'Sign in to see your balances, open positions, PnL and every trade across Solana, Base, Robinhood Chain, BNB Chain and Ethereum.'
-        }
+        title={text('portfolio.gate.title')}
+        description={text('portfolio.gate.description')}
         features={['Live PnL, equity curve and a daily PnL calendar', 'One-click 25 / 50 / 100% sells and "sell initials"', 'Open orders, order history and trade log']}
       >
         <PortfolioBody scope={scope} tab={tab} onTab={(t) => setParam('tab', t === 'positions' ? null : t)} />

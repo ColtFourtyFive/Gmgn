@@ -9,7 +9,8 @@ TP / SL / trailing orders, token launches). It runs in one of two modes per depl
 
 ```
 ┌───────────────────────────── apps/web (Vite + React) ─────────────────────────────┐
-│ pages/*        one file per route (App.tsx)                                         │
+│ pages/*        one file per route (routes.tsx: the route table App renders)         │
+│ copy/          wording that differs by mode (demo / live) and chain                 │
 │ components/    ui · common · layout · trade        design system, shell, trading   │
 │                discovery · token · wallet · monitor · signals · callouts ·          │
 │                launch · share · account            page areas                      │
