@@ -146,17 +146,19 @@ export async function startFakePumpPortal(opts: FakePumpPortalOptions = {}): Pro
       try {
         msg = JSON.parse(String(raw));
       } catch {
-        socket.send(JSON.stringify({ errors: 'Invalid message. Message must be valid JSON.' }));
+        // (the live feed's wording, as captured in test/fixtures/pumpportal/misc.json)
+        socket.send(JSON.stringify({ errors: 'Invalid message. Failed to subscribe.' }));
         return;
       }
       const keys = Array.isArray(msg.keys) ? msg.keys.filter((k): k is string => typeof k === 'string') : null;
       const needsKeys = (what: string) => {
-        if (!keys) {
-          socket.send(JSON.stringify({ errors: `Invalid message. Message must contain parameter 'keys' which should be an array of strings.` }));
+        // The live feed refuses trade subscriptions without a funded key before looking at 'keys'.
+        if (opts.requireApiKey && !client.hasKey && what.startsWith('subscribe')) {
+          socket.send(JSON.stringify({ message: "'subscribeTokenTrade' and 'subscribeAccountTrade' methods are only available when connecting with an API key funded with at least 0.02 SOL." }));
           return true;
         }
-        if (opts.requireApiKey && !client.hasKey && what.startsWith('subscribe')) {
-          socket.send(JSON.stringify({ message: 'Please use an API key funded with at least 0.02 SOL to subscribe to trade data.' }));
+        if (!keys) {
+          socket.send(JSON.stringify({ errors: `Invalid message. Message must contain parameter 'keys' which should be an array of strings.` }));
           return true;
         }
         return false;
@@ -168,7 +170,7 @@ export async function startFakePumpPortal(opts: FakePumpPortalOptions = {}): Pro
           break;
         case 'subscribeMigration':
           client.migrations = true;
-          socket.send(JSON.stringify({ message: 'Successfully subscribed to migration events.' }));
+          socket.send(JSON.stringify({ message: "Subscribed to 'migration' events." }));
           break;
         case 'subscribeTokenTrade':
           if (needsKeys('subscribe')) return;
@@ -185,12 +187,12 @@ export async function startFakePumpPortal(opts: FakePumpPortalOptions = {}): Pro
         case 'unsubscribeTokenTrade':
           if (needsKeys('unsubscribe')) return;
           for (const k of keys!) client.tokens.delete(k);
-          socket.send(JSON.stringify({ message: 'Unsubscribed from keys.' }));
+          socket.send(JSON.stringify({ message: 'Unsubscribed.' }));
           break;
         case 'unsubscribeAccountTrade':
           if (needsKeys('unsubscribe')) return;
           for (const k of keys!) client.accounts.delete(k);
-          socket.send(JSON.stringify({ message: 'Unsubscribed from keys.' }));
+          socket.send(JSON.stringify({ message: 'Unsubscribed.' }));
           break;
         case 'unsubscribeNewToken':
           client.newTokens = false;
@@ -201,7 +203,7 @@ export async function startFakePumpPortal(opts: FakePumpPortalOptions = {}): Pro
           socket.send(JSON.stringify({ message: 'Unsubscribed from migration events.' }));
           break;
         default:
-          socket.send(JSON.stringify({ errors: 'Invalid message. Unknown method.' }));
+          socket.send(JSON.stringify({ errors: "Invalid message. 'method' must be 'subscribeNewToken', 'subscribeTokenTrade', 'subscribeAccountTrade', or 'subscribeMigration'." }));
       }
     });
   });

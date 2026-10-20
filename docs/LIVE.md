@@ -25,12 +25,16 @@ never loaded in the other. Set `DEMO_URL` on the live site to show users a "Try 
                       │ create / buy / sell / migrate (subscribeNewToken, subscribeMigration,
                       │ subscribeTokenTrade [tracked mints], subscribeAccountTrade [followed / copied / KOL wallets])
                       ▼
- live/feed/pumpportal.ts ── zod (messages.ts) ── queue ──► applied on engine ticks (never during a snapshot hold)
+ live/feed/pumpportal.ts ── zod (messages.ts) ── verify.ts ── queue ──► applied on engine ticks (never during a snapshot hold)
+                 live/feed/verify.ts: each launch's curve account read (batched) for its quote mint,
+                                      mayhem flag and fee; launches quoted in another mint dropped
                                                            │
                 live/feed/ingest.ts: create → World.addExternalToken + dev buy
                                      trade  → World.recordExternalTrade (post-trade curve reserves,
-                                              newTokenBalance; dedupe by signature)
-                                     migrate→ World.completeCurve + migrateExternal (PumpSwap pool, LP burned)
+                                              newTokenBalance, wallet amounts incl. curve fees;
+                                              dedupe by signature)
+                                     migrate→ World.completeCurve + migrateExternal (PumpSwap pool, LP
+                                              burned), then the pool is read back from chain
                 live/feed/tracker.ts: cap LIVE_MAX_TRACKED_TOKENS, idle drop, protected tokens pinned
                                                            ▼
                        World ledger ──► analytics (lists, security, holders, signals) ──► REST + WS hub
@@ -101,7 +105,7 @@ Key properties:
 | Variable | Default | Meaning |
 |---|---|---|
 | `PUMPPORTAL_WS_URL` | `wss://pumpportal.fun/api/data` | Data feed socket |
-| `PUMPPORTAL_API_KEY` | unset | Appended as `?api-key=` (never logged). Trade streams (`subscribeTokenTrade` / `subscribeAccountTrade`) are reported to need a key funded with ~0.02 SOL; without one only launches and migrations may arrive |
+| `PUMPPORTAL_API_KEY` | unset | Appended as `?api-key=` (never logged). **Needed for trades**: PumpPortal refuses `subscribeTokenTrade` / `subscribeAccountTrade` without a key funded with at least 0.02 SOL (checked 2026-10-20). Without one only launches and migrations arrive, so streamed tokens' prices, holders and trades stay at their launch state; the feed retries the trade streams every 10 min and on reconnect (`diagnostics().feed.tradeStreams`) |
 | `LIVE_MAX_TRACKED_TOKENS` | `3000` (min 100) | Tokens whose trades are streamed at once (least recently active dropped) |
 | `LIVE_TOKEN_IDLE_MINUTES` | `30` | Stop streaming a token after this long without a trade (protected tokens excepted) |
 | `LIVE_RPC_RPS` | `5` | RPC requests/s the ingestion and enrichment may spend (page loads go first) |
@@ -305,8 +309,20 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 - Balance sync covers accounts active in the last 15 minutes (API requests and fills), not idle
   sockets.
 - Creation time of a token loaded on demand is approximate (oldest of the newest 1000 signatures).
-- The feed's trade streams depend on PumpPortal's plan; holders and authorities are refreshed only
-  for tokens someone has open or holds.
+- The feed's trade streams need a funded `PUMPPORTAL_API_KEY` (see section 2); holders and
+  authorities are refreshed only for tokens someone has open or holds.
+- pump.fun launches quoted in another mint (24-46% of them in the 2026-10-20 runs: the PUMP token,
+  CARDS, other coins) are not shown: their frames carry the program's shadow SOL values, not SOL.
+  Telling them apart needs the launch's curve account, so without `SOLANA_RPC_URL` launches pass
+  unchecked (`diagnostics().verify.unverified`). The check holds each launch for one batched read
+  (~0.3-1 s).
+- Mayhem-mode coins get their 2B supply (the agent's minted billion is its holding from the launch)
+  and their real SOL is tracked from trade flows (the program moves their virtual SOL on its own);
+  the mayhem agent's trades are booked fee-free. The supply is not re-read when the agent's unsold
+  tokens are burned after its 24 h.
+- PumpSwap trades (`pool: 'pump-amm'`) could not be captured: their amounts are taken as sent. A
+  migrated pool's reserves are read back from chain once after the migration. Fresh pump coins pay
+  tiered PumpSwap fees (20 + 5 + 95 bps observed), not the 0.25% in `LIVE_DEXES` (fee totals only).
 - Accounts state is one JSON blob rewritten on change: fine for a small user base, revisit beyond a
   few thousand accounts. The audit table only grows (no retention policy yet).
 - `node:sqlite` is experimental in Node 22 (a warning is printed in live mode).
@@ -319,13 +335,25 @@ None of these could be checked from the build environment. Verify each in stagin
 tiny-amount mainnet smoke test (pump buy/sell, Jupiter buy/sell, Jito send, SOL and SPL withdrawal,
 deposit detection, Turnkey signing) before enabling the site for users.
 
-**PumpPortal**
-- Frame shapes and units (`create` / `buy` / `sell` / `migrate` fields; SOL and whole-token units;
-  `vSolInBondingCurve` / `vTokensInBondingCurve` as post-trade virtual reserves; `newTokenBalance`).
-- Whether `subscribeTokenTrade` also delivers PumpSwap (`pool: 'pump-amm'`) trades after migration.
-- Ack / error / refusal wording; API-key requirement and funding for trade streams; rate and key
-  limits (we send ≤100 keys per message, batches every 250 ms); whether protocol pings are answered.
-- Capture real frames and replace the synthesized fixtures in `apps/server/test/fixtures/pumpportal`.
+**PumpPortal** (checked 2026-10-20 against the live feed and mainnet; details and captured frames in
+`apps/server/test/fixtures/pumpportal/README.md`)
+- Verified: `create` / `migrate` frame shapes and units (SOL and whole tokens; a create's numbers are
+  the pump `TradeEvent` of the dev buy: `solAmount` before the curve's 1.25% fees, post-trade virtual
+  reserves, `marketCapSol` = vSol / vTokens x 1e9); ack, refusal and error wording; trade streams
+  refused without a funded key; protocol pings answered (the server pings every 25 s); `MigrateV2`
+  pool contents (curve real SOL less 0.015, 206.9M tokens, part of the SOL as virtual quote
+  reserve). On-chain curves confirm 30 SOL / 1.073B virtual, 793.1M curve tokens, 6 decimals and
+  0.95% + 0.30% fees for SOL-quoted, non-mayhem curves (mayhem: 2B mint supply, moving virtual SOL).
+  Not trustworthy: `bondingCurveKey` (wrong for some mayhem launches), and the SOL fields of launches
+  quoted in another mint. End to end (`scripts/pumpportal-check.ts`, 2-minute runs, no key): 40-73
+  launches per run, every one checked against its curve; tokens whose curve had not moved since the
+  launch matched the chain exactly (price, market cap, progress, holders), the others differed by the
+  trades the feed could not stream; a migration's pool was read back from chain.
+- Still open (needs a funded key): `buy` / `sell` frame keys (`newTokenBalance`), whether
+  `subscribeTokenTrade` delivers PumpSwap trades after migration and what their `solAmount` means,
+  the trade-subscription ack, key / rate limits (we send ≤100 keys per message, batches every
+  250 ms). Run `scripts/pumpportal-check.ts --capture frames.jsonl` with `PUMPPORTAL_API_KEY` set and
+  replace the reconstructed trade frames in the fixtures with captured ones.
 
 **pump.fun / PumpSwap**
 - Curve constants (30 SOL / 1.073B virtual, 793.1M curve tokens, 6 decimals, 1.25% fee) and the

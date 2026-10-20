@@ -4,7 +4,7 @@
 // loads, protection / idle sleep / World pruning / wallet sweeping, on-chain
 // authorities and top holders, the RPC probe and the tracked-set snapshot.
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Keypair, PublicKey, type AccountInfo, type Connection, type ParsedAccountData } from '@solana/web3.js';
@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
 import { loadLiveConfig } from '../src/live/config';
 import { metadataPda, METAPLEX_PROGRAM_ID, loadPumpAmmSdk, loadPumpSdk } from '../src/live/enrich/onchain';
-import type { FeedEvent } from '../src/live/feed/messages';
+import { parseFeedMessage, type CreateEvent, type FeedEvent } from '../src/live/feed/messages';
 import { LiveMarket } from '../src/live/market';
 
 const TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -106,6 +106,13 @@ class FakeRpc {
     this.calls.push('getAccountInfo');
     const a = this.accounts.get(key.toBase58());
     return a && Buffer.isBuffer(a.data) ? (a as AccountInfo<Buffer>) : null;
+  }
+  async getMultipleAccountsInfo(keys: PublicKey[]) {
+    this.calls.push('getMultipleAccountsInfo');
+    return keys.map((k) => {
+      const a = this.accounts.get(k.toBase58());
+      return a && Buffer.isBuffer(a.data) ? (a as AccountInfo<Buffer>) : null;
+    });
   }
   async getSignaturesForAddress(key: PublicKey) {
     this.calls.push('getSignaturesForAddress');
@@ -376,5 +383,90 @@ describe('on-chain security and health', () => {
     await internals().probeRpc();
     expect(market.liveStatus().rpcHealthy).toBe(false);
     rpc.slotOk = true;
+  });
+});
+
+describe('launch verification and migrated pools (feed -> chain)', () => {
+  const FIX = join(__dirname, 'fixtures', 'pumpportal');
+  const curves = JSON.parse(readFileSync(join(FIX, 'curves.json'), 'utf8')) as Record<string, { owner: string; data: string }>;
+  const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as Record<string, Record<string, unknown>>;
+  /** A bonding-curve account as mainnet returned it (fixtures/pumpportal/curves.json). */
+  const mainnetCurve = (name: string) => raw(new PublicKey(curves[name].owner), Buffer.from(curves[name].data, 'base64'));
+  const launchOf = (mint: string, frame = misc.createNoBuy): CreateEvent => ({ ...(parseFeedMessage(JSON.stringify(frame)) as CreateEvent), mint, signature: `${mint}${mint}`.slice(0, 88) });
+  type Internals = { verifier: { push(e: FeedEvent): void; size: number }; drain(): void; queue: FeedEvent[] };
+
+  let m: LiveMarket;
+  beforeAll(() => {
+    m = new LiveMarket(built.ctx, { env: {}, verify: { batchMs: 5, retryMs: 5 }, poolReadDelaysMs: [0, 20] });
+  });
+  afterAll(async () => {
+    await m.stop();
+  });
+  const mi = () => m as unknown as Internals;
+
+  it('books a SOL-quoted launch after reading its curve, and drops one quoted in the PUMP token with its trades', async () => {
+    const { world } = built.ctx;
+    const solMint = Keypair.generate().publicKey;
+    const pumpQuoted = Keypair.generate().publicKey;
+    rpc.accounts.set(sdk.bondingCurvePda(solMint).toBase58(), mainnetCurve('SOL'));
+    rpc.accounts.set(sdk.bondingCurvePda(pumpQuoted).toBase58(), mainnetCurve('PUMP_QUOTED'));
+    const solLaunch = launchOf(solMint.toBase58());
+    const quotedLaunch = launchOf(pumpQuoted.toBase58(), misc.createQuotedInPump);
+    const quotedBuy: FeedEvent = {
+      kind: 'trade',
+      side: 'buy',
+      signature: '6'.repeat(88),
+      mint: quotedLaunch.mint,
+      trader: Keypair.generate().publicKey.toBase58(),
+      tokenAmount: 1e6,
+      solAmount: 0.03,
+      pool: 'pump',
+      vSolInBondingCurve: 30.03,
+      vTokensInBondingCurve: 1.072e9,
+    };
+    mi().verifier.push(solLaunch);
+    mi().verifier.push(quotedLaunch);
+    mi().verifier.push(quotedBuy); // held behind its launch, dropped with it
+    expect(mi().queue).toHaveLength(0);
+    await vi.waitFor(() => expect(mi().verifier.size).toBe(0));
+    expect(rpc.calls).toEqual(['getMultipleAccountsInfo']);
+    mi().drain();
+    expect(world.tokens.get(solLaunch.mint)?.curve?.feeRate).toBeCloseTo(0.0125, 12);
+    expect(world.tokens.has(quotedLaunch.mint)).toBe(false);
+    // a later trade of the dropped launch is ignored, not parked and looked up on chain
+    mi().verifier.push({ ...quotedBuy, signature: '7'.repeat(88) });
+    mi().drain();
+    expect(world.tokens.has(quotedLaunch.mint)).toBe(false);
+    expect(m.diagnostics().verify).toMatchObject({ verified: 1, rejected: 1, pending: 0 });
+    expect(m.diagnostics().ingest.ignored).toBeGreaterThanOrEqual(1);
+    expect(m.diagnostics().parked).toBe(0);
+    expect(rpc.calls).toEqual(['getMultipleAccountsInfo']);
+  });
+
+  it("reads a migrated token's PumpSwap pool back from the chain", async () => {
+    const { world } = built.ctx;
+    const mint = Keypair.generate().publicKey;
+    rpc.accounts.set(sdk.bondingCurvePda(mint).toBase58(), mainnetCurve('SOL'));
+    mi().verifier.push(launchOf(mint.toBase58()));
+    await vi.waitFor(() => expect(mi().verifier.size).toBe(0));
+    mi().drain();
+    const t = world.tokens.get(mint.toBase58())!;
+    mi().verifier.push({ kind: 'migrate', signature: '8'.repeat(88), mint: mint.toBase58(), pool: 'pump-amm' });
+    mi().drain();
+    expect(t.status).toBe('migrated');
+    expect(t.pool!.native).toBeCloseTo(84.990359, 5); // the migration model, until the read lands
+    const poolKey = sdk.canonicalPumpPoolPda(mint);
+    const base = Keypair.generate().publicKey;
+    const quote = Keypair.generate().publicKey;
+    rpc.accounts.set(poolKey.toBase58(), poolAccount(mint, base, quote));
+    rpc.accounts.set(base.toBase58(), tokenAccount(poolKey.toBase58(), '206900000000000'));
+    rpc.accounts.set(quote.toBase58(), tokenAccount(poolKey.toBase58(), '67405853768', 9));
+    // read in the background, applied on the next engine tick (drain), never mid-snapshot
+    await vi.waitFor(() => {
+      mi().drain();
+      expect(t.pool!.native).toBeCloseTo(67.405853768, 9);
+    });
+    expect(t.pool!.tokens).toBeCloseTo(206_900_000, 3);
+    expect(m.diagnostics().poolReads.applied).toBe(1);
   });
 });

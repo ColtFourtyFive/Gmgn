@@ -122,8 +122,9 @@ tokens and wallets tracked. Without a snapshot the server seeds a population and
   and determinism, classifier evaluations, money/PnL math, order triggers, auth and hub behaviour.
 - `apps/web/src/**/*.test.*`: component and hook tests (vitest + jsdom).
 - `apps/web/e2e`: Playwright end-to-end suite against the real server serving the built app.
-- `apps/server/scripts`: `sim-report.ts` (market realism report), `soak.ts` (memory/snapshot soak) and
-  `fake-pumpportal.ts` (dev/test: a local stand-in for the PumpPortal feed).
+- `apps/server/scripts`: `sim-report.ts` (market realism report), `soak.ts` (memory/snapshot soak),
+  `fake-pumpportal.ts` (dev/test: a local stand-in for the PumpPortal feed) and `pumpportal-check.ts`
+  (read-only: live mode against the real feed for a while, analytics compared with the chain).
 - Live mode: `live-*.test.ts`, `store.test.ts`, `security.test.ts`, `accounts-live.test.ts` and
   `live-integration.test.ts`, all offline (fixtures, fake RPC, local feed server).
   `ground-truth.ts` (runs a seed + scenario and writes JSON with wallet archetypes, token fates and
@@ -152,6 +153,8 @@ Live mode serves Solana only: an HTTP `preValidation` hook and a hub channel gua
 PumpPortal WS ──► feed/pumpportal.ts (one socket; subscribeNewToken + subscribeMigration always,
                   token / account trade subscriptions diffed and batched; ping/stale/backoff)
              ──► feed/messages.ts (zod; bad frames counted and dropped; text sanitized)
+             ──► feed/verify.ts (each launch held for one batched read of its curve account: launches
+                  quoted in another mint dropped, mayhem flag and fee rate taken from the chain)
              ──► LiveMarket queue ──(engine tick, never during a snapshot hold)──► feed/ingest.ts
                     create  → World.addExternalToken (launch curve) + the dev's initial buy
                     trade   → World.recordExternalTrade (post-trade reserves, newTokenBalance,

@@ -172,7 +172,10 @@ describe('live mode across ingest, wallets, store and accounts', () => {
     const frame = curveBuyFrame(mint, Keypair.generate().publicKey.toBase58(), 0.3);
     feed.emit(frame);
     const trades = await until(() => get<Trade[]>(`/api/sol/tokens/${mint}/trades`), (r) => r.body.some((t) => t.txHash === frame.signature));
-    expect(trades.body.find((t) => t.txHash === frame.signature)).toMatchObject({ chain: 'sol', side: 'buy', nativeAmount: 0.3 });
+    // the frame's 0.3 SOL went into the curve; the buyer paid pump.fun's 1.25% fees on top
+    const booked = trades.body.find((t) => t.txHash === frame.signature);
+    expect(booked).toMatchObject({ chain: 'sol', side: 'buy' });
+    expect(booked?.nativeAmount).toBeCloseTo(0.3 * 1.0125, 9);
     expect(trades.body.every((t) => t.txHash && t.chain === 'sol')).toBe(true);
   }, 20_000);
 

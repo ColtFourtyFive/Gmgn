@@ -3,9 +3,12 @@
 // way they do over the simulator.
 //
 //   feed        PumpPortal (one socket): launches, migrations, the tracked tokens'
-//               trades and the watched wallets' trades. Events are queued and
-//               applied on engine ticks (never while a snapshot holds the engine),
-//               through FeedIngestor into the World.
+//               trades and the watched wallets' trades (those two need a funded
+//               PUMPPORTAL_API_KEY). Launches are first checked against their
+//               curve account (feed/verify.ts: ones quoted in another mint are
+//               dropped); events are queued and applied on engine ticks (never
+//               while a snapshot holds the engine), through FeedIngestor into the
+//               World. A migration's pool is then read back from the chain.
 //   tracking    new launches and opened tokens are streamed; capped with LRU
 //               eviction, idle ones dropped (and put to sleep), protected ones
 //               (held, watchlisted, ordered / alerted, open in a client) kept.
@@ -18,6 +21,7 @@
 //               World and a sweep of observed wallets nothing references.
 
 import type { ChainId, LiveStatus } from '@trenchscope/shared';
+import type { Connection } from '@solana/web3.js';
 import type { AppContext, MarketSource } from '../context';
 import type { TokenState, WalletState, World } from '../sim/world';
 import { RequestBudget } from './enrich/budget';
@@ -26,7 +30,7 @@ import { loadKolFile, type KolEntry } from './enrich/kol';
 import { TokenLookup } from './enrich/lookup';
 import { MetadataQueue, type TokenMetadata } from './enrich/metadata';
 import { classifyNarrative } from './enrich/narratives';
-import { parsePublicKey, pumpPoolAddress } from './enrich/onchain';
+import { parsePublicKey, pumpPoolAddress, readPumpPool, type PoolReserves } from './enrich/onchain';
 import { PriceTicker, type JupiterPrice } from './enrich/prices';
 import { OnchainSecurity } from './enrich/security';
 import { BASE58_ADDRESS } from './enrich/sanitize';
@@ -35,6 +39,7 @@ import type { FeedEvent } from './feed/messages';
 import { loadIngestEnv, type IngestEnv } from './feed/options';
 import { PumpPortalClient, type PumpPortalOptions } from './feed/pumpportal';
 import { TrackedTokens } from './feed/tracker';
+import { LaunchVerifier, rpcCurveReader, type CurveReader, type LaunchVerifierOptions } from './feed/verify';
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -57,6 +62,8 @@ const MAX_ON_DEMAND_WALLETS = 2000;
 const METADATA_RETRY_MS = 5 * MIN;
 const DORMANT_TRADES_KEPT = 200;
 const RPC_PROBE_TIMEOUT_MS = 5000;
+/** A migrated token's pool is read from the chain this long after the migration (then once more if absent). */
+const POOL_READ_DELAYS_MS = [5 * SEC, 20 * SEC];
 
 interface LiveMarketSnapshot {
   version: 1;
@@ -72,7 +79,11 @@ export interface LiveMarketDeps {
   lookup?: HostLookup;
   env?: NodeJS.ProcessEnv;
   log?: Pick<Console, 'warn' | 'info'>;
-  feed?: Partial<Pick<PumpPortalOptions, 'batchMs' | 'backoffBaseMs' | 'backoffMaxMs' | 'pingEveryMs' | 'staleMs' | 'random'>>;
+  feed?: Partial<Pick<PumpPortalOptions, 'batchMs' | 'backoffBaseMs' | 'backoffMaxMs' | 'pingEveryMs' | 'staleMs' | 'random' | 'tradeRetryMs'>>;
+  /** Launch verification timing (tests). */
+  verify?: Partial<Pick<LaunchVerifierOptions, 'batchMs' | 'retryMs' | 'maxAttempts'>>;
+  /** Delays of the post-migration pool reads (tests). */
+  poolReadDelaysMs?: number[];
   priceEveryMs?: number;
   rpcProbeEveryMs?: number;
 }
@@ -85,6 +96,10 @@ export interface LiveDiagnostics {
   tracked: number;
   trackedAccounts: number;
   feed: PumpPortalClient['diag'] | null;
+  /** Launch checks against the curve account; `pending` launches wait for their read. */
+  verify: LaunchVerifier['stats'] & { pending: number };
+  /** Post-migration pool reads that corrected / could not find the pool. */
+  poolReads: { applied: number; missing: number };
   ingest: FeedIngestor['stats'];
   lookup: TokenLookup['stats'];
   metadata: MetadataQueue['stats'];
@@ -100,6 +115,14 @@ export class LiveMarket implements MarketSource {
   private readonly log: Pick<Console, 'warn' | 'info'>;
   private readonly ingest: FeedIngestor;
   private readonly feed: PumpPortalClient;
+  private readonly verifier: LaunchVerifier;
+  private curveReader: { connection: Connection; read: CurveReader } | null = null;
+  private readonly poolReads = { applied: 0, missing: 0 };
+  private readonly poolTimers = new Set<NodeJS.Timeout>();
+  /** Pools read back from the chain, applied on the next tick (like feed events, never mid-snapshot). */
+  private poolsRead = new Map<string, PoolReserves>();
+  /** Receives every raw feed frame (capture tools, scripts/pumpportal-check.ts). */
+  private frameTap: ((text: string) => void) | null = null;
   private readonly tracker: TrackedTokens;
   private readonly budget: RequestBudget;
   private readonly lookup: TokenLookup;
@@ -121,6 +144,8 @@ export class LiveMarket implements MarketSource {
   private rpcHealthy = false;
   private probeTimer: NodeJS.Timeout | null = null;
   private started = false;
+  /** Stopped for good: no more chain reads are scheduled. */
+  private closed = false;
   private nativeSeeded = false;
   private readonly maxWorldTokens: number;
   private prunedTokens = 0;
@@ -139,10 +164,18 @@ export class LiveMarket implements MarketSource {
     const feedCfg = live?.feed ?? { pumpPortalUrl: 'wss://pumpportal.fun/api/data', maxTrackedTokens: 3000 };
     this.maxWorldTokens = Math.max(1000, feedCfg.maxTrackedTokens * 2);
     this.ingest = new FeedIngestor(this.world, { now: () => this.world.now, pumpPoolAddress });
+    this.verifier = new LaunchVerifier({
+      reader: () => this.readCurves(),
+      emit: (e) => this.enqueue(e),
+      reject: (mint) => this.ingest.ignoreMint(mint),
+      log: this.log,
+      ...deps.verify,
+    });
     this.feed = new PumpPortalClient({
       url: feedCfg.pumpPortalUrl,
       apiKey: this.env.pumpPortalApiKey,
-      onEvent: (e) => this.enqueue(e),
+      onEvent: (e) => this.verifier.push(e),
+      onFrame: (text) => this.frameTap?.(text),
       log: this.log,
       ...deps.feed,
     });
@@ -203,6 +236,11 @@ export class LiveMarket implements MarketSource {
   start(): void {
     if (this.started) return;
     this.started = true;
+    if (!this.env.pumpPortalApiKey) {
+      this.log.warn(
+        '[live] PUMPPORTAL_API_KEY is not set: PumpPortal streams token and account trades only to an API key funded with at least 0.02 SOL. Launches and migrations still arrive, but prices, holders and trades of streamed tokens will not move.',
+      );
+    }
     this.feed.start();
     this.prices.start();
     const probe = () => void this.probeRpc();
@@ -214,8 +252,12 @@ export class LiveMarket implements MarketSource {
 
   async stop(): Promise<void> {
     this.started = false;
+    this.closed = true;
     if (this.probeTimer) clearInterval(this.probeTimer);
     this.probeTimer = null;
+    this.verifier.close();
+    for (const t of this.poolTimers) clearTimeout(t);
+    this.poolTimers.clear();
     this.prices.stop();
     this.metadata.close();
     this.budget.close();
@@ -246,6 +288,8 @@ export class LiveMarket implements MarketSource {
       tracked: this.tracker.size,
       trackedAccounts: this.feed.trackedAccounts,
       feed: this.feed.diag,
+      verify: { ...this.verifier.stats, pending: this.verifier.size },
+      poolReads: { ...this.poolReads },
       ingest: this.ingest.stats,
       lookup: this.lookup.stats,
       metadata: this.metadata.stats,
@@ -253,6 +297,11 @@ export class LiveMarket implements MarketSource {
       rpc: { started: this.budget.started, refused: this.budget.refused, queued: this.budget.queued },
       pruned: { tokens: this.prunedTokens, wallets: this.prunedWallets },
     };
+  }
+
+  /** Hand every raw feed frame to `fn` as received (null stops): for capture tools. */
+  tapFeed(fn: ((text: string) => void) | null): void {
+    this.frameTap = fn;
   }
 
   serialize(): LiveMarketSnapshot {
@@ -306,6 +355,7 @@ export class LiveMarket implements MarketSource {
 
   /** Apply queued feed events (engine tick). */
   private drain(): void {
+    if (this.poolsRead.size > 0) this.applyPoolsRead();
     if (this.queue.length === 0) return;
     const batch = this.queue.length > DRAIN_PER_TICK ? this.queue.splice(0, DRAIN_PER_TICK) : this.queue;
     if (batch === this.queue) this.queue = [];
@@ -332,6 +382,66 @@ export class LiveMarket implements MarketSource {
       if (!t.imageUrl) this.metadata.push(t.address, t.metadataUri);
     } else if (this.tracker.has(t.address)) {
       this.tracker.touch(t.address, this.world.now);
+    }
+    if (e.kind === 'migrate') this.schedulePoolRead(t.address, 0);
+  }
+
+  /** The launch verifier's curve reader over the current RPC connection (null without one). */
+  private readCurves(): CurveReader | null {
+    const connection = this.ctx.live?.connection ?? null;
+    if (!connection) return null;
+    if (this.curveReader?.connection !== connection) {
+      this.curveReader = { connection, read: rpcCurveReader(connection, (fn) => this.budget.run(fn, 'high')) };
+    }
+    return this.curveReader.read;
+  }
+
+  /**
+   * Read a just-migrated token's PumpSwap pool from the chain and take its reserves (the vaults plus
+   * the pool's virtual quote reserve): the migration model only estimates them, and the trades that
+   * would move them stream only with a funded API key.
+   */
+  private schedulePoolRead(mint: string, attempt: number): void {
+    const delays = this.deps.poolReadDelaysMs ?? POOL_READ_DELAYS_MS;
+    if (!this.ctx.live?.connection || attempt >= delays.length || this.closed) return;
+    const timer = setTimeout(() => {
+      this.poolTimers.delete(timer);
+      void this.readPool(mint, attempt);
+    }, delays[attempt]);
+    timer.unref?.();
+    this.poolTimers.add(timer);
+  }
+
+  private async readPool(mint: string, attempt: number): Promise<void> {
+    const connection = this.ctx.live?.connection;
+    const key = parsePublicKey(mint);
+    if (!connection || !key || this.closed) return;
+    let pool: PoolReserves | null = null;
+    try {
+      pool = await readPumpPool(connection, key, (fn) => this.budget.run(fn, 'low'));
+    } catch {
+      pool = null;
+    }
+    if (this.closed) return;
+    if (!pool) {
+      this.poolReads.missing++;
+      this.schedulePoolRead(mint, attempt + 1);
+      return;
+    }
+    this.poolsRead.set(mint, pool);
+  }
+
+  private applyPoolsRead(): void {
+    const read = this.poolsRead;
+    this.poolsRead = new Map();
+    for (const [mint, pool] of read) {
+      const t = this.world.tokens.get(mint);
+      if (!t?.pool || t.status !== 'migrated') continue;
+      t.pool.native = pool.native;
+      t.pool.tokens = pool.tokens;
+      if (!t.pool.address) t.pool.address = pool.address;
+      t.version++;
+      this.poolReads.applied++;
     }
   }
 

@@ -23,9 +23,14 @@ vi.mock('node:dns/promises', () => ({ lookup: async () => [{ address: '93.184.21
 vi.mock('../src/live/enrich/transport', () => ({ pinnedFetch: () => (input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init) }));
 
 const FIX = join(__dirname, 'fixtures', 'pumpportal');
+// Real frames: a launch, ten buys completing its curve, its migration (see fixtures/pumpportal/README.md).
 const lifecycle = JSON.parse(readFileSync(join(FIX, 'lifecycle.json'), 'utf8')) as Record<string, unknown>[];
-const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as { createCat: Record<string, unknown>; wallets: { DEV: string; A: string; B: string; MINT: string; MINT2: string } };
-const { MINT, MINT2, A } = misc.wallets;
+const amm = JSON.parse(readFileSync(join(FIX, 'amm-trade.synthesized.json'), 'utf8')) as Record<string, unknown>[];
+const misc = JSON.parse(readFileSync(join(FIX, 'misc.json'), 'utf8')) as Record<string, Record<string, unknown>>;
+const MINT = lifecycle[1].mint as string;
+const DEV = lifecycle[1].traderPublicKey as string;
+const A = lifecycle[2].traderPublicKey as string;
+const MINT2 = misc.createNoBuy.mint as string;
 const IMAGE = 'https://ipfs.io/ipfs/QmImageImageImageImageImageImageImageImageIma';
 const KOL = Keypair.generate().publicKey.toBase58();
 
@@ -63,7 +68,7 @@ beforeAll(async () => {
     fetched.push(url);
     const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
     if (url.startsWith('http://jupiter.test/price/v3')) return json({ So11111111111111111111111111111111111111112: { usdPrice: 187.5, decimals: 9, liquidity: 1e9, priceChange24h: 1.2 } });
-    if (url.includes('QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG')) return json({ name: 'Ribbit Frog', description: 'the frog that ribbits', image: IMAGE, twitter: '@ribbit_sol', website: 'https://ribbit.fun' });
+    if (url.includes('QmdcFLcm9VYEQTaAFNDZPFZFigEmpo7N2ETUcCYgSNHYkU')) return json({ name: 'Dogettecoin', description: 'the dog that dogs', image: IMAGE, twitter: '@dogette_sol', website: 'https://dogette.fun' });
     return new Response('not found', { status: 404 });
   });
   dir = mkdtempSync(join(tmpdir(), 'trenchscope-live-'));
@@ -108,34 +113,41 @@ describe('live ingestion through the app', () => {
     send(lifecycle.slice(0, 3)); // ack, create, a buy
     const trenches = await until(() => get<TrenchesSnapshot>('/api/sol/trenches'), (r) => r.body.new.some((t) => t.address === MINT && t.holderCount >= 2));
     const row = trenches.body.new.find((t) => t.address === MINT)!;
-    expect(row).toMatchObject({ symbol: 'RIBBIT', name: 'Ribbit Frog', launchpad: 'pump', status: 'curve', narrative: 'Frogs' });
-    expect(row.priceUsd).toBeCloseTo((31.5 / 1021904761.904762) * 187.5, 12);
+    expect(row).toMatchObject({ symbol: 'DOGETTE', name: 'Dogettecoin', launchpad: 'pump', status: 'curve', narrative: 'Dogs' });
+    expect(row.priceUsd).toBeCloseTo((36.581645484 / 879949482.174964) * 187.5, 12);
     const detail = await get<TokenDetail>(`/api/sol/tokens/${MINT}`);
     expect(detail.status).toBe(200);
-    expect(detail.body.curve?.virtualNative).toBeCloseTo(31.5, 9);
+    expect(detail.body.curve?.virtualNative).toBeCloseTo(36.581645484, 9);
     const trades = await get<Trade[]>(`/api/sol/tokens/${MINT}/trades`);
     expect(trades.body.map((t) => [t.side, t.wallet])).toEqual([
       ['buy', A],
-      ['buy', misc.wallets.DEV],
+      ['buy', DEV],
     ]);
+    // what the buyer paid: the curve amount plus pump.fun's 1.25% fees
+    expect(trades.body[0].nativeAmount).toBeCloseTo(3.737201041 * 1.0125, 9);
     await until(() => received, (r) => r.some((m) => m.method === 'subscribeTokenTrade' && m.keys?.includes(MINT)));
   });
 
   it('enriches the launch from its metadata: image, description, socials', async () => {
     const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.imageUrl === IMAGE);
-    expect(detail.body.description).toBe('the frog that ribbits');
-    expect(detail.body.socials).toEqual({ twitter: 'https://x.com/ribbit_sol', website: 'https://ribbit.fun/' });
+    expect(detail.body.description).toBe('the dog that dogs');
+    expect(detail.body.socials).toEqual({ twitter: 'https://x.com/dogette_sol', website: 'https://dogette.fun/' });
     const trenches = await get<TrenchesSnapshot>('/api/sol/trenches');
     expect(trenches.body.new.find((t) => t.address === MINT)?.imageUrl).toBe(IMAGE);
   });
 
   it('follows the curve to completion and migration, then PumpSwap trades; meta counts both', async () => {
     send(lifecycle.slice(3));
-    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.status === 'migrated' && (r.body.pool?.tokenReserve ?? 0) > 0 && r.body.priceNative > 4e-7);
+    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.status === 'migrated' && (r.body.pool?.tokenReserve ?? 0) > 0);
     expect(detail.body.pool).toMatchObject({ dex: 'PumpSwap', lpBurnedRate: 1 });
-    expect(detail.body.priceNative).toBeCloseTo(1 / 2_400_000, 12);
+    // 84.990 SOL against 206.9M tokens, as MigrateV2 left the pool on mainnet
+    expect(detail.body.pool?.nativeReserve).toBeCloseTo(84.990359, 5);
+    expect(detail.body.pool?.tokenReserve).toBeCloseTo(206_900_000, 3);
+    send(amm);
+    const after = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => Math.abs(r.body.priceNative - 1 / 2_400_000) < 1e-12);
+    expect(after.body.status).toBe('migrated');
     const trades = await get<Trade[]>(`/api/sol/tokens/${MINT}/trades`);
-    expect(trades.body).toHaveLength(5);
+    expect(trades.body).toHaveLength(12);
     const meta = await get<MetaResponse>('/api/meta');
     expect(meta.body.chains[0]).toMatchObject({ launches1h: 1, migrations1h: 1 });
     expect(meta.body.live?.trackedTokens).toBeGreaterThanOrEqual(1);
@@ -148,7 +160,7 @@ describe('live ingestion through the app', () => {
     const before = (await get<Trade[]>(`/api/sol/tokens/${MINT}/trades`)).body.length;
     send(lifecycle);
     feedSocket!.send('{"txType":"buy"');
-    feedSocket!.send(JSON.stringify(misc.createCat));
+    feedSocket!.send(JSON.stringify(misc.createNoBuy));
     await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT2}`), (r) => r.status === 200);
     expect((await get<Trade[]>(`/api/sol/tokens/${MINT}/trades`)).body.length).toBe(before);
     const diag = (built.market as LiveMarket).diagnostics();
@@ -184,6 +196,8 @@ describe('live ingestion through the app', () => {
   });
 
   it('never fetched anything but the stubbed Jupiter and metadata URLs', () => {
-    for (const url of fetched) expect(url.startsWith('http://jupiter.test/') || url.startsWith('https://ipfs.io/ipfs/') || url.startsWith('https://dweb.link/ipfs/'), url).toBe(true);
+    // (the second launch's metadata uri names its own gateway: answered 404 by the stub)
+    const stubbed = ['http://jupiter.test/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/', 'https://gateway.pinata.cloud/ipfs/'];
+    for (const url of fetched) expect(stubbed.some((p) => url.startsWith(p)), url).toBe(true);
   });
 });

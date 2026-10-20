@@ -1,0 +1,13 @@
+[
+  {
+    "signature": "3pXDkVwZ4wC7aQJxUK3nV1bqfhD6R2X6tqgFh1hVJ8RkZ4e3uJUZ7dQ9WwVg2yPZ8xY3sRk5sH4bJ6mT2pNcLqEa",
+    "mint": "7JFy6LQNL1FFreGt1caZPWoGKpJCtj4qC5Gs1o18pump",
+    "traderPublicKey": "9xW6MU46ANg5XXosD9Xkn6mNHnYmRLTVAWa6ADfPkjDY",
+    "txType": "buy",
+    "tokenAmount": 2400000,
+    "solAmount": 1,
+    "newTokenBalance": 102524942.76665,
+    "marketCapSol": 416.666666667,
+    "pool": "pump-amm"
+  }
+]
