@@ -36,7 +36,7 @@ import {
 
 /** Short description and extra search terms per page key. */
 const PAGE_META: Record<string, { description: string; keywords: string[] }> = {
-  trenches: { description: 'New, almost bonded and migrated launches', keywords: ['launches', 'bonding curve', 'pump'] },
+  trenches: { description: 'New, graduating and migrated launches', keywords: ['launches', 'bonding curve', 'pump'] },
   trending: { description: 'Hottest tokens by time window', keywords: ['hot', 'top', 'gainers', 'volume'] },
   'new-pairs': { description: 'Fresh DEX pools of migrated tokens', keywords: ['pools', 'migrated', 'listings'] },
   monitor: { description: 'Smart money and KOL trades, live', keywords: ['smart money', 'kol', 'feed', 'tracker', 'following'] },
