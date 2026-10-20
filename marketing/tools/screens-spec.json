@@ -1,0 +1,128 @@
+[
+ {
+  "ref": "screen-trenches",
+  "src": "/home/user/Gmgn/marketing/screens/screen-trenches.png",
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-trenches.png",
+  "width": 1600,
+  "height": 900,
+  "crop": [
+   0,
+   0,
+   3840,
+   2160
+  ],
+  "callouts": [
+   {
+    "box": [
+     1420,
+     1052,
+     1125,
+     72
+    ],
+    "label": "risk chips on every card",
+    "side": "top"
+   }
+  ]
+ },
+ {
+  "ref": "screen-token-audit",
+  "src": "/home/user/Gmgn/marketing/screens/screen-token-audit.png",
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-token-audit.png",
+  "width": 1080,
+  "height": 1350,
+  "crop": [
+   3080,
+   950,
+   770,
+   1180
+  ],
+  "callouts": [
+   {
+    "box": [
+     3125,
+     1000,
+     690,
+     620
+    ],
+    "label": "7 flags \u00b7 high risk",
+    "side": "top"
+   }
+  ]
+ },
+ {
+  "ref": "screen-buy-preview",
+  "src": "/home/user/Gmgn/marketing/screens/screen-token-audit.png",
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-buy-preview.png",
+  "width": 1200,
+  "height": 1200,
+  "crop": [
+   3090,
+   110,
+   760,
+   900
+  ],
+  "callouts": [
+   {
+    "box": [
+     3140,
+     545,
+     655,
+     440
+    ],
+    "label": "full cost before you click",
+    "side": "top"
+   }
+  ]
+ },
+ {
+  "ref": "screen-wallet",
+  "src": "/home/user/Gmgn/marketing/screens/screen-wallet.png",
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-wallet.png",
+  "width": 1600,
+  "height": 900,
+  "crop": [
+   330,
+   100,
+   3200,
+   1800
+  ],
+  "watermark": true,
+  "callouts": [
+   {
+    "box": [
+     2170,
+     490,
+     280,
+     230
+    ],
+    "label": "copy score, explained",
+    "side": "bottom"
+   }
+  ]
+ },
+ {
+  "ref": "screen-monitor",
+  "src": "/home/user/Gmgn/marketing/screens/screen-monitor.png",
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-monitor.png",
+  "width": 1600,
+  "height": 900,
+  "crop": [
+   0,
+   0,
+   3840,
+   2160
+  ],
+  "callouts": [
+   {
+    "box": [
+     3010,
+     238,
+     680,
+     885
+    ],
+    "label": "smart money piling in",
+    "side": "left"
+   }
+  ]
+ }
+]
