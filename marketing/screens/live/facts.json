@@ -1,0 +1,19 @@
+{
+ "token": "SWA",
+ "address": "1twwAw21nTDRvfVq8EjWGhCfCnL5JGDGkBBdoyjKkpit",
+ "captured": "2026-10-20T21:23:20.676Z",
+ "values": {
+  "flags": "5",
+  "risk": "High",
+  "rugRatio": "75.4%",
+  "dev": "0%",
+  "insiders": "8.2%",
+  "bundlers": "83%",
+  "snipers": "1 (0%)",
+  "fresh": "67%",
+  "top10": "8.4%",
+  "smart": "0",
+  "holders": "3"
+ },
+ "auditText": "Audit\n5 flags\nHigh risk\nRug ratio\n75.4%\nBundlers\n83%\nFresh wallets\n67%\nRug ratio\n75%\nInsiders\n8.2%\nSmart money\n0\nLP burned\nOn curve\nMint authority\nRenounced\nFreeze authority\nRenounced\nBuy / sell tax\n0% / 0%\nTop 10 holders\n8.4%\nDev holding\n0%\nSnipers\n1 (0%)\nBot degens\n33%\nWash trading\nNo\n\nAudit — reference only.\n\nLess"
+}

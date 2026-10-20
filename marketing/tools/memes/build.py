@@ -212,7 +212,35 @@ def forecast():
     return cards.stage(w, h, body), w, h
 
 
-BUILD = {"meme-1": bingo, "meme-2": alignment, "meme-4": translator, "meme-6": wanted, "meme-8": starter, "meme-9": tiers, "meme-10": forecast}
+def facts():
+    """meme-3: a nutrition-facts label; every number from screens/live/facts.json (one capture-mode audit frame)."""
+    w, h = 1080, 1350
+    f = json.load(open(f"{M}/screens/live/facts.json"))["values"]
+    tone = lambda v, warn, bad: RED if v >= bad else (AMBER if v >= warn else "#22D687")
+    p = lambda x: float(x.rstrip("%").split()[0])
+    rows = [("dev holding", f["dev"], tone(p(f["dev"]), 10, 30)), ("insiders", f["insiders"], tone(p(f["insiders"]), 5, 10)),
+            ("bundlers", f'{f["bundlers"]} of volume', tone(p(f["bundlers"]), 10, 30)), ("snipers", f["snipers"], tone(int(f["snipers"].split()[0]), 5, 21)),
+            ("fresh wallets", f["fresh"], tone(p(f["fresh"]), 15, 30)), ("top 10 holders", f["top10"], tone(p(f["top10"]), 30, 50)),
+            ("smart money", f["smart"], AMBER if f["smart"] == "0" else "#22D687")]
+    rr = "".join(f'<div style="display:flex;justify-content:space-between;padding:10px 0;border-top:2px solid #3A4150"><span style="font-weight:600">{k}</span>'
+                 f'<span class="mono" style="font-weight:700;color:{c}">{v}</span></div>' for k, v, c in rows)
+    label = (f'<div style="position:absolute;left:150px;right:150px;top:250px;background:{PANEL};border:6px solid {FG};padding:26px 34px;font-size:34px">'
+             f'<div style="font-weight:900;font-size:86px;letter-spacing:-.03em;line-height:.95">Trench Facts</div>'
+             f'<div style="border-top:3px solid {FG};margin-top:12px;padding-top:10px;font-weight:600">serving size: 1 launch · demo data</div>'
+             f'<div style="font-weight:600">servings per container: {f["holders"]} holders</div>'
+             f'<div style="border-top:16px solid {FG};margin-top:14px"></div>{rr}'
+             f'<div style="border-top:10px solid {FG};margin-top:6px;display:flex;justify-content:space-between;padding:12px 0 6px;font-weight:900;font-size:40px">'
+             f'<span>rug ratio</span><span class="mono" style="color:{RED}">{f["rugRatio"].split(".")[0]}%</span></div>'
+             f'<div class="mono" style="font-weight:700;color:{RED}">audit: {f["flags"]} flags · {f["risk"].lower()} risk</div>'
+             f'<div style="border-top:3px solid {FG};margin-top:16px;padding-top:12px;font-size:25px;line-height:1.35;color:#C9CED8">'
+             f'ingredients: a dev, some insiders, a bundle, a lot of fresh wallets.<br><b style="color:{FG}">may contain traces of a community.</b></div></div>')
+    body = (head("trench facts", "one launch · demo data · read off the audit panel", 80, 84) + label
+            + f'<div style="position:absolute;left:80px;right:80px;bottom:44px;display:flex;justify-content:space-between;align-items:center">'
+              f'<span class="mono" style="color:{MUTED};font-size:22px">UI shown with demo data · high risk · nfa</span>{cards.wordmark(30)}</div>')
+    return cards.stage(w, h, body), w, h
+
+
+BUILD = {"meme-1": bingo, "meme-3": facts, "meme-2": alignment, "meme-4": translator, "meme-6": wanted, "meme-8": starter, "meme-9": tiers, "meme-10": forecast}
 
 if __name__ == "__main__":
     jobs = []
