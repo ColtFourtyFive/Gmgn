@@ -14,6 +14,14 @@ export interface ChainTokenBalance {
   program: string;
   /** The token accounts holding it (usually just the associated one). */
   accounts: string[];
+  /** Each of those accounts with its own balance; a frozen one cannot send. */
+  parts: TokenAccountPart[];
+}
+
+export interface TokenAccountPart {
+  address: string;
+  raw: bigint;
+  frozen: boolean;
 }
 
 export interface ChainBalances {
@@ -28,24 +36,27 @@ interface ParsedTokenAccount {
   account: { owner: PublicKey; data: unknown };
 }
 
-function tokenAmountOf(data: unknown): { mint: string; amount: string; decimals: number } | null {
-  const info = (data as { parsed?: { info?: { mint?: unknown; tokenAmount?: { amount?: unknown; decimals?: unknown } } } })?.parsed?.info;
+/** jsonParsed token account: `{ parsed: { type: 'account', info: { mint, owner, state, tokenAmount: { amount, decimals } } } }`. */
+function tokenAmountOf(data: unknown): { mint: string; amount: string; decimals: number; frozen: boolean } | null {
+  const info = (data as { parsed?: { info?: { mint?: unknown; state?: unknown; tokenAmount?: { amount?: unknown; decimals?: unknown } } } })?.parsed?.info;
   const amount = info?.tokenAmount?.amount;
   const decimals = info?.tokenAmount?.decimals;
   if (typeof info?.mint !== 'string' || typeof amount !== 'string' || !/^\d+$/.test(amount) || typeof decimals !== 'number') return null;
-  return { mint: info.mint, amount, decimals };
+  return { mint: info.mint, amount, decimals, frozen: info.state === 'frozen' };
 }
 
 function addAccounts(into: Map<string, ChainTokenBalance>, accounts: readonly ParsedTokenAccount[]): void {
   for (const { pubkey, account } of accounts) {
     const t = tokenAmountOf(account.data);
     if (!t) continue;
+    const part: TokenAccountPart = { address: pubkey.toBase58(), raw: BigInt(t.amount), frozen: t.frozen };
     const cur = into.get(t.mint);
     if (cur) {
-      cur.raw += BigInt(t.amount);
-      cur.accounts.push(pubkey.toBase58());
+      cur.raw += part.raw;
+      cur.accounts.push(part.address);
+      cur.parts.push(part);
     } else {
-      into.set(t.mint, { mint: t.mint, raw: BigInt(t.amount), decimals: t.decimals, program: account.owner.toBase58(), accounts: [pubkey.toBase58()] });
+      into.set(t.mint, { mint: t.mint, raw: part.raw, decimals: t.decimals, program: account.owner.toBase58(), accounts: [part.address], parts: [part] });
     }
   }
 }

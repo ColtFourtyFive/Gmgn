@@ -54,7 +54,8 @@ never loaded in the other. Set `DEMO_URL` on the live site to show users a "Try 
         → confirm by signature status until lastValidBlockHeight (rebroadcast same bytes, never re-sign)
         → getTransaction → fill parsed from balance deltas → World.recordExternalTrade + LiveFillRecord
   live/wallets/*: balance sync (20 s for active accounts, 1.5 s after fills), deposit scan
-     (getSignaturesForAddress cursor), withdrawals (2FA + whitelist + rate limit, pending → sent → confirmed)
+     (getSignaturesForAddress cursors: the wallet and its token accounts), withdrawals (2FA + whitelist +
+     rate limit, pending → sent → confirmed)
                                │
   store/ (SQLite, DATA_DIR/trenchscope.db): accounts + trading state blobs (written through),
      append-only audit, fills (unique per account+signature), transfers (idempotent by clientId)
@@ -111,7 +112,7 @@ Key properties:
 | `LIVE_TOKEN_IDLE_MINUTES` | `30` | Stop streaming a token after this long without a trade (protected tokens excepted) |
 | `LIVE_RPC_RPS` | `5` | RPC requests/s the ingestion and enrichment may spend (page loads go first) |
 | `LIVE_KOL_FILE` | unset | JSON `[{ address, name, twitter? }]` of KOL wallets (labelled and streamed) |
-| `IPFS_GATEWAYS` | `https://ipfs.io/ipfs/,https://dweb.link/ipfs/` | Gateways tried in order for metadata JSON (use a dedicated one, e.g. Pinata, in production) |
+| `IPFS_GATEWAYS` | `https://ipfs.filebase.io/ipfs/,https://gateway.pinata.cloud/ipfs/` | Gateways tried in order for metadata JSON; the first also serves token images to browsers (use a dedicated one, e.g. Pinata or Filebase, in production). ipfs.io, dweb.link and cloudflare-ipfs.com no longer serve |
 | `JUPITER_API_URL` | `https://api.jup.ag` with a key, else `https://lite-api.jup.ag` | Swap API v1 and Price API v3 base |
 | `JUPITER_API_KEY` | unset | Sent as `x-api-key` |
 
@@ -119,7 +120,7 @@ Key properties:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SOLANA_RPC_URL` | unset → balances, holders, deposits and trading disabled | HTTPS JSON-RPC (Helius, Triton, QuickNode, ...) |
+| `SOLANA_RPC_URL` | unset → balances, holders, deposits and trading disabled | HTTPS JSON-RPC (Helius, Triton, QuickNode, ...). Must serve `getTokenLargestAccounts` with both token programs indexed (top holders; pump.fun mints are Token-2022): public endpoints refuse it |
 | `SOLANA_WS_URL` | derived from `SOLANA_RPC_URL` | WebSocket RPC (passed to web3.js) |
 | `JITO_BLOCK_ENGINE_URL` | `https://mainnet.block-engine.jito.wtf` | Anti-MEV sends (`/api/v1/transactions?bundleOnly=true`) |
 | `PLATFORM_FEE_BPS` | `80` (0.8%, max 300) | Platform fee on every swap |
@@ -198,9 +199,13 @@ encrypted at rest. It is refused when `NODE_ENV=production`, and dev wallets mus
 | `lite-api.jup.ag` or `api.jup.ag` | Swap quotes / instructions, prices |
 | `mainnet.block-engine.jito.wtf` (or your regional block engine) | Anti-MEV sends |
 | `api.turnkey.com` | Wallet creation and signing |
-| IPFS gateways (`ipfs.io`, `dweb.link`, or yours) and any https host a token's metadata `uri` names | Token metadata JSON (SSRF-guarded: public https only, no IP literals or private addresses, 5 s, 256 KB, JSON only) |
+| IPFS gateways (`ipfs.filebase.io`, `gateway.pinata.cloud`, or yours) and any https host a token's metadata `uri` names | Token metadata JSON (SSRF-guarded: public https only, no IP literals or private addresses, 8 s a URL, 256 KB, JSON only) |
 
-Token images are loaded by the browser, not the server (the live CSP allows `img-src https:`).
+Token images are loaded by the browser, not the server (the live CSP allows `img-src https:`). An image
+the metadata names on any IPFS gateway is served from the first configured gateway (content-addressed:
+the same bytes), which must allow cross-origin image loads: pump.fun writes `https://ipfs.io/ipfs/<cid>`,
+which since September 2026 answers browsers with a challenge page and `Cross-Origin-Resource-Policy:
+same-origin`.
 
 ## 5. Fee wallet
 
@@ -341,6 +346,10 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 - PumpSwap trades (`pool: 'pump-amm'`) could not be captured: their amounts are taken as sent. A
   migrated pool's reserves are read back from chain once after the migration. Fresh pump coins pay
   tiered PumpSwap fees (20 + 5 + 95 bps observed), not the 0.25% in `LIVE_DEXES` (fee totals only).
+- Deposit records: a token account's signatures are re-read when its balance moved since the last scan,
+  and every 30 minutes regardless (a deposit and an equal outflow between two balance reads shows up on
+  that sweep). A transaction format newer than v1 is skipped by the scanner (logged once per version);
+  balances still follow the chain.
 - Accounts state is one JSON blob rewritten on change: fine for a small user base, revisit beyond a
   few thousand accounts. The audit table only grows (no retention policy yet).
 - `node:sqlite` is experimental in Node 22 (a warning is printed in live mode).
@@ -399,13 +408,13 @@ documented as `COULD_NOT_FIND_ANY_ROUTE` is still accepted), slippage error 6001
 answers 200 with `simulationError` and a 1,400,000 limit when its own simulation fails: the venue refuses a
 `TRANSACTION_ERROR` before signing and ignores the limit otherwise. The route instruction carries
 `quoted_out_amount` and `slippage_bps` (not `otherAmountThreshold`). Not verified here: `x-api-key` on
-`api.jup.ag` and the Price API v3 (no key available; enrichment's area).
+`api.jup.ag` (no key available). Price API v3: verified, see below.
 
 **Solana RPC**: `getTransaction` pre/post token balances with `owner` and lookup-table account ordering
 checked on real legacy and v0 transactions (`test/fixtures/rpc/real-*.json`), web3.js's parsed response
 reading the same; a sell that closes its token account refunds the rent (booked as rent, not proceeds).
-Still to check: `getSignaturesForAddress` paging, `getParsedTokenAccountsByOwner` shapes (public endpoints
-refuse "indexed" methods: use a provider), `SendTransactionError` on a real refusal, metadata decoding.
+Still to check: `SendTransactionError` on a real refusal (nothing could be sent). Paging, token accounts
+and metadata decoding: verified, see below (public endpoints refuse "indexed" methods: use a provider).
 
 **Jito**: `getTipAccounts` returns exactly the 8 accounts in `JITO_TIP_ACCOUNTS`; landed tips (bundles.jito.wtf
 tip floor, October 2026) run p25 ~2-6k, p50 ~4-11k, p95 ~30-150k lamports, so the 1000-lamport minimum is a
@@ -421,5 +430,39 @@ every 2 s.
   transactions, and the policy syntax in section 3.
 
 **Product**
-- Authenticator apps scanning the generated `otpauth://` URI; deposit QR codes in wallet apps; token
-  images from IPFS gateways under the live CSP.
+- Authenticator apps scanning the generated `otpauth://` URI; deposit QR codes in wallet apps.
+
+**Verified on mainnet: wallets and enrichment** (`apps/server/scripts/sol-wallets-verify.ts`, read-only,
+October 2026; real captures in `apps/server/test/fixtures/rpc/real`, `jupiter/price-v3.json`, `ipfs/`)
+- `getSignaturesForAddress`: newest first, `before` / `until` exclusive, at most 1000 a call.
+- `getTransaction`: mainnet carries v1 transactions (no lookup tables, compute budget in the message)
+  besides legacy and v0 (up to half of pump.fun samples); `maxSupportedTransactionVersion: 0` makes the
+  RPC refuse them, which stopped the deposit scanner at the first one. It now asks for 1 and skips a
+  newer format with a warning. Token balances carry `owner` and `programId` (SPL and Token-2022); keys
+  are static, then lookup-table writable, then readonly.
+- A token transfer into an account the wallet already has lists the token account, not the wallet, so
+  `getSignaturesForAddress(wallet)` never returns it: deposits are now also read through the wallet's
+  token accounts (cursor per account).
+- `getParsedTokenAccountsByOwner` shapes, Token-2022 `extensions` and `state: 'frozen'` (frozen airdrops
+  exist; withdrawals refuse them up front).
+- Rent: the Rent sysvar is 5080 lamports per byte (a plain account 0.00065024 SOL, an SPL token account
+  0.00148844, a pump.fun Token-2022 associated account 170 bytes / 0.00151384). Withdrawals read it from
+  the RPC; `RENT_EXEMPT_MIN_LAMPORTS` / `TOKEN_ACCOUNT_RENT_LAMPORTS` in `execution/amounts.ts` keep the
+  older, higher figures (they over-reserve).
+- Withdrawals simulated from funded owners (never sent): SOL (450 compute units); SOL below the
+  rent-exempt minimum to an empty address fails on chain (`InsufficientFundsForRent`) and is refused up
+  front; USDC into a new associated account (14-22k units); a pump.fun Token-2022 token into a new
+  170-byte account (~21,600 units).
+- Mint reads: the Token-2022 `tokenMetadata` extension (pump.fun mints have no Metaplex account),
+  Metaplex (BONK), authorities, PumpSwap pools. `getTokenLargestAccounts` is refused by public RPCs
+  (api.mainnet-beta: method limit 0; publicnode: personal token only; others exclude the token
+  programs from their secondary indexes); the holder reads need an RPC that serves it.
+- A pump.fun curve that completed before PumpSwap (e.g. Fartcoin, on Raydium) has no canonical pool: the
+  on-demand lookup now prices it through Jupiter instead of leaving it "migrating".
+- IPFS: ipfs.io and dweb.link stopped serving on 2026-09-21 (429 to servers, a challenge page with CORP
+  `same-origin` to browsers); cloudflare-ipfs.com and cf-ipfs.com no longer resolve; w3s.link and
+  nftstorage.link redirect to the retired ones. ipfs.filebase.io (~0.3 s) and gateway.pinata.cloud
+  (4-7 s) serve metadata and images cross-origin.
+- Jupiter Price v3: `{ usdPrice, decimals, liquidity, priceChange24h, blockId, createdAt, launchpad? }`;
+  unknown ids are absent (200 with `{}`); ids past the 50th are dropped without an error. A failed chunk
+  no longer costs the other chunks (and SOL/USD) their prices.

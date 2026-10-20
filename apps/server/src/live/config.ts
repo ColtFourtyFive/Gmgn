@@ -76,8 +76,14 @@ export interface LoadedLiveConfig {
 }
 
 const DEFAULT_PLATFORM_FEE_BPS = 80;
-/** Public IPFS gateways tried in order when IPFS_GATEWAYS is unset. */
-export const DEFAULT_IPFS_GATEWAYS = 'https://ipfs.io/ipfs/,https://dweb.link/ipfs/';
+/**
+ * Public IPFS gateways tried in order when IPFS_GATEWAYS is unset; the first also serves token
+ * images to browsers. Checked on mainnet metadata in October 2026: ipfs.filebase.io (fast) and
+ * gateway.pinata.cloud (slow) serve JSON and images cross-origin; ipfs.io and dweb.link were
+ * retired (429 to servers, a challenge page with CORP same-origin to browsers), w3s.link and
+ * nftstorage.link redirect to them, cloudflare-ipfs.com and cf-ipfs.com no longer resolve.
+ */
+export const DEFAULT_IPFS_GATEWAYS = 'https://ipfs.filebase.io/ipfs/,https://gateway.pinata.cloud/ipfs/';
 
 function env(e: NodeJS.ProcessEnv, key: string): string | null {
   const v = e[key]?.trim();
@@ -144,7 +150,7 @@ export function loadLiveConfig(e: NodeJS.ProcessEnv = process.env): LoadedLiveCo
       jitoUrl: env(e, 'JITO_BLOCK_ENGINE_URL') ?? 'https://mainnet.block-engine.jito.wtf',
       signer: { provider, turnkey, localKeystoreKey: provider === 'local-dev' ? localKeystoreKey : null },
       fees: { platformFeeBps, feeWallet },
-      // cloudflare-ipfs.com was retired in 2024; a dedicated gateway (e.g. Pinata) is better in production.
+      // A dedicated gateway (e.g. Pinata or Filebase with your own key) is better in production.
       ipfsGateways: (env(e, 'IPFS_GATEWAYS') ?? DEFAULT_IPFS_GATEWAYS).split(',').map((g) => g.trim()).filter(Boolean),
       security,
     },

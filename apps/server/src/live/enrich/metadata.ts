@@ -1,13 +1,14 @@
 // Token metadata JSON (the `uri` a launch registers): image, description and
-// social links. Fetched through fetchPublicJson (https only, public hosts, 5 s,
-// 256 KB, JSON only); ipfs:// URIs go through the configured gateways in turn.
+// social links. Fetched through fetchPublicJson (https only, public hosts, 8 s a
+// URL, 256 KB, JSON only); ipfs:// URIs and IPFS gateway links go through the
+// configured gateways in turn.
 // Everything taken from the JSON is sanitised: text loses control characters
 // and is length capped, and only public https image / social URLs survive.
 // A small worker pool drains a bounded queue; results are cached per URI.
 
 import type { Socials } from '@trenchscope/shared';
 import { FetchRefused, fetchPublicJson, type FetchFn, type HostLookup } from './http';
-import { cleanText, ipfsToGateway, publicHttpsUrl, safeImageUrl, safeSocial } from './sanitize';
+import { cleanText, ipfsPathOf, ipfsToGateway, publicHttpsUrl, safeImageUrl, safeSocial } from './sanitize';
 
 export interface TokenMetadata {
   description: string;
@@ -16,26 +17,29 @@ export interface TokenMetadata {
 }
 
 const MAX_DESCRIPTION = 600;
+/**
+ * Per candidate URL. Measured on mainnet metadata (October 2026): ipfs.filebase.io answers in
+ * ~0.3-0.5 s, gateway.pinata.cloud in 3.7-6.8 s, so 5 s would cut the fallback off half the time.
+ */
+export const METADATA_TIMEOUT_MS = 8000;
 
-/** Candidate https URLs for a metadata URI (gateways in order for IPFS), or [] when it cannot be fetched. */
+/**
+ * Candidate https URLs for a metadata URI (gateways in order for IPFS), or [] when it cannot be fetched.
+ * An https gateway link (pump.fun writes https://ipfs.io/ipfs/<cid>; path or subdomain style) is
+ * tried on the configured gateways first and on its own host last: the public gateways metadata
+ * names are retired one after another (ipfs.io and dweb.link stopped serving in September 2026,
+ * cloudflare-ipfs.com and cf-ipfs.com no longer resolve).
+ */
 export function metadataUrls(uri: string, gateways: string[]): string[] {
   const raw = uri.trim();
   if (!raw) return [];
+  const viaGateways = (cidPath: string) => gateways.map((g) => ipfsToGateway(`ipfs://${cidPath}`, [g])).filter((u): u is string => !!u);
   const ipfs = /^ipfs:\/\/(?:ipfs\/)?(.+)$/i.exec(raw)?.[1] ?? null;
-  if (ipfs) {
-    const out: string[] = [];
-    for (const g of gateways) {
-      const u = ipfsToGateway(`ipfs://${ipfs}`, [g]);
-      if (u) out.push(u);
-    }
-    return out;
-  }
+  if (ipfs) return viaGateways(ipfs);
   const url = publicHttpsUrl(raw, 1024);
   if (!url) return [];
-  // An https gateway link (https://ipfs.io/ipfs/<cid>) falls back to the configured gateways.
-  const cid = /^\/ipfs\/(.+)$/.exec(url.pathname)?.[1];
-  const alternates = cid ? gateways.map((g) => ipfsToGateway(`ipfs://${cid}`, [g])).filter((u): u is string => !!u && u !== url.href) : [];
-  return [url.href, ...alternates];
+  const cidPath = ipfsPathOf(url);
+  return [...new Set([...(cidPath ? viaGateways(cidPath) : []), url.href])];
 }
 
 /** The sanitised fields of a metadata JSON object (unknown shapes yield empty fields). */
@@ -72,7 +76,7 @@ export async function fetchTokenMetadata(uri: string, opts: MetadataFetcherOptio
   let last: unknown = null;
   for (const url of urls) {
     try {
-      const json = await fetchPublicJson(url, { fetch: opts.fetch, lookup: opts.lookup, timeoutMs: opts.timeoutMs ?? 5000, maxBytes: opts.maxBytes ?? 256 * 1024, signal: opts.signal });
+      const json = await fetchPublicJson(url, { fetch: opts.fetch, lookup: opts.lookup, timeoutMs: opts.timeoutMs ?? METADATA_TIMEOUT_MS, maxBytes: opts.maxBytes ?? 256 * 1024, signal: opts.signal });
       return sanitizeMetadata(json, opts.gateways);
     } catch (err) {
       last = err;

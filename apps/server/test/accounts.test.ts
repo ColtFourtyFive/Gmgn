@@ -88,6 +88,9 @@ function makeToken(symbol = 'PEPE') {
 
 const systemNote = (title: string) => ({ kind: 'system' as const, title, body: '', chain: null, token: null, wallet: null });
 
+// Tests that run many real scrypt hashes: CPU-bound, so they get room on slow or busy machines (CI runners).
+const HASH_HEAVY_TIMEOUT_MS = 30_000;
+
 describe('auth', () => {
   it('creates guest accounts with a session and a funded paper wallet per chain', async () => {
     const { token, account } = await guest();
@@ -205,7 +208,7 @@ describe('auth', () => {
     // A successful sign-in clears the counter.
     for (let i = 0; i < MAX_LOGIN_ATTEMPTS - 1; i++) await login('wrong-again');
     expect((await login('hunter22')).status).toBe(200);
-  });
+  }, HASH_HEAVY_TIMEOUT_MS);
 
   it('runs at most MAX_CONCURRENT_HASHES password hashes at once and refuses past a bounded queue', async () => {
     const total = MAX_CONCURRENT_HASHES + MAX_QUEUED_HASHES + 5;
@@ -230,7 +233,7 @@ describe('auth', () => {
     expect(busy).toHaveLength(5);
     expect(busy[0].headers['retry-after']).toBe('1');
     expect(busy[0].json()).toMatchObject({ code: 'busy' });
-  });
+  }, HASH_HEAVY_TIMEOUT_MS);
 
   it('requires a valid session on protected endpoints', async () => {
     for (const url of ['/api/me', '/api/settings', '/api/follows', '/api/watchlist', '/api/notifications', '/api/rewards']) {

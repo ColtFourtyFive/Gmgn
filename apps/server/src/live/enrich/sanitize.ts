@@ -94,12 +94,46 @@ export function ipfsToGateway(raw: string, gateways: string[]): string | null {
   return `${gateway.replace(/\/+$/, '')}/${m[1]}`;
 }
 
-/** An image URL a browser may load: public https, or an ipfs:// reference turned into a gateway URL. */
+/** CIDv1 base32 (lowercase) as it appears as a subdomain gateway label. */
+const SUBDOMAIN_CID = /^(b[a-z2-7]{50,99})\.ipfs\.[a-z0-9.-]+$/;
+
+/**
+ * `<cid>[/path]` of an https IPFS gateway URL, path style (https://host/ipfs/<cid>/path) or
+ * subdomain style (https://<cid>.ipfs.host/path); null for anything else.
+ */
+export function ipfsPathOf(url: URL): string | null {
+  const sub = SUBDOMAIN_CID.exec(url.hostname.toLowerCase());
+  const raw = sub ? `${sub[1]}${url.pathname === '/' ? '' : url.pathname}` : (/^\/ipfs\/(.+)$/.exec(url.pathname)?.[1] ?? null);
+  if (!raw) return null;
+  return /^[A-Za-z0-9]{46,100}(\/[\w.\-/%]*)?$/.test(raw) ? raw.replace(/\/+$/, '') : null;
+}
+
+/** Whether `url` is already served by one of the configured gateways. */
+function onGateway(url: URL, gateways: string[]): boolean {
+  return gateways.some((g) => {
+    const gw = publicHttpsUrl(g);
+    return !!gw && gw.host === url.host && url.pathname.startsWith(gw.pathname.replace(/\/*$/, '/'));
+  });
+}
+
+/**
+ * An image URL a browser may load: public https, or an ipfs:// reference turned into a gateway URL.
+ * Images on any other IPFS gateway are moved to the first configured one: content-addressed, the
+ * same bytes, and the public gateways metadata names come and go (pump.fun writes
+ * https://ipfs.io/ipfs/<cid>, which since September 2026 answers browsers with a challenge page
+ * and `Cross-Origin-Resource-Policy: same-origin`, so the image would never render).
+ */
 export function safeImageUrl(raw: unknown, gateways: string[]): string | null {
   if (typeof raw !== 'string') return null;
   const viaIpfs = /^ipfs:\/\//i.test(raw.trim()) ? ipfsToGateway(raw, gateways) : null;
   const url = publicHttpsUrl(viaIpfs ?? raw);
-  return url ? url.href : null;
+  if (!url) return null;
+  const cidPath = viaIpfs ? null : ipfsPathOf(url);
+  if (cidPath && !onGateway(url, gateways)) {
+    const moved = ipfsToGateway(`ipfs://${cidPath}`, gateways);
+    if (moved) return moved;
+  }
+  return url.href;
 }
 
 const TWITTER_HOSTS = new Set(['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com']);

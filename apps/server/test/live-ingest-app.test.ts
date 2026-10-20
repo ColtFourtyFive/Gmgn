@@ -15,7 +15,7 @@ import type { MetaResponse, TokenDetail, Trade, TrenchesSnapshot, WalletProfile 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
-import { loadLiveConfig } from '../src/live/config';
+import { DEFAULT_IPFS_GATEWAYS, loadLiveConfig } from '../src/live/config';
 import type { LiveMarket } from '../src/live/market';
 
 vi.mock('node:dns/promises', () => ({ lookup: async () => [{ address: '93.184.216.34', family: 4 }] }));
@@ -31,7 +31,10 @@ const MINT = lifecycle[1].mint as string;
 const DEV = lifecycle[1].traderPublicKey as string;
 const A = lifecycle[2].traderPublicKey as string;
 const MINT2 = misc.createNoBuy.mint as string;
-const IMAGE = 'https://ipfs.io/ipfs/QmImageImageImageImageImageImageImageImageIma';
+// What pump.fun metadata names (a retired public gateway), and where the image is served from: the first configured gateway.
+const IMAGE_CID = 'bafybeihkwbffktou5ieivkg4r3s6bulv6ee545mj22blyvdm4hz4j63kwq';
+const IMAGE = `https://ipfs.io/ipfs/${IMAGE_CID}`;
+const IMAGE_SHOWN = `${DEFAULT_IPFS_GATEWAYS.split(',')[0]}${IMAGE_CID}`;
 const KOL = Keypair.generate().publicKey.toBase58();
 
 let wss: WebSocketServer;
@@ -129,11 +132,11 @@ describe('live ingestion through the app', () => {
   });
 
   it('enriches the launch from its metadata: image, description, socials', async () => {
-    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.imageUrl === IMAGE);
+    const detail = await until(() => get<TokenDetail>(`/api/sol/tokens/${MINT}`), (r) => r.body.imageUrl === IMAGE_SHOWN);
     expect(detail.body.description).toBe('the dog that dogs');
     expect(detail.body.socials).toEqual({ twitter: 'https://x.com/dogette_sol', website: 'https://dogette.fun/' });
     const trenches = await get<TrenchesSnapshot>('/api/sol/trenches');
-    expect(trenches.body.new.find((t) => t.address === MINT)?.imageUrl).toBe(IMAGE);
+    expect(trenches.body.new.find((t) => t.address === MINT)?.imageUrl).toBe(IMAGE_SHOWN);
   });
 
   it('follows the curve to completion and migration, then PumpSwap trades; meta counts both', async () => {
@@ -196,8 +199,9 @@ describe('live ingestion through the app', () => {
   });
 
   it('never fetched anything but the stubbed Jupiter and metadata URLs', () => {
-    // (the second launch's metadata uri names its own gateway: answered 404 by the stub)
-    const stubbed = ['http://jupiter.test/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/', 'https://gateway.pinata.cloud/ipfs/'];
+    // Metadata on any IPFS gateway is tried on the configured gateways first, then on its own host
+    // (the second launch's metadata uri names its own gateway: answered 404 by the stub).
+    const stubbed = ['http://jupiter.test/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/', 'https://gateway.pinata.cloud/ipfs/', ...DEFAULT_IPFS_GATEWAYS.split(',')];
     for (const url of fetched) expect(stubbed.some((p) => url.startsWith(p)), url).toBe(true);
   });
 });

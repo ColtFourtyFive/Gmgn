@@ -2,39 +2,53 @@
 //
 // Authorization chain, each refusal audited: live mode only, 2FA enabled, a valid TOTP code,
 // a whitelisted destination past its activation delay, a per-account rate limit, then the
-// balance (SOL: amount <= balance - fee reserve; SPL: amount <= token balance, SOL for the fee
-// and the destination's token account rent). The transfer is recorded 'pending' before it is
-// signed and 'sent' with its signature before it is broadcast, so a crash at any point leaves a
-// record that resumes correctly: 'pending' was never sent; 'sent' is confirmed by signature.
-// A retry with the same clientId returns the recorded transfer and never sends twice.
+// balance (SOL: amount <= balance - fee reserve, and at least the rent-exempt minimum when the
+// destination holds nothing yet; SPL: amount <= the sending token account's balance, SOL for the
+// fee and the destination's token account rent, a transferable mint). The transfer is recorded
+// 'pending' before it is signed and 'sent' with its signature before it is broadcast, so a crash
+// at any point leaves a record that resumes correctly: 'pending' was never sent; 'sent' is
+// confirmed by signature. A retry with the same clientId returns the recorded transfer and never
+// sends twice.
+//
+// The transactions planWithdrawal builds were simulated on mainnet from funded owners
+// (scripts/sol-wallets-verify.ts): SOL to existing and new addresses, SPL Token and Token-2022
+// (pump.fun mints) into a new associated account, with the compute units and rent they use.
 
 import { randomBytes } from 'node:crypto';
 import type { WalletTransfer, WithdrawRequest } from '@trenchscope/shared';
-import { createAssociatedTokenAccountIdempotentInstruction, createTransferCheckedInstruction, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import {
+  ExtensionType,
+  TOKEN_2022_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createTransferCheckedInstruction,
+  getAccountLen,
+  getAccountTypeOfMintType,
+  getAssociatedTokenAddressSync,
+  getExtensionTypes,
+  unpackMint,
+} from '@solana/spl-token';
 import { PublicKey, SystemProgram, type Connection, type TransactionInstruction, type VersionedTransaction } from '@solana/web3.js';
 import { HttpError, type AppContext, type EmbeddedWalletRef, type SignerApi } from '../../context';
-import {
-  RENT_EXEMPT_MIN_LAMPORTS,
-  SIGNATURE_FEE_LAMPORTS,
-  TOKEN_ACCOUNT_RENT_LAMPORTS,
-  fromBaseUnits,
-  lamportsToSol,
-  solToLamports,
-  toBaseUnits,
-} from '../execution/amounts';
+import { SIGNATURE_FEE_LAMPORTS, fromBaseUnits, lamportsToSol, solToLamports, toBaseUnits } from '../execution/amounts';
 import { walletDelta, type TxLike } from '../execution/fills';
 import { lanesFor } from '../execution/lanes';
 import { confirmSignature, sendSigned, SendRefusedError, type ConfirmOptions, type SendDeps } from '../execution/send';
 import { assertSignedAsBuilt, compileV0, computeBudgetInstructions, signatureOf } from '../execution/tx';
-import { readTokenBalance } from './balances';
+import { readTokenBalance, type TokenAccountPart } from './balances';
+import { MAX_TX_VERSION } from './deposits';
+import { rentExemptLamports } from './rent';
 
 /** SOL kept back for network fees and rent (DepositInfo.feeReserve): never withdrawable, never spent by "max" buys. */
 export const FEE_RESERVE_SOL = 0.003;
 export const FEE_RESERVE_LAMPORTS = solToLamports(FEE_RESERVE_SOL);
 /** A withdrawal bids a small fixed priority fee: it is not racing anyone. */
 const WITHDRAW_PRIORITY_LAMPORTS = 10_000n;
+/** Simulated on mainnet: 450 units (two compute-budget instructions and the transfer). */
 const SOL_TRANSFER_COMPUTE_UNITS = 1_000;
+/** Simulated on mainnet: 14k-22k units (SPL Token and Token-2022), the destination account's creation included. */
 const SPL_TRANSFER_COMPUTE_UNITS = 60_000;
+/** An SPL Token account's size; Token-2022 accounts add the mint's account extensions. */
+const SPL_TOKEN_ACCOUNT_BYTES = 165;
 /** Per-account limits: 3 a minute, 20 an hour. */
 const RATE_LIMITS = [
   { windowMs: 60_000, max: 3 },
@@ -57,6 +71,131 @@ const defaultDeps = (): WithdrawalDeps => ({
   fetch: (...args) => fetch(...args),
   confirm: { pollMs: 500, timeoutMs: 60_000, rebroadcastMs: 2000 },
 });
+
+/** A withdrawal the chain state does not allow (audited and answered 400 with `code`). */
+export class WithdrawalRefused extends Error {
+  constructor(
+    message: string,
+    readonly code: 'insufficient_balance' | 'invalid_input',
+  ) {
+    super(message);
+  }
+}
+
+export interface WithdrawalInput {
+  owner: PublicKey;
+  to: PublicKey;
+  /** null = SOL. */
+  mint: PublicKey | null;
+  /** Display amount (SOL or whole tokens), rounded down to base units. */
+  amount: number;
+  /** Lamports already committed to the account's unconfirmed sends. */
+  committed: bigint;
+  /** Token symbol for messages. */
+  symbol?: string;
+}
+
+export interface WithdrawalPlan {
+  instructions: TransactionInstruction[];
+  amountRaw: bigint;
+  decimals: number;
+  /** Signature fee plus priority fee (lamports). */
+  networkFeeLamports: bigint;
+  /** Rent of the destination token account this transfer creates (0 when it exists, and for SOL). */
+  rentLamports: bigint;
+  /** Lamports held against the account's balance until the transfer settles. */
+  commitLamports: bigint;
+  /** SPL only: the accounts the transfer moves between. */
+  token: { program: PublicKey; source: PublicKey; destination: PublicKey; destinationExists: boolean; destinationBytes: number } | null;
+}
+
+const maxBig = (a: bigint, b: bigint) => (a > b ? a : b);
+
+/**
+ * Check a withdrawal against the chain and build its instructions (no signing, no sending).
+ * Throws WithdrawalRefused for what the user can fix; RPC failures propagate.
+ */
+export async function planWithdrawal(connection: Connection, input: WithdrawalInput): Promise<WithdrawalPlan> {
+  const { owner, to, mint, amount } = input;
+  const balance = BigInt(await connection.getBalance(owner, 'confirmed'));
+  const spendable = balance - input.committed;
+  const networkFeeLamports = SIGNATURE_FEE_LAMPORTS + WITHDRAW_PRIORITY_LAMPORTS;
+  const insufficient = (what: string) => new WithdrawalRefused(`insufficient balance: ${what}`, 'insufficient_balance');
+  const invalid = (what: string) => new WithdrawalRefused(what, 'invalid_input');
+
+  if (!mint) {
+    const amountRaw = toBaseUnits(amount, 9);
+    if (amountRaw <= 0n) throw invalid('amount: too small');
+    if (amountRaw > spendable - FEE_RESERVE_LAMPORTS) {
+      throw insufficient(`at most ${lamportsToSol(maxBig(0n, spendable - FEE_RESERVE_LAMPORTS))} SOL can be withdrawn (${FEE_RESERVE_SOL} SOL stays for fees)`);
+    }
+    // SOL sent to an address that holds nothing creates it, and it must start rent-exempt or the
+    // transaction fails (InsufficientFundsForRent, as simulated on mainnet).
+    if ((await connection.getBalance(to, 'confirmed')) === 0) {
+      const min = await rentExemptLamports(connection, 0);
+      if (amountRaw < min) throw invalid(`amount: an empty address must receive at least ${lamportsToSol(min)} SOL`);
+    }
+    return {
+      instructions: [...computeBudgetInstructions(SOL_TRANSFER_COMPUTE_UNITS, WITHDRAW_PRIORITY_LAMPORTS), SystemProgram.transfer({ fromPubkey: owner, toPubkey: to, lamports: amountRaw })],
+      amountRaw,
+      decimals: 9,
+      networkFeeLamports,
+      rentLamports: 0n,
+      commitLamports: amountRaw + networkFeeLamports,
+      token: null,
+    };
+  }
+
+  const held = await readTokenBalance(connection, owner, mint);
+  if (!held || held.raw <= 0n) throw insufficient('no balance of this token');
+  const symbol = input.symbol ?? 'tokens';
+  const { decimals } = held;
+  const amountRaw = toBaseUnits(amount, decimals);
+  if (amountRaw <= 0n) throw invalid('amount: too small');
+  if (amountRaw > held.raw) throw insufficient(`the wallet holds ${fromBaseUnits(held.raw, decimals)} ${symbol}`);
+  const program = new PublicKey(held.program);
+  // From the wallet's associated account, else its largest account of the mint.
+  const ata = getAssociatedTokenAddressSync(mint, owner, false, program).toBase58();
+  const source: TokenAccountPart = held.parts.find((p) => p.address === ata) ?? [...held.parts].sort((a, b) => (b.raw > a.raw ? 1 : b.raw < a.raw ? -1 : 0))[0];
+  if (source.frozen) throw invalid("this token is frozen in your wallet by the token's freeze authority");
+  if (amountRaw > source.raw) throw insufficient(`at most ${fromBaseUnits(source.raw, decimals)} ${symbol} can be sent at once (the rest sits in another token account)`);
+
+  // Token-2022: the destination account's size follows the mint's extensions, and some mints
+  // cannot be moved by a plain transferChecked.
+  let destinationBytes = SPL_TOKEN_ACCOUNT_BYTES;
+  if (program.equals(TOKEN_2022_PROGRAM_ID)) {
+    const info = await connection.getAccountInfo(mint, 'confirmed');
+    if (!info) throw new Error('token mint could not be read');
+    const types = getExtensionTypes(unpackMint(mint, info, program).tlvData);
+    if (types.includes(ExtensionType.NonTransferable)) throw invalid('this token cannot be transferred');
+    if (types.includes(ExtensionType.TransferHook)) throw invalid('withdrawals of tokens with a transfer hook are not supported');
+    // The account extensions the mint's extensions require, plus ImmutableOwner, which the
+    // associated token account program always adds (pump.fun mints: 170 bytes, as on mainnet).
+    const required = types.map(getAccountTypeOfMintType).filter((t) => t !== ExtensionType.Uninitialized);
+    destinationBytes = getAccountLen([...new Set([...required, ExtensionType.ImmutableOwner])]);
+  }
+  const destination = getAssociatedTokenAddressSync(mint, to, false, program);
+  const destinationExists = !!(await connection.getAccountInfo(destination, 'confirmed'));
+  const rentLamports = destinationExists ? 0n : await rentExemptLamports(connection, destinationBytes);
+  // The wallet pays the fee and any new account's rent, and must stay rent-exempt itself.
+  const ownerMinimum = await rentExemptLamports(connection, 0);
+  if (networkFeeLamports + rentLamports > spendable - ownerMinimum) {
+    throw insufficient(`${lamportsToSol(networkFeeLamports + rentLamports + ownerMinimum)} SOL is needed for the network fee${rentLamports ? ' and the receiving token account' : ''}`);
+  }
+  return {
+    instructions: [
+      ...computeBudgetInstructions(SPL_TRANSFER_COMPUTE_UNITS, WITHDRAW_PRIORITY_LAMPORTS),
+      createAssociatedTokenAccountIdempotentInstruction(owner, destination, to, mint, program),
+      createTransferCheckedInstruction(new PublicKey(source.address), mint, destination, owner, amountRaw, decimals, [], program),
+    ],
+    amountRaw,
+    decimals,
+    networkFeeLamports,
+    rentLamports,
+    commitLamports: networkFeeLamports + rentLamports,
+    token: { program, source: new PublicKey(source.address), destination, destinationExists, destinationBytes },
+  };
+}
 
 export class Withdrawals {
   deps: WithdrawalDeps;
@@ -171,49 +310,15 @@ export class Withdrawals {
     const { connection, signer, ref, to, mint } = w;
     const owner = new PublicKey(ref.address);
     const lanes = lanesFor(ctx.live!);
-    const balance = BigInt(await connection.getBalance(owner, 'confirmed'));
-    const spendable = balance - lanes.committed(accountId);
-    const networkFee = SIGNATURE_FEE_LAMPORTS + WITHDRAW_PRIORITY_LAMPORTS;
-    const insufficient = (what: string) => this.reject(accountId, ip, req, 400, `insufficient balance: ${what}`, 'insufficient_balance');
-
-    let instructions: TransactionInstruction[];
-    let commitLamports: bigint;
-    let amountRaw: bigint;
-    let decimals: number;
-    let symbol: string;
-    if (!mint) {
-      decimals = 9;
-      symbol = 'SOL';
-      amountRaw = toBaseUnits(req.amount, 9);
-      if (amountRaw <= 0n) throw this.reject(accountId, ip, req, 400, 'amount: too small', 'invalid_input');
-      if (amountRaw > spendable - FEE_RESERVE_LAMPORTS) {
-        throw insufficient(`at most ${lamportsToSol(maxBig(0n, spendable - FEE_RESERVE_LAMPORTS))} SOL can be withdrawn (${FEE_RESERVE_SOL} SOL stays for fees)`);
-      }
-      instructions = [...computeBudgetInstructions(SOL_TRANSFER_COMPUTE_UNITS, WITHDRAW_PRIORITY_LAMPORTS), SystemProgram.transfer({ fromPubkey: owner, toPubkey: to, lamports: amountRaw })];
-      commitLamports = amountRaw + networkFee;
-    } else {
-      const held = await readTokenBalance(connection, owner, mint);
-      if (!held || held.raw <= 0n) throw insufficient('no balance of this token');
-      decimals = held.decimals;
-      symbol = ctx.world.getToken(mint.toBase58())?.symbol ?? 'tokens';
-      amountRaw = toBaseUnits(req.amount, decimals);
-      if (amountRaw <= 0n) throw this.reject(accountId, ip, req, 400, 'amount: too small', 'invalid_input');
-      if (amountRaw > held.raw) throw insufficient(`the wallet holds ${fromBaseUnits(held.raw, decimals)} ${symbol}`);
-      const program = new PublicKey(held.program);
-      const source = getAssociatedTokenAddressSync(mint, owner, false, program);
-      const dest = getAssociatedTokenAddressSync(mint, to, false, program);
-      const destExists = !!(await connection.getAccountInfo(dest, 'confirmed'));
-      const rent = destExists ? 0n : TOKEN_ACCOUNT_RENT_LAMPORTS;
-      if (networkFee + rent > spendable - RENT_EXEMPT_MIN_LAMPORTS) {
-        throw insufficient(`${lamportsToSol(networkFee + rent + RENT_EXEMPT_MIN_LAMPORTS)} SOL is needed for the network fee${rent ? ' and the receiving token account' : ''}`);
-      }
-      instructions = [
-        ...computeBudgetInstructions(SPL_TRANSFER_COMPUTE_UNITS, WITHDRAW_PRIORITY_LAMPORTS),
-        createAssociatedTokenAccountIdempotentInstruction(owner, dest, to, mint, program),
-        createTransferCheckedInstruction(source, mint, dest, owner, amountRaw, decimals, [], program),
-      ];
-      commitLamports = networkFee + rent;
+    const symbol = mint ? (ctx.world.getToken(mint.toBase58())?.symbol ?? 'tokens') : 'SOL';
+    let plan: WithdrawalPlan;
+    try {
+      plan = await planWithdrawal(connection, { owner, to, mint, amount: req.amount, committed: lanes.committed(accountId), symbol });
+    } catch (err) {
+      if (err instanceof WithdrawalRefused) throw this.reject(accountId, ip, req, 400, err.message, err.code);
+      throw err;
     }
+    const { instructions, commitLamports, amountRaw, decimals } = plan;
 
     const transfer: WalletTransfer = {
       id: `wd_${randomBytes(8).toString('hex')}`,
@@ -318,7 +423,7 @@ export class Withdrawals {
         }
         // In the background: leave it 'sent'; the next restart resumes it.
       } else {
-        const tx = (await deps.connection.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' }).catch(() => null)) as TxLike | null;
+        const tx = (await deps.connection.getTransaction(sig, { maxSupportedTransactionVersion: MAX_TX_VERSION, commitment: 'confirmed' }).catch(() => null)) as TxLike | null;
         const fee = tx?.meta ? lamportsToSol(BigInt(tx.meta.fee)) : 0;
         transfer.networkFee = fee;
         if (result.err) {
@@ -386,4 +491,3 @@ export class Withdrawals {
   }
 }
 
-const maxBig = (a: bigint, b: bigint) => (a > b ? a : b);
