@@ -24,6 +24,8 @@ def ai(n):
 
 
 GATE = f"{APP}/trailer-gate.mp4"
+# The audit panel is static before the dialog dims the page, so shot 8 uses a real frame at t=0.3 s.
+GATE_STILL = f"{APP}/trailer-gate-t0.3.png"
 gate_blur_dialog = [[1790, 286, 116, 48], [2040, 922, 220, 48]]
 gate_blur_toast = [[3300, 128, 180, 44], [3200, 168, 700, 64], [3560, 600, 220, 90]]
 
@@ -35,11 +37,11 @@ segments = [
     ai(5),                                                                                     # 9.0  bundler
     ai(6),                                                                                     # 11.4 insider
     ai(7),                                                                                     # 13.2 dev
-    {"src": GATE, "start": 0.05, "end": 2.25, "crop": [2700, 900, 1280, 720]},                 # 15.6 receipts: audit
-    {"src": GATE, "start": 2.25, "end": 3.05, "crop": [2700, 1480, 1280, 720]},                # 17.8 receipts: holder chips
+    {"src": GATE_STILL, "still": True, "dur": 2.2, "crop": [2880, 990, 1120, 630], "zoom": [1.0, 1.04]},                 # 15.6 receipts: audit
+    {"src": GATE_STILL, "still": True, "dur": 0.8, "crop": [2700, 1480, 1280, 720], "zoom": [1.0, 1.02]},                # 17.8 receipts: holder chips
     {"src": f"{OV}/s9-card.png", "still": True, "dur": 1.2},                                   # 18.6 card
     {"src": GATE, "start": 1.1, "end": 1.6, "crop": [2600, 100, 1240, 698], "blur": [[3560, 548, 220, 80]]},                   # 19.8 quote preview
-    {"src": GATE, "start": 3.75, "end": 6.05, "crop": [900, 200, 1600, 900], "blur": gate_blur_dialog},  # 20.3 dialog, tick, click
+    {"src": GATE, "start": 3.75, "end": 6.05, "crop": [840, 260, 1920, 1080], "blur": gate_blur_dialog},  # 20.3 dialog, tick, click
     {"src": GATE, "start": 6.35, "end": 7.75, "crop": [2600, 100, 1240, 698], "blur": gate_blur_toast},   # 22.6 fill toast
     ai(11),                                                                                    # 24.0 the rug
     {"src": f"{APP}/{rug_clip}.mp4", "start": 0.2, "end": 3.2, "crop": [0, 330, 2400, 1350], "zoom": [1.0, 1.05]},  # 25.8 rug in the sim
@@ -72,7 +74,7 @@ overlays += [
     o("s5-card", 9.15, 11.3), o("s5-sub", 9.4, 11.3),
     o("s6-card", 11.55, 13.1), o("s6-sub", 11.8, 13.1),
     o("s7-card", 13.35, 15.5), o("s7-sub", 13.6, 15.5),
-    o("simbug", 15.6, 18.6, 0.01), o("s8-cap", 15.8, 18.5),
+    o("simbug-l", 15.6, 18.6, 0.01), o("s8-cap", 15.8, 18.5),
     o("simbug", 19.8, 24.0, 0.01), o("s10-card", 20.0, 23.9), o("s10-sub", 20.3, 23.9),
     o("s11-cap", 24.2, 25.7),
     o("simbug", 25.8, 28.8, 0.01), o("s12-red", 26.2, 27.0, 0.05), o("s12-cap", 27.1, 28.7),

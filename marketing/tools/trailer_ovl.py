@@ -37,6 +37,11 @@ def letterbox():
                 f'<div style="position:absolute;left:0;right:0;bottom:0;height:{BAR}px;background:#050608"></div>')
 
 
+def simbug_left():
+    return page('<div class="mono" style="position:absolute;left:48px;top:44px;background:rgba(10,12,16,.8);border:1.5px solid #FFB547;color:#FFB547;'
+                'font-weight:600;font-size:26px;letter-spacing:.08em;padding:10px 18px;border-radius:999px">SIM · PAPER TRADING</div>')
+
+
 def simbug():
     return page('<div class="mono" style="position:absolute;right:48px;top:44px;background:rgba(10,12,16,.8);border:1.5px solid #FFB547;color:#FFB547;'
                 'font-weight:600;font-size:26px;letter-spacing:.08em;padding:10px 18px;border-radius:999px">SIM · PAPER TRADING</div>')
@@ -131,11 +136,12 @@ def blur_box(x, y, w, h):
 OVERLAYS = {
     "letterbox": letterbox(),
     "simbug": simbug(),
+    "simbug-l": simbug_left(),
     "aitag": ai_tag(),
     "s1-hook": big_caption("everything out here\nwants your *bag.*", size=84),
     "s1-label": label("FIELD GUIDE TO THE TRENCHES · EP.01"),
-    "s1-reticle": reticle(810, 250, 240),
-    "s1-chip": chip_at("whale", 950, 214),
+    "s1-reticle": reticle(885, 262, 240),
+    "s1-chip": chip_at("whale", 1025, 226),
     "s2-cap": big_caption("so we built a *scope.*", size=88),
     "s3-a": lower_third("filmed on location."),
     "s3-b": lower_third("the location is a *simulator.*"),
@@ -150,7 +156,7 @@ OVERLAYS = {
     "s8-cap": lower_third("receipts. on every token."),
     "s9-card": card("so naturally, you…"),
     "s10-card": species_left(["THE MOST", "ENDANGERED", "SPECIES"], "homo fomo", "you"),
-    "s10-sub": lower_third("reads the warning. *buys anyway.*"),
+    "s10-sub": left_caption("reads the warning.\n*buys anyway.*", 560, size=54),
     "s11-cap": big_caption("nature is not kind to late buyers.", size=72),
     "s12-red": red_word("DEV SELL."),
     "s12-cap": lower_third("rug: real-feeling. money: *fake.*"),
