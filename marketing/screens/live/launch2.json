@@ -1,0 +1,117 @@
+{
+ "audit": {
+  "token": "PICKLE",
+  "address": "qDH8Jay7fvpoTihnTV8wBnke7V8GKb2SbHHJYdUhGpit",
+  "panel": [
+   1564,
+   472,
+   340,
+   308
+  ],
+  "table": [
+   16,
+   534,
+   1540,
+   641
+  ],
+  "fundedBy": [
+   1321,
+   614,
+   140,
+   32
+  ]
+ },
+ "risk": {
+  "token": "WILHIP",
+  "address": "YMNHWeaTCvJ4qNHYV3cfLaKuh3ak82MEMDTdSHLWpit",
+  "dialog": [
+   768,
+   130,
+   384,
+   477
+  ],
+  "audit": [
+   1564,
+   472,
+   340,
+   308
+  ],
+  "reasons": [
+   785,
+   211,
+   350,
+   148
+  ]
+ },
+ "exits": {
+  "token": "COSSTA",
+  "address": "SNvw5AarE61iabwtDXoNsiBxXonBxBx7RYUsZ3qqpit",
+  "orders": [
+   16,
+   757,
+   1540,
+   279
+  ],
+  "chart": [
+   16,
+   242,
+   1540,
+   507
+  ],
+  "devRow": [
+   17,
+   871,
+   1538,
+   33
+  ]
+ },
+ "bill": {
+  "token": "BRICK",
+  "address": "KvojdGfv8XhGn8prJtvn5Czmwq1oNM2v618NsVdMopit",
+  "liquidityUsd": 3170.005220022305,
+  "aside": [
+   1564,
+   64,
+   340,
+   976
+  ],
+  "impact": [
+   1583,
+   321,
+   302,
+   18
+  ],
+  "fees": [
+   1583,
+   363,
+   302,
+   16
+  ],
+  "route": [
+   1583,
+   383,
+   302,
+   18
+  ],
+  "receive": [
+   1583,
+   281,
+   302,
+   16
+  ],
+  "impactText": "Price impact\n16.7%"
+ },
+ "surv": {
+  "target": "tCNLGgS9zy1om9JK5eZfJmH3XvDbCrDfP5EskG5oPo7"
+ },
+ "strip": {
+  "token": "BENCH",
+  "address": "DT9KEndHWXZxWVf6jHrbLBK5N3PBBm8KWSLP4AHmvpit",
+  "panel": [
+   1564,
+   788,
+   340,
+   236
+  ]
+ }
+}
