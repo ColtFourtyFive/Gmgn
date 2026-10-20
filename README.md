@@ -16,9 +16,9 @@ in the browser.
 
 | Area | What you get |
 |---|---|
-| **Trenches** | Three live columns (New · Almost bonded · Migrated) per chain, compact token cards with curve progress, risk chips (top 10, dev, insiders, snipers, bundlers), smart/KOL counts, badges, hover previews, one-click buy, per-column filters and presets, pause-on-hover, keyboard trading |
+| **Trenches** | Three live columns (New · Near graduation · Migrated) per chain, compact token cards with curve progress, risk chips (top 10, dev, insiders, snipers, bundlers), smart/KOL counts, badges, hover previews, one-click buy, per-column filters and presets, pause-on-hover, keyboard trading |
 | **Trending / New Pairs / Narratives** | 1m–24h windows, server-side sorts and 30+ filters, heat-ranked narratives |
-| **Token page** | Live candles (1s–1d, price/market-cap), wallet-class trade markers, buy/sell panel with P1/P2/P3 presets, auto slippage, anti-MEV, quote preview, limit orders, exit strategies (TP/SL ladders, trailing, dev-sell, migration-sell), risk gate; audit panel with rug ratio, holder structure, dev history; live activity, holders, top traders, position, orders |
+| **Token page** | Live candles (1s–1d, price/market-cap), wallet-class trade markers, buy/sell panel with Slot 1/2/3 presets, auto slippage, anti-MEV, quote preview, limit orders, exit strategies (TP/SL ladders, trailing, dev-sell, migration-sell), risk gate; audit panel with rug ratio, holder structure, dev history; live activity, holders, top traders, position, orders |
 | **Wallets** | Wallet profiles with 1D/7D/30D/All PnL, win rate, PnL distribution, style title, speed, badges, copy score; leaderboards for smart money, KOLs, snipers, whales |
 | **Monitor & signals** | Live smart-money / KOL / followed-wallet feeds, smart-money convergence, 13 signal types (smart buys, KOL calls, migrations, dev sells, ATHs, price spikes, ...) |
 | **Automation** | Copy trading (fixed/ratio, filters, mirror sells, exit strategies), sniping (new launches, migrations, dev launches), price / market-cap / wallet / keyword alerts |

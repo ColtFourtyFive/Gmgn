@@ -56,7 +56,7 @@ export interface FilterPanelProps {
   chain: ChainId;
   value: TokenFilters;
   onChange: (next: TokenFilters) => void;
-  /** Metric ranges to leave out (e.g. bonding progress outside the Almost column). */
+  /** Metric ranges to leave out (e.g. bonding progress outside the Near graduation column). */
   hide?: RangeKey[];
   hideFlags?: FlagKey[];
   /** Stats window of windowed metrics (volume, swaps, change), e.g. "24h". */

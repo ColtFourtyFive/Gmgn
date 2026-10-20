@@ -18,7 +18,7 @@ export interface TrenchSort {
 
 export const COLUMN_META: Record<Column, { title: string; short: string; icon: typeof Sparkles; empty: string; defaultSort: TrenchSort }> = {
   new: { title: 'New', short: 'New', icon: Sparkles, empty: 'Waiting for new launches…', defaultSort: { key: 'age', dir: 'desc' } },
-  almost: { title: 'Almost bonded', short: 'Almost', icon: Rocket, empty: 'No token is close to bonding right now.', defaultSort: { key: 'progress', dir: 'desc' } },
+  almost: { title: 'Near graduation', short: 'Near grad.', icon: Rocket, empty: 'No token is close to bonding right now.', defaultSort: { key: 'progress', dir: 'desc' } },
   migrated: { title: 'Migrated', short: 'Migrated', icon: Waypoints, empty: 'No migrations yet.', defaultSort: { key: 'age', dir: 'desc' } },
 };
 

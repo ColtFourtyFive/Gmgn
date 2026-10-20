@@ -5,7 +5,7 @@ import { formatPercent, type ChainId, type PresetId } from '@trenchscope/shared'
 import { CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 import { SegmentedControl } from '@/components/ui';
-import { useTradeSettings } from '@/hooks/useSettings';
+import { PRESET_LABEL, useTradeSettings } from '@/hooks/useSettings';
 
 /** Titled group inside a drawer form. */
 export function FormSection({ title, description, children, className }: { title: ReactNode; description?: ReactNode; children: ReactNode; className?: string }) {
@@ -42,7 +42,7 @@ export function Note({ tone = 'info', title, children, className }: { tone?: key
 
 const PRESETS: PresetId[] = ['P1', 'P2', 'P3'];
 
-/** P1 / P2 / P3 trade-preset switcher; tooltips summarize each preset of the chain's buy presets. */
+/** Slot 1 / 2 / 3 trade-preset switcher; tooltips summarize each preset of the chain's buy presets. */
 export function PresetPicker({ chain, value, onChange, side = 'buy', className }: { chain: ChainId; value: PresetId; onChange: (p: PresetId) => void; side?: 'buy' | 'sell'; className?: string }) {
   const trade = useTradeSettings(chain);
   const presets = side === 'buy' ? trade.buyPresets : trade.sellPresets;
@@ -55,7 +55,7 @@ export function PresetPicker({ chain, value, onChange, side = 'buy', className }
       items={PRESETS.map((id) => {
         const p = presets[id];
         const slip = p.autoSlippage ? 'auto slippage' : `${formatPercent(p.slippage, { sign: false, digits: 0 })} slippage`;
-        return { value: id, label: id, title: `${id}: ${slip}${p.antiMev ? ' · anti-MEV' : ''}` };
+        return { value: id, label: PRESET_LABEL[id].short, title: `${PRESET_LABEL[id].long}: ${slip}${p.antiMev ? ' · anti-MEV' : ''}` };
       })}
     />
   );

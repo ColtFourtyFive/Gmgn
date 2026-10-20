@@ -1,5 +1,5 @@
-// Trenches: the live three-column launchpad board (New | Almost bonded |
-// Migrated) streamed from `trenches:<chain>`, with per-column filters (saved
+// Trenches: the live three-column launchpad board (New | Near graduation
+// | Migrated) streamed from `trenches:<chain>`, with per-column filters (saved
 // per chain + column), client-side sorting, pause-on-hover and hotkeys.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -183,7 +183,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
       <PageHeader
         title="Trenches"
         icon={<Flame size={16} />}
-        subtitle={<span className="hidden sm:inline">Live launchpad tokens on {CHAINS[chain].name} · new → almost bonded → migrated</span>}
+        subtitle={<span className="hidden sm:inline">Live launchpad tokens on {CHAINS[chain].name} · new → near graduation → migrated</span>}
         className="!mb-2"
         actions={
           <>

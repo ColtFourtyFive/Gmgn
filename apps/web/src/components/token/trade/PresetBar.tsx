@@ -1,4 +1,4 @@
-// P1/P2/P3 execution presets for the active side, with an inline editor
+// Slot 1/2/3 execution presets (ids P1/P2/P3) for the active side, with an inline editor
 // (slippage + auto, priority fee, tip, anti-MEV) saved to account settings.
 
 import { useEffect, useState } from 'react';
@@ -9,12 +9,13 @@ import { Native } from '@/components/common';
 import { Button, Field, IconButton, NumberInput, Popover, SegmentedControl, Toggle, Tooltip } from '@/components/ui';
 import type { DeepPartial } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { useSession } from '@/store/session';
 import { toast } from '@/store/toasts';
 import type { TradeSide } from '../store';
 
 const PRESET_IDS: PresetId[] = ['P1', 'P2', 'P3'];
-const PRESET_ITEMS = PRESET_IDS.map((id) => ({ value: id, label: id }));
+const PRESET_ITEMS = PRESET_IDS.map((id) => ({ value: id, label: PRESET_LABEL[id].short, title: PRESET_LABEL[id].long }));
 const SLIPPAGE_PRESETS = [10, 20, 30, 50];
 
 export function presetsKey(side: TradeSide): 'buyPresets' | 'sellPresets' {
@@ -62,9 +63,9 @@ export function PresetBar({ chain, side, presetId, onPresetChange, preset }: Pre
           setOpen(next);
         }}
         placement="bottom-end"
-        aria-label={`Edit ${presetId}`}
+        aria-label={`Edit ${PRESET_LABEL[presetId].long}`}
         className="w-72 p-3"
-        trigger={<IconButton size="xs" label={`Edit ${side} preset ${presetId}`} icon={<Settings2 size={13} />} />}
+        trigger={<IconButton size="xs" label={`Edit ${side} preset ${PRESET_LABEL[presetId].long}`} icon={<Settings2 size={13} />} />}
       >
         {(close) => <PresetEditor chain={chain} side={side} id={presetId} preset={preset} onDone={close} />}
       </Popover>
@@ -85,7 +86,7 @@ function PresetEditor({ chain, side, id, preset, onDone }: { chain: ChainId; sid
     setSaving(true);
     try {
       await savePreset(chain, side, id, { slippage: draft.slippage, autoSlippage: draft.autoSlippage, priorityFee: draft.priorityFee, tip: draft.tip, antiMev: draft.antiMev });
-      toast.success(`${side === 'buy' ? 'Buy' : 'Sell'} preset ${id} saved`);
+      toast.success(`${side === 'buy' ? 'Buy' : 'Sell'} preset ${PRESET_LABEL[id].long} saved`);
       onDone();
     } catch (err) {
       toast.error('Couldn’t save preset', errorMessage(err));
@@ -98,7 +99,7 @@ function PresetEditor({ chain, side, id, preset, onDone }: { chain: ChainId; sid
     <div className="flex flex-col gap-3">
       <div>
         <p className="text-sm font-semibold text-fg">
-          {side === 'buy' ? 'Buy' : 'Sell'} preset {id}
+          {side === 'buy' ? 'Buy' : 'Sell'} preset {PRESET_LABEL[id].long}
         </p>
         <p className="text-xs text-muted">Applies to market, limit and auto orders on {CHAINS[chain].name}.</p>
       </div>

@@ -5,10 +5,9 @@ import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon, Native } from '@/components/common';
 import { Badge, Field, NumberInput, Panel, SegmentedControl, Toggle } from '@/components/ui';
 import { useMeta } from '@/hooks';
+import { PRESET_LABEL } from '@/hooks/useSettings';
 import { NumberList } from './NumberList';
 import { PRESET_IDS, path, type SettingsErrors } from './model';
-
-const PRESET_NAMES: Record<PresetId, string> = { P1: 'Preset 1', P2: 'Preset 2', P3: 'Preset 3' };
 
 /** Label left, compact control right, error underneath. */
 function InlineRow({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
@@ -84,7 +83,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
       >
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted">Active {side} preset</span>
-          <SegmentedControl size="sm" value={active} onChange={setActive} aria-label={`Active ${side} preset`} items={PRESET_IDS.map((id) => ({ value: id, label: id }))} />
+          <SegmentedControl size="sm" value={active} onChange={setActive} aria-label={`Active ${side} preset`} items={PRESET_IDS.map((id) => ({ value: id, label: PRESET_LABEL[id].short, title: PRESET_LABEL[id].long }))} />
           {suggested && (
             <span className="text-xs text-faint sm:ml-auto">
               Network priority fee now: <Native value={suggested.low} /> / <Native value={suggested.medium} /> / <Native value={suggested.high} chain={chain} />
@@ -98,7 +97,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
             return (
               <fieldset key={id} className={clsx('flex min-w-0 flex-col gap-2.5 rounded border bg-panel-2 p-3', id === active ? 'border-accent/50' : 'border-line')}>
                 <legend className="sr-only">
-                  {side} {PRESET_NAMES[id]}
+                  {side} {PRESET_LABEL[id].long}
                 </legend>
                 <div className="flex items-center gap-2">
                   <span className="num text-md font-semibold text-fg">{id}</span>

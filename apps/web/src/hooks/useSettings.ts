@@ -17,6 +17,13 @@ export const DEFAULT_DISPLAY: DisplaySettings = {
   riskThresholds: { top10: 0.3, dev: 0.3, insiders: 0.05, bundlers: 0.1, snipers: 0.1 },
 };
 
+/** Display names for the execution preset slots; the ids stay P1..P3 in the API contract. */
+export const PRESET_LABEL: Record<PresetId, { short: string; long: string }> = {
+  P1: { short: 'S1', long: 'Slot 1' },
+  P2: { short: 'S2', long: 'Slot 2' },
+  P3: { short: 'S3', long: 'Slot 3' },
+};
+
 function preset(chain: ChainId, id: PresetId, slippage: number, antiMev: boolean): TradePreset {
   const fee = CHAINS[chain].baseNetworkFee;
   return { id, slippage, autoSlippage: id === 'P1', priorityFee: fee * 2, tip: antiMev ? fee : 0, antiMev };
