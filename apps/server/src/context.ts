@@ -46,6 +46,10 @@ export interface AppConfig {
   snapshotEveryMs: number;
   /** Serve the built web app from this directory if it exists. */
   webDist: string | null;
+  /** Trust X-Forwarded-For (deployments behind a reverse proxy). */
+  trustProxy: boolean;
+  /** Max guest/register calls per client IP per 10 minutes (0 disables). */
+  accountCreationsPerIpPer10Min: number;
 }
 
 /** Viewer context for viewer-relative fields (following / you tags, remarks). */
@@ -86,14 +90,14 @@ export interface AnalyticsApi {
   devInfo(t: TokenState): DevInfo;
   /** Viewer-aware copy of a trade's tags (adds following / you). */
   viewTrade(trade: Trade, viewer: Viewer): Trade;
-  trades(t: TokenState, opts: { filter?: string; wallet?: string; limit?: number; before?: number }, viewer: Viewer): Trade[];
+  trades(t: TokenState, opts: { filter?: string; wallet?: string; minUsd?: number; limit?: number; before?: number }, viewer: Viewer): Trade[];
   holders(t: TokenState, opts: { tag?: string; limit?: number }, viewer: Viewer): Position[];
-  topTraders(t: TokenState, opts: { limit?: number }, viewer: Viewer): Position[];
+  topTraders(t: TokenState, opts: { tag?: string; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): Position[];
   trenches(q: TrenchesQuery): TrenchesSnapshot;
   trending(q: TrendingQuery): TrendingSnapshot;
   newPairs(chain: ChainId, filters: TokenFilters | undefined, limit?: number): TokenSummary[];
   walletProfile(w: WalletState, viewer: Viewer): WalletProfile;
-  walletHoldings(w: WalletState, opts: { includeClosed?: boolean; sort?: string }, viewer: Viewer): TokenPositionRow[];
+  walletHoldings(w: WalletState, opts: { includeClosed?: boolean; sort?: string; limit?: number }, viewer: Viewer): TokenPositionRow[];
   walletActivity(w: WalletState, opts: { limit?: number; before?: number; type?: string }, viewer: Viewer): FeedItem[];
   leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; limit?: number }, viewer: Viewer): LeaderboardRow[];
   feed(chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit: number, viewer: Viewer): FeedItem[];

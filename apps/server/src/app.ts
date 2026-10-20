@@ -34,6 +34,8 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     warmupMinutes: Number(process.env.WARMUP_MINUTES ?? 90),
     snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 60000),
     webDist: process.env.WEB_DIST ?? null,
+    trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true',
+    accountCreationsPerIpPer10Min: Number(process.env.ACCOUNT_CREATIONS_PER_IP ?? 30),
     ...overrides,
   };
 }
@@ -72,9 +74,13 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     if (config.warmupMinutes > 0) engine.warmup(config.warmupMinutes * 60000);
   }
 
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy });
   await app.register(cors, { origin: true });
-  await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
+  // List snapshots are large, repetitive JSON: permessage-deflate shrinks them ~10x.
+  await app.register(websocket, {
+    options: { maxPayload: 64 * 1024, perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 3 }, concurrencyLimit: 4 } },
+  });
+  installAccountCreationLimit(app, config.accountCreationsPerIpPer10Min);
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return sendError(reply, err);
@@ -152,6 +158,29 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
       await app.close();
     },
   };
+}
+
+/**
+ * Guest and register endpoints need no auth and each new account adds wallets
+ * to the world, so cap them per client IP (set TRUST_PROXY behind a proxy, or
+ * every user shares the proxy's IP).
+ */
+function installAccountCreationLimit(app: FastifyInstance, perWindow: number): void {
+  if (perWindow <= 0) return;
+  const WINDOW_MS = 10 * 60_000;
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  const limited = new Set(['/api/auth/guest', '/api/auth/register']);
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method !== 'POST' || !limited.has(req.url.split('?')[0])) return;
+    const now = Date.now();
+    if (hits.size > 10_000) for (const [ip, h] of hits) if (h.resetAt <= now) hits.delete(ip);
+    let h = hits.get(req.ip);
+    if (!h || h.resetAt <= now) hits.set(req.ip, (h = { count: 0, resetAt: now + WINDOW_MS }));
+    if (++h.count > perWindow) {
+      const retry = Math.ceil((h.resetAt - now) / 1000);
+      return reply.status(429).header('retry-after', String(retry)).send({ error: `too many new accounts from this address, try again in ${retry}s`, code: 'rate_limited' });
+    }
+  });
 }
 
 export function buildMeta(ctx: AppContext): MetaResponse {

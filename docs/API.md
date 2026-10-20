@@ -15,7 +15,7 @@ JSON-encoded strings (`?filters=%7B...%7D`).
 |---|---|---|---|
 | GET | `/api/health` | | `{ ok, now, tokens, clients, tps }` |
 | GET | `/api/meta` | | `MetaResponse` |
-| GET | `/api/search` | `q` (name, symbol, token address, wallet address, KOL label), `chain?` | `SearchResult` (max 20 tokens, 10 wallets) |
+| GET | `/api/search` | `q` (name, symbol, token address, wallet address, KOL label), `chain?` (a chain or `all`) | `SearchResult` (max 20 tokens, 10 wallets) |
 
 ## Market data (analytics module)
 
@@ -25,25 +25,29 @@ JSON-encoded strings (`?filters=%7B...%7D`).
 | GET | `/api/:chain/trending` | `window` (`StatWindow`, default `1h`), `sort?` (`TrendingSort`, default `hot`), `order?`, `filters?` JSON `TokenFilters`, `limit?` (default 100) | `TrendingSnapshot` |
 | GET | `/api/:chain/new-pairs` | `filters?`, `limit?` | `TokenSummary[]` (migrated tokens, newest pool first) |
 | GET | `/api/:chain/tokens/:address` | | `TokenDetail` |
-| GET | `/api/:chain/tokens/:address/candles` | `resolution` (`Resolution`, default `1m`), `limit?` (default 500) | `CandleResponse` |
-| GET | `/api/:chain/tokens/:address/trades` | `filter?` = `all\|buy\|sell\|dev\|smart\|kol\|sniper\|insider\|bundler\|whale\|fresh\|following\|mine`, `wallet?`, `minUsd?`, `limit?` (default 100), `before?` (ms) | `Trade[]` newest first |
-| GET | `/api/:chain/tokens/:address/holders` | `tag?` (`all` or a `WalletTag`), `limit?` (default 100) | `Position[]` (curve/pool rows first with `addrType`) |
+| GET | `/api/:chain/tokens/:address/candles` | `resolution` (`Resolution`, default `1m`), `limit?` (default 500, max 2000) | `CandleResponse` |
+| GET | `/api/:chain/tokens/:address/trades` | `filter?` = `all\|buy\|sell\|dev\|smart\|kol\|sniper\|insider\|bundler\|whale\|fresh\|following\|mine`, `wallet?`, `minUsd?`, `limit?` (default 100, max 500), `before?` (ms) | `Trade[]` newest first |
+| GET | `/api/:chain/tokens/:address/holders` | `tag?` (`all\|smart\|kol\|sniper\|bundler\|insider\|dev\|whale\|fresh\|bot\|sandwich\|top_holder\|following\|you`), `limit?` (default 100, max 500) | `Position[]` (curve/pool venue row first: `addrType` `curve` with a label in `wallet`, or `pool` with the pool address) |
 | GET | `/api/:chain/tokens/:address/top-traders` | `tag?`, `sort?` = `pnl\|realized\|unrealized\|bought\|sold`, `order?`, `limit?` | `Position[]` |
 | GET | `/api/:chain/tokens/:address/dev` | | `DevInfo` |
 | GET | `/api/:chain/wallets/:address` | | `WalletProfile` |
-| GET | `/api/:chain/wallets/:address/holdings` | `includeClosed?` (`1`), `sort?` = `value\|pnl\|recent` | `TokenPositionRow[]` |
+| GET | `/api/:chain/wallets/:address/holdings` | `includeClosed?` (`1`), `sort?` = `value\|pnl\|recent`, `limit?` (default 200, max 1000) | `TokenPositionRow[]` |
 | GET | `/api/:chain/wallets/:address/activity` | `type?` = `all\|buy\|sell`, `limit?`, `before?` | `FeedItem[]` |
 | GET | `/api/:chain/leaderboard` | `tag?` = `smart\|kol\|sniper\|whale\|all`, `period?` (`1d\|7d\|30d`), `sort?` = `pnl\|winRate\|volume\|tokens\|pnlRate`, `limit?` | `LeaderboardRow[]` |
-| GET | `/api/:chain/feed` | `kind` = `smart\|kol\|follow\|all`, `limit?` | `FeedItem[]` newest first (`follow` 🔒) |
+| GET | `/api/:chain/feed` | `kind` = `smart\|kol\|follow\|all` (default `all`), `limit?` | `FeedItem[]` newest first (`follow` 🔒) |
 | GET | `/api/:chain/signals` | `kind?` (`SignalKind`), `limit?` | `Signal[]` newest first |
 | GET | `/api/:chain/narratives` | | `Narrative[]` by heat |
+
+Limits above the documented maximum are clamped; zero or non-numeric limits return 400. EVM addresses
+are accepted in any case. Broadcast channels carry no viewer-relative tags (`you`, `following`): clients
+add them locally; REST responses include them when a token is presented.
 
 ## Accounts (accounts module)
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/api/auth/guest` | `{ referralCode? }` | `AuthResponse` (instant paper account) |
-| POST | `/api/auth/register` | `{ username, password, referralCode? }` | `AuthResponse` |
+| POST | `/api/auth/guest` | `{ referralCode? }` | `AuthResponse` (instant paper account; `account.isGuest` true) |
+| POST | `/api/auth/register` | `{ username, password, referralCode? }` | `AuthResponse` (called with a guest's token, upgrades that guest in place) |
 | POST | `/api/auth/login` | `{ username, password }` | `AuthResponse` |
 | POST | `/api/auth/logout` 🔒 | | `{ ok: true }` |
 | GET | `/api/me` 🔒 | | `Account` |
@@ -61,11 +65,15 @@ JSON-encoded strings (`?filters=%7B...%7D`).
 | POST | `/api/notifications/read` 🔒 | `{ ids? }` (all when omitted) | `{ ok: true }` |
 | GET | `/api/rewards` 🔒 | | `RewardsSummary` |
 
+Guest and register calls are limited per client IP (`ACCOUNT_CREATIONS_PER_IP` per 10 minutes, 429 with
+`retry-after`). Logins are limited to 10 attempts per account per 10 minutes. Logging out also revokes the
+session on open WebSockets (the socket receives `{ op: 'auth', ok: false }` and loses the `user` channel).
+
 ## Trading (trading module)
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/api/trade/quote` 🔒 | `QuoteRequest` | `Quote` |
+| POST | `/api/trade/quote` 🔒 | `QuoteRequest` | `Quote` (400 `quote_unavailable` when the trade cannot be priced) |
 | POST | `/api/trade/swap` 🔒 | `SwapRequest` | `SwapReceipt` (200 with `ok:false` + `error` for trade-level failures like slippage) |
 | GET | `/api/orders` 🔒 | `?status=open\|history&chain=&token=` | `Order[]` |
 | POST | `/api/orders` 🔒 | `CreateOrderRequest` | `Order` |

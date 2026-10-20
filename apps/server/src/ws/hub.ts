@@ -10,6 +10,8 @@ export interface HubClient {
   id: string;
   socket: WebSocket;
   accountId: string | null;
+  /** Session token presented with `auth`, kept so logouts can revoke the socket. */
+  token: string | null;
   subs: Map<string, Subscription>;
 }
 
@@ -63,6 +65,8 @@ export class Hub {
   private channels = new Map<string, Set<Subscription>>();
   private authResolver: AuthResolver = () => null;
   private seq = 0;
+  /** accountId -> its subscriptions to the private `user` channel. */
+  private userSubs = new Map<string, Set<Subscription>>();
 
   setAuthResolver(fn: AuthResolver): void {
     this.authResolver = fn;
@@ -79,7 +83,7 @@ export class Hub {
 
   attach(socket: WebSocket): HubClient {
     this.seq += 1;
-    const client: HubClient = { id: `c${this.seq}`, socket, accountId: null, subs: new Map() };
+    const client: HubClient = { id: `c${this.seq}`, socket, accountId: null, token: null, subs: new Map() };
     this.clients.set(client.id, client);
     socket.on('message', (raw) => {
       let msg: WsClientMessage;
@@ -109,9 +113,9 @@ export class Hub {
         this.sendTo(client, { op: 'pong', t: Date.now() });
         return;
       case 'auth': {
-        const accountId = typeof msg.token === 'string' ? this.authResolver(msg.token) : null;
-        client.accountId = accountId;
-        this.sendTo(client, { op: 'auth', ok: !!accountId, accountId: accountId ?? undefined });
+        const token = typeof msg.token === 'string' ? msg.token : null;
+        this.setAccount(client, token, token ? this.authResolver(token) : null);
+        this.sendTo(client, { op: 'auth', ok: !!client.accountId, accountId: client.accountId ?? undefined });
         return;
       }
       case 'unsub': {
@@ -151,6 +155,7 @@ export class Hub {
         client.subs.set(msg.ch, sub);
         if (!this.channels.has(msg.ch)) this.channels.set(msg.ch, new Set());
         this.channels.get(msg.ch)!.add(sub);
+        if (msg.ch === 'user' && client.accountId) this.indexUserSub(client.accountId, sub);
         this.sendTo(client, { op: 'ack', ch: msg.ch });
         return;
       }
@@ -165,8 +170,51 @@ export class Hub {
       set.delete(sub);
       if (set.size === 0) this.channels.delete(sub.ch);
     }
+    if (sub.ch === 'user' && sub.client.accountId) this.unindexUserSub(sub.client.accountId, sub);
     const prefix = sub.ch.split(':')[0];
     this.providers.get(prefix)?.onUnsubscribe?.(sub);
+  }
+
+  private indexUserSub(accountId: string, sub: Subscription): void {
+    let set = this.userSubs.get(accountId);
+    if (!set) this.userSubs.set(accountId, (set = new Set()));
+    set.add(sub);
+  }
+
+  private unindexUserSub(accountId: string, sub: Subscription): void {
+    const set = this.userSubs.get(accountId);
+    if (!set) return;
+    set.delete(sub);
+    if (set.size === 0) this.userSubs.delete(accountId);
+  }
+
+  /** Switch a client's identity; auth-only subscriptions are dropped when it changes. */
+  private setAccount(client: HubClient, token: string | null, accountId: string | null): void {
+    if (client.accountId === accountId) {
+      client.token = token;
+      return;
+    }
+    for (const [ch, sub] of client.subs) {
+      if (!this.providers.get(ch.split(':')[0])?.requiresAuth) continue;
+      client.subs.delete(ch);
+      this.removeSub(sub);
+    }
+    client.accountId = accountId;
+    client.token = accountId ? token : null;
+  }
+
+  /**
+   * Re-resolve every authenticated socket's token (after logout or session
+   * eviction) so revoked sessions stop receiving private data immediately.
+   */
+  revalidateAuth(): void {
+    for (const client of this.clients.values()) {
+      if (!client.token) continue;
+      const accountId = this.authResolver(client.token);
+      if (accountId === client.accountId) continue;
+      this.setAccount(client, client.token, accountId);
+      if (!accountId) this.sendTo(client, { op: 'auth', ok: false });
+    }
   }
 
   sendTo(client: HubClient, msg: WsServerMessage): void {
@@ -194,11 +242,10 @@ export class Hub {
 
   /** Publish to every authenticated client of an account on the `user` channel. */
   publishUser(accountId: string, type: string, data: unknown): void {
-    const set = this.channels.get('user');
+    const set = this.userSubs.get(accountId);
     if (!set) return;
     const payload = JSON.stringify({ op: 'data', ch: 'user', type, data } satisfies WsServerMessage);
     for (const sub of set) {
-      if (sub.client.accountId !== accountId) continue;
       const s = sub.client.socket;
       if (s.readyState === 1 && s.bufferedAmount <= MAX_BUFFERED) s.send(payload);
     }

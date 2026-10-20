@@ -73,7 +73,7 @@ export class Portfolio {
     for (const c of chains) {
       const wallet = accounts.walletFor(accountId, c);
       nativeBalanceUsd += wallet.native * world.nativeUsd(c);
-      positions.push(...analytics.walletHoldings(wallet, { includeClosed: false, sort: 'value' }, viewer));
+      positions.push(...analytics.walletHoldings(wallet, { includeClosed: false, sort: 'value', limit: 1000 }, viewer));
       // Closed positions count toward PnL and win rate too.
       const totals = ledgerTotals(world, wallet);
       holdingsValueUsd += totals.holdingsUsd;

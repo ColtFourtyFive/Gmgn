@@ -14,7 +14,7 @@ export const DEFAULT_DISPLAY: DisplaySettings = {
   confirmTrades: false,
   sounds: false,
   hotkeys: true,
-  riskThresholds: { top10: 0.3, dev: 0.1, insiders: 0.2, bundlers: 0.3, snipers: 0.2 },
+  riskThresholds: { top10: 0.3, dev: 0.3, insiders: 0.05, bundlers: 0.1, snipers: 0.1 },
 };
 
 function preset(chain: ChainId, id: PresetId, slippage: number, antiMev: boolean): TradePreset {

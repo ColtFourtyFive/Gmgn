@@ -320,12 +320,16 @@ export class Executor {
     return { receipt, aborted: null };
   }
 
-  /** Share of the output a sandwich bot extracts (0 when not attacked). */
+  /**
+   * Share of the output a sandwich bot extracts (0 when not attacked). Real
+   * bots size the front-run to stay inside the victim's slippage tolerance,
+   * so the loss is capped just below it and the trade still fills.
+   */
   private sandwichLoss(antiMev: boolean, quote: Quote): number {
     if (antiMev || quote.route !== 'pool' || quote.priceImpact <= MEV_MIN_IMPACT) return 0;
     const rng = this.ctx.world.rng;
     if (!rng.chance(Math.min(MEV_MAX_CHANCE, quote.priceImpact * 10))) return 0;
-    return quote.priceImpact * rng.float(0.3, 0.8);
+    return Math.min(quote.priceImpact * rng.float(0.3, 0.8), quote.slippage * 0.9);
   }
 
   private takeRateLimitSlot(accountId: string, now: number): void {

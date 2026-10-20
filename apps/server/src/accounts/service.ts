@@ -206,6 +206,7 @@ export class Accounts implements AccountsApi {
     this.sessions.delete(digest);
     const list = this.sessionsByAccount.get(accountId);
     list?.splice(list.indexOf(digest), 1);
+    this.ctx.hub.revalidateAuth();
   }
 
   resolveToken(token: string): string | null {
@@ -223,7 +224,10 @@ export class Accounts implements AccountsApi {
     let list = this.sessionsByAccount.get(accountId);
     if (!list) this.sessionsByAccount.set(accountId, (list = []));
     list.push(digest);
-    if (list.length > MAX_SESSIONS_PER_ACCOUNT) this.sessions.delete(list.shift()!);
+    if (list.length > MAX_SESSIONS_PER_ACCOUNT) {
+      this.sessions.delete(list.shift()!);
+      this.ctx.hub.revalidateAuth();
+    }
   }
 
   private countLoginAttempt(accountId: string): void {

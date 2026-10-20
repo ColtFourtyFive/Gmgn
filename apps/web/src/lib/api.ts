@@ -100,6 +100,10 @@ export async function request<T>(method: string, path: string, opts: { query?: Q
   if (!res.ok) {
     const err = (data ?? {}) as { error?: string; code?: string };
     if (res.status === 401) onUnauthorized?.();
+    // The API always answers with a JSON body; a bare 5xx comes from a proxy that cannot reach it.
+    if (res.status >= 500 && (!text || err.error === text)) {
+      throw new ApiError(res.status, 'Server unreachable — retrying shortly', 'unreachable');
+    }
     throw new ApiError(res.status, err.error ?? res.statusText, err.code);
   }
   return data as T;
