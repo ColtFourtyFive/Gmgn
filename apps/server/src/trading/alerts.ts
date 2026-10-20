@@ -58,6 +58,11 @@ export class Alerts {
 
   constructor(private readonly ctx: AppContext) {}
 
+  /** Tokens referenced by enabled alert rules (kept alive by market pruning). */
+  *referencedTokens(): Iterable<string> {
+    for (const r of this.records.values()) if (r.rule.enabled && r.rule.token) yield r.rule.token;
+  }
+
   install(): void {
     const { world, engine } = this.ctx;
     world.on('trade', (trade) => this.onTrade(trade));

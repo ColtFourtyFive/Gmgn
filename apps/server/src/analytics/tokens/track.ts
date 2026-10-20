@@ -287,13 +287,21 @@ export function pruneTrack(s: TokenTrack, now: number): void {
   if (drop > 0) s.flows.splice(0, drop);
 }
 
+// Shared empty collections for tombstones (~1.3KB -> ~0.45KB each; up to MAX_TRACKS of them).
+// Safe because gone tracks are read-only: trackOf() replaces a gone track before any write path
+// (recordTrade, backfill, cohorts, prune) can reach it.
+const GONE_SET: Set<string> = new Set();
+const GONE_FUNDERS: Map<string, string[]> = new Map();
+const GONE_LAST: Map<string, LastTrade> = new Map();
+const GONE_FLOWS: FlowBucket[] = [];
+
 /** Release per-wallet collections once the token is gone; identity + last values remain. */
 export function tombstone(s: TokenTrack): void {
   s.gone = true;
-  s.bundlers = new Set();
-  s.snipers = new Set();
-  s.insiders = new Set();
-  s.earlyFunders = new Map();
-  s.lastTrade = new Map();
-  s.flows = [];
+  s.bundlers = GONE_SET;
+  s.snipers = GONE_SET;
+  s.insiders = GONE_SET;
+  s.earlyFunders = GONE_FUNDERS;
+  s.lastTrade = GONE_LAST;
+  s.flows = GONE_FLOWS;
 }

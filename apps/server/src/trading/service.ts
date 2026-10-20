@@ -42,7 +42,10 @@ export class Trading implements TradingApi {
   readonly alerts: Alerts;
   readonly portfolio: Portfolio;
 
+  private readonly world: AppContext['world'];
+
   constructor(ctx: AppContext, opts: TradingOptions = {}) {
+    this.world = ctx.world;
     this.executor = new Executor(ctx, (fill) => this.onFill(fill), opts.latencyMs === undefined ? latencyFromEnv() : opts.latencyMs);
     this.orders = new OrderBook(ctx, this.executor, this.jobs);
     this.copyTrade = new CopyTrader(ctx, this.executor, this.jobs);
@@ -58,6 +61,8 @@ export class Trading implements TradingApi {
     this.sniper.install();
     this.alerts.install();
     this.portfolio.install();
+    this.world.addPinSource(() => this.orders.tokensWithOpenOrders());
+    this.world.addPinSource(() => this.alerts.referencedTokens());
   }
 
   /** Resolves once every triggered order, copy trade and snipe in flight has settled. */

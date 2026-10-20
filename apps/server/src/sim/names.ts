@@ -19,7 +19,7 @@ export interface NarrativeDef {
   mods: string[];
   /** Suffix words ("Agent", "Inu"...). */
   tails: string[];
-  /** One-line lore fragments for descriptions. */
+  /** One-line lore sentences for descriptions (lowercase start, no period). */
   lore: string[];
 }
 
@@ -75,7 +75,7 @@ export const NARRATIVES: NarrativeDef[] = [
     name: 'Frogs',
     glyph: '🐸',
     glyphs: ['🐸', '🪷', '🌿'],
-    heads: ['Ribbert', 'Croaksworth', 'Toadie', 'Lilypad', 'Hopkins', 'Frogo', 'Gribbit', 'Polliwog', 'Kermish', 'Bogsby'],
+    heads: ['Ribbert', 'Croaksworth', 'Toadie', 'Lilypad', 'Hopkins', 'Frogo', 'Gribbit', 'Polliwog', 'Puddleton', 'Bogsby'],
     mods: ['Smug', 'Based', 'Swamp', 'Comfy', 'Sad', 'Feels', 'Rare', 'Moist'],
     tails: ['Frog', 'Toad', 'Croak', 'Hop'],
     lore: [
@@ -180,7 +180,7 @@ export const NARRATIVES: NarrativeDef[] = [
     name: 'Classic Memes',
     glyph: '😂',
     glyphs: ['😂', '🗿', '🤡', '💀', '🫡'],
-    heads: ['Stonks', 'Copium', 'Wojak Jr', 'Gigachad', 'Bonk Stick', 'Ratio', 'Cope', 'Based', 'Npc', 'Sigma'],
+    heads: ['Stonks', 'Copium', 'Doomer Jr', 'Chadwick', 'Bruh Moment', 'Ratio', 'Cope', 'Based', 'Npc', 'Sigma'],
     mods: ['Ultimate', 'Peak', 'Certified', 'Classic', 'Cursed', 'Deep Fried', 'Big', 'Lil'],
     tails: ['Coin', 'Meme', 'Moment', 'Era'],
     lore: [
@@ -299,19 +299,36 @@ const CLOSERS = [
   '',
 ];
 
+/** Tickers of well-known real tokens (and a listed stock) that generated names never reuse. */
+export const RESERVED_TICKERS: ReadonlySet<string> = new Set([
+  'ACT', 'BOME', 'BONK', 'BRETT', 'COIN', 'DOGE', 'FLOKI', 'GIGA', 'GOAT', 'MEW', 'MICHI', 'MOG', 'MYRO', 'NEIRO',
+  'PENGU', 'PEPE', 'PNUT', 'PONKE', 'POPCAT', 'SAMO', 'SHIB', 'SLERF', 'TOSHI', 'TRUMP', 'TURBO', 'WIF', 'WOJAK',
+]);
+
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function symbolFrom(rng: Rng, words: string[]): string {
-  const letters = words.map((w) => w.toUpperCase().replace(/[^A-Z0-9]/g, '')).filter(Boolean);
-  const main = letters[letters.length - 1] ?? 'MEME';
+function tickerCase(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Ticker from the name's words: initials, a blend, or (mostly) the distinctive
+ * `core` word, so a generic tail ("Coin", "Club") never becomes the whole ticker.
+ */
+function symbolFrom(rng: Rng, words: string[], core: string): string {
+  const letters = words.map(tickerCase).filter(Boolean);
+  const last = letters[letters.length - 1] ?? 'MEME';
+  const main = tickerCase(core) || last;
   const roll = rng.next();
   let sym: string;
-  if (letters.length > 1 && roll < 0.3) sym = letters.map((w) => w[0]).join('') + (letters.length < 3 ? main.slice(1, 3) : '');
-  else if (letters.length > 1 && roll < 0.5) sym = (letters[0].slice(0, 3) + main.slice(0, 3)).slice(0, 6);
-  else sym = main.slice(0, rng.int(3, 6));
-  return sym.length >= 2 ? sym : main.slice(0, 4);
+  if (letters.length > 1 && roll < 0.3) sym = letters.map((w) => w[0]).join('') + (letters.length < 3 ? last.slice(1, 3) : '');
+  else if (letters.length > 1 && roll < 0.45) sym = (letters[0].slice(0, 3) + last.slice(0, 3)).slice(0, 6);
+  else sym = main.length <= 6 ? main : main.slice(0, rng.int(3, 5));
+  if (sym.length < 2) sym = main.slice(0, 4);
+  if (RESERVED_TICKERS.has(sym)) sym = [3, 4, 5, 6].map((n) => main.slice(0, n)).find((s) => !RESERVED_TICKERS.has(s)) ?? `${sym.slice(0, 5)}X`;
+  return sym;
 }
 
 function seedString(rng: Rng, len = 10): string {
@@ -325,15 +342,19 @@ export function generateTokenMeta(rng: Rng, narrative: NarrativeDef, chainName: 
   const head = rng.pick(narrative.heads);
   const pattern = rng.next();
   let words: string[];
+  let core = head;
   if (pattern < 0.3) words = [rng.pick(narrative.mods), head];
   else if (pattern < 0.55) words = [head, rng.pick(narrative.tails)];
   else if (pattern < 0.75) words = [head];
-  else if (pattern < 0.88) words = [rng.pick(narrative.mods) + head.split(' ')[0]];
-  else words = ['The', rng.pick(narrative.mods), head];
+  else if (pattern < 0.88) {
+    core = rng.pick(narrative.mods) + head.split(' ')[0];
+    words = [core];
+  } else words = ['The', rng.pick(narrative.mods), head];
   const name = words.join(' ');
-  const symbol = symbolFrom(rng, words.filter((w) => w !== 'The'));
+  const symbol = symbolFrom(rng, words.filter((w) => w !== 'The'), core);
   const closer = rng.pick(CLOSERS).replace('{chain}', chainName).replace('{head}', head.toLowerCase());
-  const description = `${name} ($${symbol}) is ${rng.pick(narrative.lore)}. ${closer}`.trim();
+  const lore = rng.pick(narrative.lore);
+  const description = `${name} ($${symbol}). ${lore.charAt(0).toUpperCase()}${lore.slice(1)}. ${closer}`.trim();
   return {
     name,
     symbol,

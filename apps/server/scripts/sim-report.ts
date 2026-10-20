@@ -151,12 +151,11 @@ interface Agg {
   positions: number;
   invested: number;
 }
-const byRole = new Map<string, Agg>();
+const byArchetype = new Map<string, Agg>();
 for (const w of world.wallets.values()) {
-  const role = memOf(w).role ?? w.archetype;
-  if (role === 'funder') continue;
-  let agg = byRole.get(role);
-  if (!agg) byRole.set(role, (agg = { wallets: new Set(), realized: 0, unrealized: 0, wins: 0, positions: 0, invested: 0 }));
+  if (memOf(w).role === 'funder') continue;
+  let agg = byArchetype.get(w.archetype);
+  if (!agg) byArchetype.set(w.archetype, (agg = { wallets: new Set(), realized: 0, unrealized: 0, wins: 0, positions: 0, invested: 0 }));
   for (const pos of w.positions.values()) {
     const t = world.tokens.get(pos.token);
     const unreal = t ? pos.balance * world.priceUsd(t) - pos.costBasisUsd : 0;
@@ -168,10 +167,10 @@ for (const w of world.wallets.values()) {
     if (pos.realizedPnlUsd + unreal > 0) agg.wins++;
   }
 }
-console.log('\n--- archetype PnL (all chains) ---');
+console.log('\n--- archetype PnL (all chains; win rate = share of positions in profit) ---');
 table(
-  ['role', 'wallets', 'positions', 'invested', 'realized', 'unrealized', 'ROI', 'win rate'],
-  [...byRole]
+  ['archetype', 'wallets', 'positions', 'invested', 'realized', 'unrealized', 'ROI', 'win rate'],
+  [...byArchetype]
     .sort((a, b) => b[1].realized - a[1].realized)
     .map(([role, a]) => [
       role,

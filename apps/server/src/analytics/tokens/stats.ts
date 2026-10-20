@@ -1,8 +1,10 @@
 // Window statistics helpers. multiWindowStats computes every StatWindow in a
 // single backward pass over a token's minute buckets with exactly the same
 // semantics as World.windowStats (verified by tests), which is ~2x cheaper than
-// five separate calls. priceChangeAt uses a binary search over the buckets so
-// cheap DTOs (TokenRef) can carry a 24h change without scanning.
+// five separate calls. computeWindowsCached gives the same result but reuses
+// the sums over the immutable buckets within a sim minute (used by summaries).
+// priceChangeAt uses a binary search over the buckets so cheap DTOs (TokenRef)
+// can carry a 24h change without scanning.
 
 import { STAT_WINDOWS, type StatWindow, type WindowStats } from '@trenchscope/shared';
 import type { MinuteBucket, TokenState } from '../../sim/world';
@@ -97,6 +99,118 @@ export function computeWindows(t: TokenState, now: number, currentPriceUsd: numb
     if (ob !== null) validUntil = Math.min(validUntil, ob + 60000 + WINDOW_MINUTES[order[k]] * 60000);
   }
   return { stats, open: opens, validUntil };
+}
+
+// ---------------------------------------------------------------------------
+// Incremental variant: every bucket but the newest is immutable (trades only
+// ever touch the newest bucket), and because every window is a whole number of
+// minutes, the set of buckets a window includes only changes when the sim
+// minute rolls over. So sums / maker unions over the older buckets are built
+// once per (minute, newest bucket) and each rebuild only adds the newest
+// bucket: O(windows + makers of the newest bucket) instead of O(all buckets in
+// 24h + makers of the last hour). Results are identical to computeWindows.
+// ---------------------------------------------------------------------------
+
+/** Window sums over the immutable buckets (all but the newest), valid for one sim minute. */
+export interface WindowsBase {
+  buckets: MinuteBucket[];
+  len: number;
+  lastT: number;
+  minute: number;
+  /** Per window (STAT_WINDOWS order): index of the oldest included bucket (len = none). */
+  first: number[];
+  /** Per window: sums over buckets[first .. len-2]. */
+  acc: WindowStats[];
+  /** Maker unions over the same range for 1m / 5m / 1h. */
+  makers: Set<string>[];
+  /** Per window: sum of per-bucket maker counts over the same range (6h / 24h semantics). */
+  makerSums: number[];
+}
+
+/** Index of the first bucket starting at or after `t` (buckets sorted by t asc). */
+function firstAtOrAfter(buckets: MinuteBucket[], t: number): number {
+  let lo = 0;
+  let hi = buckets.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (buckets[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function buildBase(buckets: MinuteBucket[], minute: number): WindowsBase {
+  const len = buckets.length;
+  const order = STAT_WINDOWS;
+  // A bucket is inside a window when it ends after now - window; with minute-aligned
+  // buckets and whole-minute windows that is exactly t >= minute - window.
+  const first = order.map((w) => firstAtOrAfter(buckets, minute - WINDOW_MINUTES[w] * 60000));
+  const acc = order.map(() => emptyStats());
+  const makerSums = order.map(() => 0);
+  const makers: Set<string>[] = [new Set(), new Set(), new Set()];
+  const end = len - 1; // exclusive: the newest bucket stays out of the base
+  for (let k = 0; k < order.length; k++) {
+    const s = acc[k];
+    for (let i = first[k]; i < end; i++) {
+      const b = buckets[i];
+      s.volumeUsd += b.volumeUsd;
+      s.buyVolumeUsd += b.buyVolumeUsd;
+      s.sellVolumeUsd += b.sellVolumeUsd;
+      s.buys += b.buys;
+      s.sells += b.sells;
+      makerSums[k] += b.makers.size;
+    }
+  }
+  // Unions nest (1m within 5m within 1h): build the narrowest, then widen.
+  for (let k = 0; k < 3; k++) {
+    const set = k === 0 ? makers[0] : (makers[k] = new Set(makers[k - 1]));
+    const stop = k === 0 ? end : Math.min(end, first[k - 1]);
+    for (let i = first[k]; i < stop; i++) for (const m of buckets[i].makers) set.add(m);
+  }
+  return { buckets, len, lastT: len > 0 ? buckets[len - 1].t : -1, minute, first, acc, makers, makerSums };
+}
+
+/**
+ * Same result as computeWindows(t, now, price); reuses `base` when it is still
+ * valid (same sim minute, same newest bucket) and returns the base to keep.
+ */
+export function computeWindowsCached(t: TokenState, now: number, currentPriceUsd: number, prev?: WindowsBase): { snapshot: WindowsSnapshot; base: WindowsBase } {
+  const buckets = t.buckets;
+  const len = buckets.length;
+  const minute = now - (now % 60000);
+  const lastT = len > 0 ? buckets[len - 1].t : -1;
+  const base = prev && prev.buckets === buckets && prev.len === len && prev.lastT === lastT && prev.minute === minute ? prev : buildBase(buckets, minute);
+  const last = len > 0 ? buckets[len - 1] : null;
+  const stats = {} as Record<StatWindow, WindowStats>;
+  const opens: number[] = [];
+  let validUntil = Infinity;
+  for (let k = 0; k < STAT_WINDOWS.length; k++) {
+    const a = base.acc[k];
+    const s: WindowStats = { ...a };
+    const f = base.first[k];
+    const lastIn = last !== null && len - 1 >= f;
+    let makers = k <= 2 ? base.makers[k].size : base.makerSums[k];
+    if (lastIn) {
+      s.volumeUsd += last.volumeUsd;
+      s.buyVolumeUsd += last.buyVolumeUsd;
+      s.sellVolumeUsd += last.sellVolumeUsd;
+      s.buys += last.buys;
+      s.sells += last.sells;
+      if (k <= 2) {
+        const u = base.makers[k];
+        for (const m of last.makers) if (!u.has(m)) makers++;
+      } else makers += last.makers.size;
+    }
+    s.swaps = s.buys + s.sells;
+    s.makers = makers;
+    // Open: close of the bucket just before the window, else the open of the oldest included one.
+    const open = f > 0 ? buckets[f - 1].close : len > 0 ? buckets[0].open : null;
+    opens.push(open === null ? NaN : open);
+    s.priceChange = open !== null && open > 0 ? currentPriceUsd / open - 1 : 0;
+    stats[STAT_WINDOWS[k]] = s;
+    if (f < len) validUntil = Math.min(validUntil, buckets[f].t + 60000 + WINDOW_MINUTES[STAT_WINDOWS[k]] * 60000);
+  }
+  return { snapshot: { stats, open: opens, validUntil }, base };
 }
 
 /** Same sums, new live price: O(windows). Only valid while idle and before `validUntil`. */

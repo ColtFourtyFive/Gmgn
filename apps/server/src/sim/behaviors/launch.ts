@@ -15,7 +15,7 @@ const SEC = 1000;
 const MIN = 60 * SEC;
 
 /** Trades per second a token sees at unit activity, per chain. */
-export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.58, bsc: 0.42, base: 0.45, eth: 0.8 };
+export const CHAIN_ACTIVITY: Record<ChainId, number> = { sol: 0.47, bsc: 0.31, base: 0.33, eth: 0.58 };
 
 const COPYCAT_FATES: TokenFate[] = ['dud', 'rug', 'pump_dump'];
 const COPYCAT_WEIGHTS = [70, 20, 10];
@@ -130,8 +130,8 @@ export class Launcher {
     t.sim = sim as unknown as Record<string, unknown>;
     t.hype = sim.path[2];
 
-    if (costs[0] > 0) this.desk.buyTokens(dev, t, costs[0]);
-    if (bundleShares.length) this.bundle(t, dev, boss, costs.slice(1, 1 + bundleShares.length));
+    if (costs[0] > 0) this.desk.allocate(dev, t, costs[0]);
+    if (bundleShares.length) this.bundle(t, boss, costs.slice(1, 1 + bundleShares.length));
     anchorLaunch(sim, rng, Math.log(world.marketCapUsd(t)), gradLn);
     this.insiders(t, dev, boss, costs.slice(1 + bundleShares.length));
     this.scheduleSnipers(t, dev, bundled);
@@ -140,7 +140,7 @@ export class Launcher {
   }
 
   /** Same-block bundle: crew wallets funded by the dev's side (or via an exchange) buy at creation. */
-  private bundle(t: TokenState, dev: WalletState, boss: WalletState, costs: number[]): void {
+  private bundle(t: TokenState, boss: WalletState, costs: number[]): void {
     const rng = this.world.rng;
     const viaExchange = rng.chance(0.4);
     const fee = CHAINS[t.chain].baseNetworkFee;
@@ -154,7 +154,7 @@ export class Launcher {
       this.world.transferNative(from, w, native);
       t.bundlers.add(w.address);
       if (whitelist || (i === 0 && rng.chance(0.35))) t.devTeam.add(w.address);
-      this.desk.buyTokens(w, t, costs[i]);
+      this.desk.allocate(w, t, costs[i]);
     });
   }
 
@@ -176,7 +176,8 @@ export class Launcher {
   private crew(boss: WalletState, kind: 'bundlers' | 'insiders', count: number): WalletState[] {
     const rng = this.world.rng;
     const m = memOf(boss);
-    const pool = (m[kind] ??= []);
+    // Housekeeping may have swept crew wallets whose tokens were all pruned.
+    const pool = (m[kind] = (m[kind] ?? []).filter((a) => this.world.wallets.has(a)));
     const out: WalletState[] = [];
     for (let i = 0; i < count; i++) {
       let w: WalletState | undefined;

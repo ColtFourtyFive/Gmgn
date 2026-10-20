@@ -13,6 +13,7 @@ import {
   type TokenSummary,
   type Trade,
   type WalletTag,
+  type WindowStats,
   type WsServerMessage,
 } from '@trenchscope/shared';
 import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
@@ -26,7 +27,7 @@ import {
 } from '../src/analytics/filters';
 import { tokenAnalyticsFor, type TokenAnalytics } from '../src/analytics/tokens';
 import { RUG_WEIGHTS, rugRatio, rugSignals, type RugInputs } from '../src/analytics/tokens/security';
-import { computeWindows, multiWindowStats, priceChangeAt, repriceWindows } from '../src/analytics/tokens/stats';
+import { computeWindows, computeWindowsCached, multiWindowStats, priceChangeAt, repriceWindows, type WindowsBase } from '../src/analytics/tokens/stats';
 import type { TokenFate, TokenState, WalletState, World } from '../src/sim/world';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,11 @@ function sell(fx: Fx, w: WalletState, t: TokenState, tokens: number) {
 }
 
 const bal = (w: WalletState, t: TokenState) => w.positions.get(t.address)?.balance ?? 0;
+/** Window stats equal up to floating-point summation order (counts exact). */
+function expectStatsClose(a: WindowStats, b: WindowStats) {
+  for (const k of ['swaps', 'buys', 'sells', 'makers'] as const) expect(a[k], k).toBe(b[k]);
+  for (const k of ['volumeUsd', 'buyVolumeUsd', 'sellVolumeUsd', 'priceChange'] as const) expect(Math.abs(a[k] - b[k]), k).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(b[k])));
+}
 /** Move sim time forward (bypasses the 1s DTO cache floor). */
 const tick = (fx: Fx, ms = 1500) => {
   fx.world.now += ms;
@@ -304,6 +310,43 @@ describe('summary, stats and security', () => {
     expect(t.cache.volume24hUsd).toBe(s.stats['24h'].volumeUsd);
   });
 
+  it('incremental window stats (cached immutable buckets) match World.windowStats as trades and minutes roll', () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'INC', 5);
+    let base: WindowsBase | undefined;
+    let reused = 0;
+    let checks = 0;
+    const check = () => {
+      const now = fx.world.now;
+      const price = fx.world.priceUsd(t);
+      const r = computeWindowsCached(t, now, price, base);
+      if (r.base === base) reused++;
+      base = r.base;
+      const full = computeWindows(t, now, price);
+      expect(r.snapshot.open).toEqual(full.open);
+      expect(r.snapshot.validUntil).toBe(full.validUntil);
+      for (const w of STAT_WINDOWS) {
+        const ref = fx.world.windowStats(t, w, now);
+        expectStatsClose(r.snapshot.stats[w], ref);
+        checks++;
+      }
+    };
+    // bursts inside one minute (base reused), minute rollovers, idle gaps that empty short windows
+    const gaps = [700, 900, 12_000, 47_000, 61_000, 2_000, 400, 5 * 60_000 + 3000, 1500, 59_999, 1, 3600_000 + 7000, 800];
+    for (let i = 0; i < 160; i++) {
+      tick(fx, gaps[i % gaps.length]);
+      const w = buyers[i % buyers.length];
+      if (i % 4 === 1 && bal(w, t) > 0) sell(fx, w, t, bal(w, t) / 2);
+      else buy(fx, w, t, 0.02 + (i % 6) * 0.01);
+      check();
+      if (i % 5 === 0) {
+        tick(fx, 15_000); // no trade: same buckets, maybe a new minute
+        check();
+      }
+    }
+    expect(reused).toBeGreaterThan(20);
+    expect(checks).toBeGreaterThan(900);
+  });
+
   it('reprices idle windows exactly until a bucket ages out', () => {
     const { t, buyers } = tokenWithBuyers(fx, 'sol', 'IDL', 3);
     tick(fx, 90_000);
@@ -329,7 +372,7 @@ describe('summary, stats and security', () => {
     expect(b).not.toBe(a);
     expect(b.security).toBe(a.security);
     expect(b.priceUsd).toBeCloseTo(fx.world.priceUsd(t), 12);
-    expect(b.stats['24h']).toEqual(fx.world.windowStats(t, '24h'));
+    expectStatsClose(b.stats['24h'], fx.world.windowStats(t, '24h'));
     fx.world.setNativeUsd('sol', native);
   });
 
@@ -552,6 +595,34 @@ describe('summary, stats and security', () => {
     expect(() => fx.ta.trenches({ chain })).not.toThrow();
     expect(() => fx.ta.narratives(chain)).not.toThrow();
     expect(fx.ta.search(t1.symbol, chain).tokens).toHaveLength(0);
+  });
+
+  it('bounds memory: forgets deleted migrations and drops caches of long-idle tokens', () => {
+    const chain: ChainId = 'bsc';
+    const internals = fx.ta as unknown as { caches: Map<string, unknown>; migrated: Record<ChainId, string[]> };
+    const { t: gone } = tokenWithBuyers(fx, chain, 'DEL', 2);
+    const { t: kept } = tokenWithBuyers(fx, chain, 'KEP', 2);
+    fx.world.migrate(gone);
+    fx.world.migrate(kept);
+    tick(fx);
+    expect(fx.ta.newPairs(chain, undefined).map((s) => s.address).slice(0, 2)).toEqual([kept.address, gone.address]);
+    const { t: idle } = tokenWithBuyers(fx, chain, 'IDL', 1);
+    fx.ta.summary(idle);
+    fx.ta.detail(idle);
+    expect(internals.caches.has(idle.address)).toBe(true);
+    gone.dormant = true;
+    fx.world.tokens.delete(gone.address);
+    fx.ctx.engine.step(31_000); // sweep
+    expect(internals.migrated[chain]).not.toContain(gone.address);
+    expect(internals.migrated[chain]).toContain(kept.address);
+    expect(internals.caches.has(gone.address)).toBe(false);
+    expect(fx.ta.newPairs(chain, undefined).map((s) => s.address)).not.toContain(gone.address);
+    // untouched for > 10 min: the idle token's DTO caches are released, then rebuilt on demand
+    tick(fx, 11 * 60_000);
+    fx.ctx.engine.step(31_000);
+    expect(internals.caches.has(idle.address)).toBe(false);
+    expect(fx.ta.summary(idle).address).toBe(idle.address);
+    expect(internals.caches.has(idle.address)).toBe(true);
   });
 
   it('round-trips its state through a v8 snapshot', async () => {
@@ -911,7 +982,8 @@ describe('REST routes', () => {
     expect((await get('/api/doge/trenches')).status).toBe(400);
     expect((await get('/api/sol/trenches?filters=%7Bnope')).status).toBe(400);
     expect((await get(`/api/sol/trenches?filters=${enc({ new: { bogus: 1 } })}`)).status).toBe(400);
-    expect((await get('/api/sol/trenches?limit=101')).status).toBe(400);
+    expect((await get('/api/sol/trenches?limit=101')).status).toBe(200); // clamped to the documented max
+    expect((await get('/api/sol/trenches?limit=0')).status).toBe(400);
     expect((await get('/api/sol/trenches?limit=abc')).status).toBe(400);
     r = await get(`/api/sol/trending?window=5m&sort=volume&order=asc&filters=${enc({ keyword: t.symbol })}`);
     expect(r.status).toBe(200);
@@ -1030,6 +1102,12 @@ describe('realtime channels', () => {
     await sock.client({ op: 'sub', ch: 'trending:sol', params: { window: '7m' } });
     await sock.client({ op: 'sub', ch: 'trenches:sol', params: { filters: { new: { nope: 1 } } } });
     expect(errs()).toHaveLength(3);
+    // the bare per-column filters object (types.ts channel comment) is accepted too; big limits clamp
+    await sock.client({ op: 'sub', ch: 'trenches:bsc', params: { new: { keyword: 'zz-no-such-token' } } });
+    await sock.client({ op: 'sub', ch: 'trending:bsc', params: { window: '1h', limit: 500 } });
+    expect(errs()).toHaveLength(3);
+    expect((sock.data('trenches:bsc', 'trenches')[0].data as { new: TokenSummary[] }).new).toEqual([]);
+    expect((sock.data('trending:bsc', 'trending')[0].data as { tokens: TokenSummary[] }).tokens.length).toBeLessThanOrEqual(100);
     // no work while warming
     const before = sock.sent.length;
     fx.ctx.engine.warming = true;
@@ -1080,6 +1158,32 @@ describe('realtime channels', () => {
     buy(fx, buyers[0], t, 0.1);
     fx.ta.channels.flushToken();
     expect(sock.data(ch, 'trades')).toHaveLength(1);
+  });
+
+  it('never strands the last detail update when a trade lands inside the 1s cache floor', async () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'WSS', 1);
+    const ch = `token:sol:${t.address}`;
+    const sock = new FakeSocket();
+    fx.ctx.hub.attach(sock as never);
+    await sock.client({ op: 'sub', ch });
+    tick(fx, 300); // within the detail/summary cache floor of the snapshot just sent
+    buy(fx, buyers[0], t, 2);
+    for (let i = 0; i < 12; i++) {
+      tick(fx, 250);
+      fx.ta.channels.flushToken();
+    }
+    const details = sock.data(ch, 'token').map((m) => m.data as { priceUsd: number; stats: { '24h': { swaps: number } } });
+    const last = details[details.length - 1];
+    expect(last.stats['24h'].swaps).toBe(t.tradeCount);
+    expect(last.priceUsd).toBeCloseTo(fx.world.priceUsd(t), 15);
+    // and the cached state is not re-sent once it is current
+    const n = details.length;
+    for (let i = 0; i < 8; i++) {
+      tick(fx, 250);
+      fx.ta.channels.flushToken();
+    }
+    expect(sock.data(ch, 'token')).toHaveLength(n);
+    await sock.client({ op: 'unsub', ch });
   });
 });
 

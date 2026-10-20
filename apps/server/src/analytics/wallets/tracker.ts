@@ -100,6 +100,16 @@ function bucketFor(list: Bucket[], start: number, keepFrom: number): Bucket {
   return b;
 }
 
+/**
+ * Whether a first buy measures token selection: launch-team entries (creator,
+ * dev team, bundlers, insiders -- token cohorts, also exposed as trade tags)
+ * ride an informational edge on their own launch and are not counted.
+ */
+export function isSelectionEntry(t: TokenState, w: WalletState): boolean {
+  const a = w.address;
+  return a !== t.creator && !t.devTeam.has(a) && !t.bundlers.has(a) && !t.insiders.has(a);
+}
+
 export const hourStart = (t: number): number => t - (((t % HOUR_MS) + HOUR_MS) % HOUR_MS);
 export const dayStart = (t: number): number => t - (((t % DAY_MS) + DAY_MS) % DAY_MS);
 
@@ -200,7 +210,7 @@ export class WalletTrack {
     const db = bucketFor(this.days, dayStart(ts), dayStart(ts) - DAY_KEEP * DAY_MS);
     this.addToBucket(hb, trade, t.address, cost, realized);
     this.addToBucket(db, trade, t.address, cost, realized);
-    if (trade.side === 'buy' && pos.buys === 1) {
+    if (trade.side === 'buy' && pos.buys === 1 && isSelectionEntry(t, w)) {
       hb.entries++;
       db.entries++;
     }
@@ -433,7 +443,7 @@ export function periodStats(world: World, w: WalletState, tr: WalletTrack | unde
       if (pos.balance > 0 && pos.firstBuyAt !== null) openAges.push(now - pos.firstBuyAt);
     }
     cws = tr ? tr.copyWindowsSince(-Infinity) : [];
-    daily = tr ? dailySeries(tr.days, dayStart(now) - 29 * DAY_MS, dayStart(now)) : [];
+    daily = dailySeries(tr ? tr.days : [], dayStart(now) - 29 * DAY_MS, dayStart(now));
   } else {
     const from = periodStart(period, now);
     const src = tr ? (period === '1d' ? tr.hours : tr.days) : [];

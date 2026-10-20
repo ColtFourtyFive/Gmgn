@@ -126,27 +126,37 @@ export function hashString(s: string): number {
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const HEX = '0123456789abcdef';
 
+/**
+ * Address/hash builders fill an array and join once: `+=` in a loop leaves
+ * V8 cons-strings (~88 fragments per hash), which tripled heap usage.
+ * Draw order is unchanged so seeded worlds stay identical.
+ */
+
 /** Solana-style base58 address (32-44 chars). Optional vanity suffix (e.g. "pump"-style). */
 export function base58Address(rng: Rng, length = 44, suffix = ''): string {
-  let s = '';
   const n = length - suffix.length;
-  for (let i = 0; i < n; i++) s += B58[Math.floor(rng.next() * 58)];
-  return s + suffix;
+  const chars = new Array<string>(n + 1);
+  for (let i = 0; i < n; i++) chars[i] = B58[Math.floor(rng.next() * 58)];
+  chars[n] = suffix;
+  return chars.join('');
 }
 
 /** EVM-style 0x address. Optional vanity suffix (hex). */
 export function evmAddress(rng: Rng, suffix = ''): string {
-  let s = '0x';
   const n = 40 - suffix.length;
-  for (let i = 0; i < n; i++) s += HEX[Math.floor(rng.next() * 16)];
-  return s + suffix;
+  const chars = new Array<string>(n + 2);
+  chars[0] = '0x';
+  for (let i = 0; i < n; i++) chars[i + 1] = HEX[Math.floor(rng.next() * 16)];
+  chars[n + 1] = suffix;
+  return chars.join('');
 }
 
 export function txHash(rng: Rng, style: 'base58' | 'evm'): string {
   if (style === 'evm') {
-    let s = '0x';
-    for (let i = 0; i < 64; i++) s += HEX[Math.floor(rng.next() * 16)];
-    return s;
+    const chars = new Array<string>(65);
+    chars[0] = '0x';
+    for (let i = 0; i < 64; i++) chars[i + 1] = HEX[Math.floor(rng.next() * 16)];
+    return chars.join('');
   }
   return base58Address(rng, 88);
 }

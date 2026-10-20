@@ -34,10 +34,10 @@ export class Desk {
     return r.ok ? r : null;
   }
 
-  /** Buy an exact token amount on a bonding curve (launch-block allocations). */
-  buyTokens(w: WalletState, t: TokenState, nativeIn: number, at?: number): SwapOutcome | null {
+  /** Launch-block allocation: spend exactly `nativeIn` (precomputed for a target share of supply). */
+  allocate(w: WalletState, t: TokenState, nativeIn: number): SwapOutcome | null {
     if (!(nativeIn > 0) || !Number.isFinite(nativeIn)) return null;
-    const r = this.world.executeSwap(w, t, 'buy', nativeIn, { networkFee: CHAINS[t.chain].baseNetworkFee, at });
+    const r = this.world.executeSwap(w, t, 'buy', nativeIn, { networkFee: CHAINS[t.chain].baseNetworkFee });
     return r.ok ? r : null;
   }
 

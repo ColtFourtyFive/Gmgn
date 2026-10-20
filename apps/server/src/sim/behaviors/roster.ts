@@ -28,7 +28,7 @@ export interface AgentMemory {
   bank: number;
   /** Devs: hidden reputation, 0 = serial rugger .. 1 = builder. */
   rep?: number;
-  /** Serial devs: reusable bundler / insider wallets they control. */
+  /** Devs: reusable bundler / insider wallets they control (sock puppets use their boss's). */
   bundlers?: string[];
   insiders?: string[];
   /** KOLs: sells into their own calls. */
@@ -247,9 +247,14 @@ export class Roster {
   maintain(chain: ChainId, samples: number): void {
     const rng = this.world.rng;
     const nu = this.world.nativeUsd(chain);
-    for (let i = 0; i < samples; i++) {
-      const w = this.pick(chain, rng.pick(TRADING_ROLES));
-      if (!w) continue;
+    const lists = TRADING_ROLES.map((r) => this.list(chain, r));
+    const total = lists.reduce((n, l) => n + l.length, 0);
+    for (let i = 0; i < samples && total > 0; i++) {
+      // uniform over all trading wallets, whatever their role
+      let k = Math.floor(rng.next() * total);
+      let li = 0;
+      while (k >= lists[li].length) k -= lists[li++].length;
+      const w = lists[li][k];
       const m = memOf(w);
       const usd = w.native * nu;
       if (usd < m.bank * 0.25) this.fund(this.funder(chain), w, m.bank * rng.float(0.4, 1));

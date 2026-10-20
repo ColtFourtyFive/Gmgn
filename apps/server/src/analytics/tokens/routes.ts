@@ -14,7 +14,14 @@ import { TRADER_SORTS, TRADE_FILTERS, tokenAnalyticsFor, type TokenAnalytics } f
 const WALLET_TAG_FILTERS = ['all', 'smart', 'kol', 'sniper', 'bundler', 'insider', 'dev', 'whale', 'fresh', 'bot', 'sandwich', 'top_holder', 'following', 'you'] as const;
 const TRENDING_SORTS = ['hot', 'volume', 'swaps', 'marketCap', 'liquidity', 'holders', 'priceChange', 'age', 'smartDegenCount', 'kolCount', 'netBuy'] as const;
 
-const intParam = (lo: number, hi: number) => z.coerce.number().int().min(lo).max(hi).optional();
+/** Integer >= lo (400 otherwise); values above the documented max are clamped, like the wallet routes do. */
+const intParam = (lo: number, hi: number) =>
+  z.coerce
+    .number()
+    .int()
+    .min(lo)
+    .transform((v) => Math.min(v, hi))
+    .optional();
 const order = z.enum(['asc', 'desc']).optional();
 
 const schemas = {
@@ -134,6 +141,8 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
   app.get<{ Params: TokenParams }>('/api/:chain/tokens/:address/trades', async (req) => {
     const t = tokenOf(req.params);
     const q = parseQuery(schemas.trades, req);
+    // EVM addresses are generated lower-case; accept checksummed input like the token lookup does.
+    if (q.wallet && t.chain !== 'sol' && !ctx.world.wallets.has(q.wallet)) q.wallet = q.wallet.toLowerCase();
     return ta().trades(t, q, viewerOf(ctx, req));
   });
 

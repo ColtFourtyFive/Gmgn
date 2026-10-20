@@ -247,6 +247,8 @@ export interface WorldEvents {
   kolCall: [token: TokenState, wallet: WalletState];
   /** Off-chain flag changes: community takeover, paid boost, socials updated. */
   tokenFlag: [token: TokenState, flag: 'cto' | 'boost' | 'socials'];
+  /** Inert wallets dropped by housekeeping; listeners should free per-wallet state. */
+  walletsRemoved: [addresses: Set<string>];
 }
 
 export interface WorldSnapshot {
@@ -293,6 +295,8 @@ export class World extends EventEmitter {
   private seq = 0;
   /** Total trades executed (for tps metrics). */
   tradeTotal = 0;
+  /** Modules that need tokens kept alive (open orders, alerts) register sources here. */
+  private pinSources: (() => Iterable<string>)[] = [];
 
   constructor(seed = 'trenchscope', now = Date.now()) {
     super();
@@ -459,6 +463,40 @@ export class World extends EventEmitter {
       to.fundAmount = amount;
     }
     return true;
+  }
+
+  /**
+   * Remove wallets nothing references any more (e.g. single-use bundlers whose
+   * tokens were pruned). Callers guarantee no token holds them as a holder.
+   */
+  removeWallets(addresses: Set<string>): void {
+    if (addresses.size === 0) return;
+    const chains = new Set<ChainId>();
+    for (const addr of addresses) {
+      const w = this.wallets.get(addr);
+      if (!w) continue;
+      chains.add(w.chain);
+      this.wallets.delete(addr);
+    }
+    for (const chain of chains) {
+      for (const [arch, list] of this.walletsByArchetype[chain]) {
+        const kept = list.filter((a) => !addresses.has(a));
+        if (kept.length !== list.length) this.walletsByArchetype[chain].set(arch, kept);
+      }
+    }
+    this.emit('walletsRemoved', addresses);
+  }
+
+  /** Register a source of token addresses that must survive pruning. */
+  addPinSource(source: () => Iterable<string>): void {
+    this.pinSources.push(source);
+  }
+
+  /** Token addresses currently pinned by any module. */
+  pinnedTokens(): Set<string> {
+    const pinned = new Set<string>();
+    for (const source of this.pinSources) for (const addr of source()) pinned.add(addr);
+    return pinned;
   }
 
   // ---------------------------------------------------------------------------

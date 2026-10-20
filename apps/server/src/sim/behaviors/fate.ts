@@ -38,6 +38,9 @@ export interface TokenSim {
   vol: number;
   /** Transient extra activity in trades/s (calls, boosts, migration) that decays. */
   bump: number;
+  /** Recent informed selling (USD, decaying) and when it was last updated. */
+  exitFlow: number;
+  exitFlowAt: number;
   /** Fast / slow EMAs of ln market cap (momentum). */
   emaFast: number;
   emaSlow: number;
@@ -79,11 +82,19 @@ export function simOf(t: { sim: Record<string, unknown> }): TokenSim {
 
 const FATES: TokenFate[] = ['dud', 'rug', 'slow_rug', 'pump_dump', 'runner', 'moon'];
 const BASE_WEIGHTS = [60, 12, 8, 11, 7, 2];
+/**
+ * Mean dev reputation per launch: serial ruggers launch most often and sock-puppet
+ * devs inherit a rugger's reputation (see Roster), so the average launch comes from rep ~0.32.
+ */
+const MEAN_LAUNCH_REP = 0.32;
 
-/** Base distribution for an average dev (rep 0.5); ruggers skew bad, builders skew good. */
+/**
+ * Ruggers skew bad, builders skew good; the adjustment is centred on the average
+ * launch so the overall mix stays at the base distribution.
+ */
 export function pickFate(rng: Rng, rep: number): TokenFate {
-  const bad = (0.2 + 2 * (1 - rep)) / 1.2;
-  const good = (0.2 + 2 * rep) / 1.2;
+  const bad = (0.2 + 2 * (1 - rep)) / (0.2 + 2 * (1 - MEAN_LAUNCH_REP));
+  const good = (0.2 + 2 * rep) / (0.2 + 2 * MEAN_LAUNCH_REP);
   const w = BASE_WEIGHTS.map((b, i) => (i >= 1 && i <= 3 ? b * bad : i >= 4 ? b * good : b));
   return rng.weighted(FATES, w);
 }
@@ -126,16 +137,12 @@ export function evalPath(s: TokenSim, now: number): { ln: number; act: number } 
     point.act = p[2];
     return point;
   }
-  for (let i = 3; i < n; i += 3) {
-    if (now < p[i]) {
-      const f = (now - p[i - 3]) / (p[i] - p[i - 3]);
-      point.ln = p[i - 2] + (p[i + 1] - p[i - 2]) * f;
-      point.act = p[i - 1] + (p[i + 2] - p[i - 1]) * f;
-      return point;
-    }
-  }
-  point.ln = p[n - 2];
-  point.act = p[n - 1];
+  // now < tEnd, so a later waypoint exists
+  let i = 3;
+  while (now >= p[i]) i += 3;
+  const f = (now - p[i - 3]) / (p[i] - p[i - 3]);
+  point.ln = p[i - 2] + (p[i + 1] - p[i - 2]) * f;
+  point.act = p[i - 1] + (p[i + 2] - p[i - 1]) * f;
   return point;
 }
 
@@ -196,6 +203,8 @@ export function planLaunch(rng: Rng, fate: TokenFate, c: LaunchContext): TokenSi
     noise: 0,
     vol: 0.02,
     bump: 0,
+    exitFlow: 0,
+    exitFlowAt: now,
     emaFast: l0,
     emaSlow: l0,
     last: now,
@@ -244,17 +253,17 @@ export function planLaunch(rng: Rng, fate: TokenFate, c: LaunchContext): TokenSi
       const a = c.act * rng.lognormal(0.045, 0.4);
       const tPeak = rng.float(1, 6) * MIN;
       const peak = Math.min(l0 + Math.log(Math.min(Math.max(rng.lognormal(2.2, 0.4), 1.4), 6)), g - 0.3);
-      const b = new PathBuilder(now, l0, a).to(tPeak, peak, a * 1.2).to(rng.float(20, 50) * MIN, l0 + Math.log(1.2), a * 0.2);
+      const b = new PathBuilder(now, l0, a).to(tPeak, peak, a * 1.2).to(rng.float(12, 30) * MIN, l0 + Math.log(1.2), a * 0.2);
       setTail(s, b, -0.005, 8 * MIN);
       setEvent(s, 'devSell', now + tPeak * 0.6);
-      s.deadline = now + tPeak + rng.float(15, 40) * MIN;
+      s.deadline = now + tPeak + rng.float(8, 25) * MIN;
       s.dangerAt = s.eventAt;
       break;
     }
     case 'pump_dump': {
       const a = c.act * rng.lognormal(0.14, 0.35);
       const tPump = rng.float(1.5, 7) * MIN;
-      s.completes = rng.chance(0.22);
+      s.completes = rng.chance(0.1);
       const top = s.completes ? g + 0.3 : Math.min(l0 + Math.log(Math.min(Math.max(rng.lognormal(6, 0.35), 3), 12)), g - 0.12);
       const b = new PathBuilder(now, l0, a * 0.8).to(tPump * 0.5, (l0 + top) / 2, a * 1.3).to(tPump * 0.5, top, a * 1.6);
       setTail(s, b, 0, 6 * MIN);
@@ -268,9 +277,9 @@ export function planLaunch(rng: Rng, fate: TokenFate, c: LaunchContext): TokenSi
     case 'moon': {
       const moon = fate === 'moon';
       const a = c.act * (moon ? rng.lognormal(0.2, 0.3) : rng.lognormal(0.12, 0.35));
-      s.completes = rng.chance(moon ? 0.85 : 0.55);
+      s.completes = rng.chance(moon ? 0.85 : 0.5);
       if (s.completes) {
-        const dur = (moon ? rng.float(3, 12) : rng.float(4, 25)) * MIN;
+        const dur = (moon ? rng.float(3, 12) : rng.float(3, 18)) * MIN;
         const b = new PathBuilder(now, l0, a).waves(rng, l0, g + (moon ? 0.35 : 0.3), dur, rng.int(2, 3), a, [0.15, 0.35]);
         setTail(s, b, 0, 10 * MIN);
       } else {
@@ -278,7 +287,7 @@ export function planLaunch(rng: Rng, fate: TokenFate, c: LaunchContext): TokenSi
         const peak = c.lnAtProgress(rng.float(0.4, 0.9));
         const b = new PathBuilder(now, l0, a).waves(rng, l0, peak, rng.float(3, 15) * MIN, 2, a, [0.15, 0.3]);
         s.dangerAt = b.end;
-        b.to(rng.float(10, 25) * MIN, l0 + Math.log(1.5), a * 0.15);
+        b.to(rng.float(5, 12) * MIN, l0 + Math.log(1.5), a * 0.15);
         setTail(s, b, -0.01, 6 * MIN);
       }
       break;

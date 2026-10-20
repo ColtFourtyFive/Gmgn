@@ -77,6 +77,11 @@ export class OrderBook {
   /** Account id -> its orders in creation order. */
   private readonly byAccount = new Map<string, Order[]>();
   private readonly openByToken = new Map<string, Set<Order>>();
+
+  /** Tokens with open orders (kept alive by market pruning). */
+  tokensWithOpenOrders(): Iterable<string> {
+    return this.openByToken.keys();
+  }
   /** Orders whose swap is in flight (triggered, waiting for confirmation). */
   private readonly executing = new Set<string>();
 

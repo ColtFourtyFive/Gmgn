@@ -323,6 +323,48 @@ describe('period stats', () => {
   });
 });
 
+describe('deleted tokens', () => {
+  it('skips tokens the simulator deleted in feeds, signals and wallet reads, and prunes their state', () => {
+    const s = mkWallet();
+    s.tags.add('smart');
+    const gone = mkToken();
+    const kept = mkToken();
+    buy(s, gone, 0.5);
+    buy(s, kept, 0.5);
+    world.migrate(gone);
+    world.migrate(kept);
+    const tokenOf = (items: { token: { address: string } }[]) => items.map((i) => i.token.address);
+    expect(tokenOf(wa.feed('sol', 'smart', 50, { accountId: null }))).toContain(gone.address);
+    expect(tokenOf(wa.signals('sol', { limit: 100 }))).toContain(gone.address);
+
+    world.tokens.delete(gone.address);
+    expect(tokenOf(wa.feed('sol', 'smart', 50, { accountId: null }))).toEqual([kept.address]);
+    expect(tokenOf(wa.feed('sol', 'all', 50, { accountId: null }))).not.toContain(gone.address);
+    expect(tokenOf(wa.signals('sol', { limit: 100 }))).not.toContain(gone.address);
+    expect(tokenOf(wa.signals('sol', { kind: 'smart_buy' }))).toEqual([kept.address]);
+    expect(tokenOf(wa.activity(s, {}, { accountId: null }))).toEqual([kept.address]);
+    expect(wa.holdings(s, { includeClosed: true }, { accountId: null }).map((r) => r.token)).toEqual([kept.address]);
+    const prof = wa.profile(s, { accountId: null });
+    expect(prof.stats['7d'].tokensTraded).toBe(2); // the deleted token still counts (unrealized 0)
+    expect(prof.stats['7d'].unrealizedPnlUsd).toBeCloseTo(prof.stats.all.unrealizedPnlUsd, 6);
+
+    // The first classification run is a full sweep: per-wallet token records of deleted tokens are dropped.
+    wa.classifyTick();
+    const tr = (wa as unknown as { tracks: Map<string, { tokens: Map<string, unknown> }> }).tracks.get(s.address)!;
+    expect(tr.tokens.has(gone.address)).toBe(false);
+    expect(tr.tokens.has(kept.address)).toBe(true);
+    // A wallet with positions but no tracked history still gets zero-filled series.
+    const legacy = mkWallet();
+    buy(legacy, kept, 0.1);
+    (wa as unknown as { tracks: Map<string, unknown> }).tracks.delete(legacy.address);
+    legacy.lastActiveAt += 1;
+    const lp = wa.profile(legacy, { accountId: null });
+    expect(lp.stats.all.tokensTraded).toBe(1);
+    expect(lp.stats.all.dailyPnl).toHaveLength(30);
+    expect(lp.stats['7d'].dailyPnl).toHaveLength(7);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Classification
 // ---------------------------------------------------------------------------
@@ -430,7 +472,7 @@ describe('classification', () => {
     expect(kol.tags.has('kol')).toBe(true); // identity tag preserved
     expect(wa.tags(kol)[0]).toBe('kol');
 
-    // Hysteresis: 50% win rate with profit keeps an existing tag but does not grant one.
+    // Hysteresis: a 50% hit / win rate with profit keeps an existing tag but does not grant one.
     const keeper = mkWallet();
     const newcomer = mkWallet();
     trade(keeper, 5, 5);
@@ -439,7 +481,7 @@ describe('classification', () => {
     wa.classifyAll();
     expect(keeper.tags.has('smart')).toBe(true);
     expect(newcomer.tags.has('smart')).toBe(false);
-    // ...and drops once the win rate falls below 45%.
+    // ...and drops once the win rate falls below 50%.
     trade(keeper, 0, 3);
     wa.classifyAll();
     expect(keeper.tags.has('smart')).toBe(false);
@@ -468,15 +510,38 @@ describe('classification', () => {
     buy(pumper, t, 30); // the token runs > 2x after the entry
     expect(tr().entryStats('7d', world.now)).toEqual({ entries: 1, hits: 1 });
 
-    // 3 of 6 entries ran 2x: profitable, but not significant against the base rate.
+    // 3 of 6 entries ran 2x: profitable, but below the 60% hit-rate bar.
     const lucky = mkWallet();
     trade(lucky, 3, 3, 3);
-    // 6 of 8 entries ran 2x: significant (z > 2.33 vs the 30% default base rate).
+    // 6 of 8 entries ran 2x: significant (z ~2.8 >= 1.5 vs the 30% default base rate).
     const picker = mkWallet();
     trade(picker, 6, 2, 1);
     wa.classifyAll();
     expect(lucky.tags.has('smart')).toBe(false);
     expect(picker.tags.has('smart')).toBe(true);
+  });
+
+  it('does not count launch-team entries (creator, dev team, bundlers, insiders) as selection skill', () => {
+    type Track = { entryStats(p: '7d', now: number): { entries: number; hits: number } };
+    const track = (w: WalletState) => (wa as unknown as { tracks: Map<string, Track> }).tracks.get(w.address)!;
+    const launcher = mkWallet('sol', { native: 1_000 });
+    const bundler = mkWallet();
+    const insider = mkWallet();
+    const outsider = mkWallet();
+    for (let i = 0; i < 8; i++) {
+      const t = mkToken('sol', launcher);
+      t.bundlers.add(bundler.address);
+      t.insiders.add(insider.address);
+      for (const w of [launcher, bundler, insider, outsider]) buy(w, t, 2);
+      buy(pumper, t, 40); // every token runs > 2x after these entries
+      for (const w of [launcher, bundler, insider, outsider]) sellFrac(w, t);
+    }
+    const now = world.now;
+    expect(track(outsider).entryStats('7d', now)).toEqual({ entries: 8, hits: 8 });
+    for (const w of [launcher, bundler, insider]) expect(track(w).entryStats('7d', now)).toEqual({ entries: 0, hits: 0 });
+    wa.classifyAll();
+    expect(outsider.tags.has('smart')).toBe(true);
+    for (const w of [launcher, bundler, insider]) expect(w.tags.has('smart')).toBe(false);
   });
 
   it('runs on the engine ticker during warmup too', () => {
@@ -624,13 +689,22 @@ describe('leaderboard', () => {
     const toks = byTokens.map((r) => r.stats.tokensTraded);
     expect(toks.every((x, i) => i === 0 || toks[i - 1] >= x)).toBe(true);
 
-    // The live ticker rebuilds snapshots in time slices; after a few ticks every chain has one.
-    const lbInternal = () => (wa as unknown as { lb: Map<string, { at: number; entries: unknown[] }> }).lb;
-    lbInternal().clear();
+    // The first live tick after warmup builds every chain at once.
+    const lbFirst = () => (wa as unknown as { lb: Map<string, { at: number; entries: unknown[] }> }).lb;
+    lbFirst().clear();
+    wa.leaderboardTick();
+    expect(lbFirst().size).toBe(4);
+    expect(lbFirst().get('sol')?.at).toBe(world.now);
+
+    // Afterwards the live ticker rebuilds one chain at a time in time slices, each about every 30s.
+    const lbInternal = lbFirst;
+    const builtAt = lbInternal().get('sol')!.at;
+    world.now += 30_000;
     for (let i = 0; i < 12; i++) {
       world.now += 1_000;
       wa.leaderboardTick();
     }
+    for (const c of ['sol', 'bsc', 'base', 'eth']) expect(lbInternal().get(c)!.at).toBeGreaterThan(builtAt);
     expect(lbInternal().get('sol')?.entries.length).toBeGreaterThanOrEqual(4);
     expect(lbInternal().size).toBe(4);
 
@@ -1140,9 +1214,12 @@ describe('evaluation (simulated market)', () => {
 
       expect(ewa.perf.trades).toBeGreaterThan(0);
       // Asserted on sol (largest population); other chains are reported (eth smart wallets make ~1-2 entries per 90m).
-      expect(tagScores.smart.sol.precision).toBeGreaterThanOrEqual(0.6);
+      // Floors, not calibration targets: the simulator is still being tuned. On a frozen build,
+      // 90m sol precision was 0.90-0.93 and recall 0.77-0.96 over 3 seeds with <= 0.75% of
+      // retail tagged (180m: 0.94 / 0.97); other builds have read as low as ~0.77 / ~0.6.
+      expect(tagScores.smart.sol.precision).toBeGreaterThanOrEqual(0.7);
       expect(tagScores.smart.sol.recall).toBeGreaterThanOrEqual(0.5);
-      expect(report.retailSmartRate).toBeLessThan(0.04);
+      expect(report.retailSmartRate).toBeLessThan(0.02);
       expect(tagScores.bot.sol.precision).toBeGreaterThanOrEqual(0.8);
       expect(tagScores.sandwich.sol.precision).toBeGreaterThanOrEqual(0.8);
       expect(tagScores.sniper.sol.precision).toBeGreaterThanOrEqual(0.8);

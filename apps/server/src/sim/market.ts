@@ -29,10 +29,17 @@ const COLD_HYPE = 0.03;
 /** Below this activity (trades/s) nobody is watching any more: the token goes quiet. */
 const DEAD_ACTIVITY = 0.004;
 const COLD_STEP_MS = 5 * SEC;
+/** Longest stretch one token step covers (a snapshot restored hours later must not replay the gap in one burst). */
+const MAX_STEP_MS = 10 * SEC;
 const DORMANT_TRADES_KEPT = 200;
 const SANDWICH_MIN_USD = 2500;
 /** KOL calls per token are capped: a handful of shills, not a stampede of them. */
 const MAX_CALLS = 4;
+/**
+ * Informed holders don't all hit thin liquidity at once: their combined exits per
+ * token are held to about this share of the token's liquidity per minute.
+ */
+const EXIT_BUDGET = 0.04;
 
 type Stage = 'early' | 'curve' | 'migrated';
 
@@ -73,6 +80,11 @@ interface MarketSnapshot {
   stats: Record<ChainId, ChainSimStats>;
 }
 
+export interface MarketOptions {
+  /** Token cap per chain: beyond it the oldest dormant tokens no human traded are deleted. */
+  maxTokensPerChain?: number;
+}
+
 function emptyStats(): ChainSimStats {
   return { launches: 0, migrations: 0, rugs: 0, dumps: 0, ctos: 0, boosts: 0, revivals: 0, pruned: 0, trades: 0 };
 }
@@ -94,11 +106,16 @@ export class MarketSim {
   /** Non-dormant tokens per chain (runtime index, rebuilt on restore). */
   private active = {} as Record<ChainId, TokenState[]>;
   private chains = {} as Record<ChainId, ChainState>;
+  private readonly maxTokensPerChain: number;
   /** Counters since boot (persisted), used by diagnostics and the sim report. */
   stats = {} as Record<ChainId, ChainSimStats>;
 
-  constructor(private readonly ctx: AppContext) {
+  constructor(
+    private readonly ctx: AppContext,
+    opts: MarketOptions = {},
+  ) {
     this.world = ctx.world;
+    this.maxTokensPerChain = opts.maxTokensPerChain ?? MAX_TOKENS_PER_CHAIN;
     this.roster = new Roster(this.world);
     this.desk = new Desk(this.world);
     this.launcher = new Launcher(this.world, this.roster, this.desk, this.scheduler, {
@@ -145,6 +162,8 @@ export class MarketSim {
       this.stats = snap.stats;
     }
     this.roster.rebuild();
+    // a world saved before the market simulator existed has no agents yet
+    if (this.roster.list(CHAIN_IDS[0], 'funder').length === 0) this.seedPopulation();
     for (const c of CHAIN_IDS) {
       this.active[c] = [];
       for (const addr of this.world.tokensByChain[c]) {
@@ -183,7 +202,7 @@ export class MarketSim {
   private stepToken(t: TokenState, now: number): void {
     const s = simOf(t);
     if (s.next > now) return;
-    const dt = (now - s.last) / SEC;
+    const dt = Math.min(now - s.last, MAX_STEP_MS) / SEC;
     if (dt <= 0) return;
     s.last = now;
     const { world } = this;
@@ -218,7 +237,12 @@ export class MarketSim {
       const stage: Stage = t.status === 'migrated' ? 'migrated' : now - t.createdAt < 90 * SEC ? 'early' : 'curve';
       // a buy can complete the curve mid-burst; trading pauses until migration
       for (let i = 0; i < n && tradable(t); i++) {
-        const gap = target - Math.log(world.marketCapUsd(t));
+        const ln = Math.log(world.marketCapUsd(t));
+        if (s.eventKind === 'rug' && ln >= s.triggerLn) {
+          this.rug(t, s, now);
+          break;
+        }
+        const gap = target - ln;
         // the crowd leans toward value, but chases green candles and panics on red ones
         const pBuy = clamp(0.5 + 0.38 * Math.tanh(1.6 * gap) + 0.18 * Math.tanh(4 * momentum), 0.05, 0.95);
         if (rng.next() < pBuy) this.flowBuy(t, s, stage, gap, momentum, now);
@@ -265,6 +289,8 @@ export class MarketSim {
   }
 
   private flowBuy(t: TokenState, s: TokenSim, stage: Stage, gap: number, momentum: number, now: number): void {
+    // a rugged honeypot is common knowledge: nobody buys it any more
+    if (t.isHoneypot && s.ruggedAt) return;
     const { world, roster } = this;
     const rng = world.rng;
     let role = this.pickBuyerRole(stage, t, gap, momentum);
@@ -275,7 +301,10 @@ export class MarketSim {
     }
     if (!w) return;
     let usd = buySizeUsd(rng, role, w, world.nativeUsd(t.chain));
-    if (role === 'retail' || role === 'fresh') usd *= 1 + clamp(2 * momentum, 0, 1.5); // FOMO: chase green candles
+    if (role === 'retail' || role === 'fresh') {
+      // bigger, deeper tokens attract bigger tickets; FOMO chases green candles
+      usd *= clamp(Math.sqrt(world.liquidityUsd(t) / 40_000), 1, 8) * (1 + clamp(2 * momentum, 0, 1.5));
+    }
     const mev = t.status === 'migrated' && usd >= SANDWICH_MIN_USD && rng.chance(0.12) ? roster.pick(t.chain, 'sandwich') : undefined;
     if (mev) this.desk.buy(mev, t, usd * rng.float(0.5, 1.5));
     const r = this.desk.buy(w, t, usd);
@@ -367,18 +396,20 @@ export class MarketSim {
       return;
     }
     const nu = world.nativeUsd(t.chain);
+    // block-timed buys keep the token's trade history in order
+    const at = Math.max(a.at, t.lastTradeAt);
     switch (a.kind) {
       case 'migrate':
         this.migrate(t, now);
         break;
       case 'snipe':
-        if (w && t.status === 'curve' && !this.avoidsContract(w, t) && desk.buy(w, t, buySizeUsd(rng, 'sniper', w, nu), a.at)) {
+        if (w && t.status === 'curve' && !this.avoidsContract(w, t) && desk.buy(w, t, buySizeUsd(rng, 'sniper', w, nu), at)) {
           t.snipers.add(w.address);
           this.watch(w, 'sniper', t);
         }
         break;
       case 'insider':
-        if (w && desk.buy(w, t, a.x, a.at) && !isBadFate(t.fate)) this.watch(w, 'crew', t);
+        if (w && desk.buy(w, t, a.x, at) && !isBadFate(t.fate)) this.watch(w, 'crew', t);
         break;
       case 'smartEntry': {
         // the sharpest of a few candidates finds runners; the weakest walks into traps
@@ -429,18 +460,32 @@ export class MarketSim {
       now,
       priceUsd,
       peakUsd: a.x,
-      danger: now >= s.dangerAt,
+      // sharper wallets read the top earlier, so informed exits are staggered
+      danger: now >= s.dangerAt - (w.skill - 0.5) * 20 * MIN,
       upside: hasUpside(t.fate, s, now),
       hype: t.hype,
     });
-    const sold = frac > 0 && this.desk.sell(w, t, frac) !== null;
-    // a rejected sell on a honeypot means the bag is stuck for good
-    const stuck = frac > 0 && !sold && t.isHoneypot === true;
+    if (frac > 0 && !this.exitRoom(t, s, now)) {
+      // the exit door is crowded: wait for liquidity to come back
+      this.scheduler.push(now + this.world.rng.float(5, 15) * SEC, 'check', t.address, w.address, Math.max(a.x, priceUsd));
+      return;
+    }
+    const sale = frac > 0 ? this.desk.sell(w, t, frac) : null;
+    if (sale) s.exitFlow += sale.usdAmount;
+    // a rejected sell (honeypot, or a bag worth less than the network fee) is stuck for good
+    const stuck = frac > 0 && !sale;
     if (pos.balance > 0 && !stuck) {
       this.scheduler.push(now + checkIntervalMs(this.world.rng, m.role), 'check', t.address, w.address, Math.max(a.x, priceUsd));
     } else {
       m.watching?.delete(t.address);
     }
+  }
+
+  /** Whether informed exits on this token still fit in the per-minute budget. */
+  private exitRoom(t: TokenState, s: TokenSim, now: number): boolean {
+    s.exitFlow *= Math.exp(-(now - s.exitFlowAt) / MIN);
+    s.exitFlowAt = now;
+    return s.exitFlow < this.world.liquidityUsd(t) * EXIT_BUDGET;
   }
 
   private kolCall(t: TokenState, kol: WalletState, now: number): void {
@@ -551,8 +596,9 @@ export class MarketSim {
     const s = simOf(t);
     planMigrated(s, rng, t.fate, now, Math.log(world.marketCapUsd(t)));
     addBump(s, 0.4);
+    // paid screener boosts: most runners buy one, some ordinary graduations too
+    if (rng.chance(s.outcome === 'fizzle' ? 0.1 : 0.45)) this.scheduler.push(now + rng.float(5, 40) * MIN, 'boost', t.address);
     if (s.outcome === 'fizzle') return;
-    if (rng.chance(0.45)) this.scheduler.push(now + rng.float(5, 40) * MIN, 'boost', t.address);
     if (!t.socials.website && rng.chance(0.5)) {
       t.socials = { ...t.socials, website: `https://${t.symbol.toLowerCase()}${rng.pick(['', 'coin', 'hq'])}.${rng.pick(['fun', 'xyz', 'meme'])}` };
       t.version++;
@@ -640,7 +686,7 @@ export class MarketSim {
           t.version++;
         }
         // abandoned but still alive: occasionally the holders take it over
-        if (!t.cto && t.hype > 0.01 && now - t.createdAt > 20 * MIN && t.holders.size >= 40 && this.devSoldAll(t) && rng.chance(0.004)) this.cto(t, now);
+        if (!t.cto && t.hype > 0.01 && now - t.createdAt > 20 * MIN && t.holders.size >= 40 && this.devSoldAll(t) && rng.chance(0.03)) this.cto(t, now);
         if (t.status !== 'migrating' && now - t.lastTradeAt > DORMANT_AFTER_MS && t.hype < 0.05) this.sleep(t);
         else keep.push(t);
       }
@@ -670,29 +716,35 @@ export class MarketSim {
     this.active[t.chain].push(t);
   }
 
+  /** Rediscover a random dormant token from anywhere in the chain's history. */
   private reviveRandom(chain: ChainId, now: number): void {
     const { world } = this;
     const addrs = world.tokensByChain[chain];
-    if (addrs.length === 0) return;
-    const t = world.tokens.get(addrs[Math.max(0, addrs.length - 1 - Math.floor(world.rng.next() * 400))]);
-    if (!t || !t.dormant) return;
+    let t: TokenState | undefined;
+    for (let i = 0; i < 4 && !t?.dormant && addrs.length; i++) t = world.tokens.get(addrs[Math.floor(world.rng.next() * addrs.length)]);
+    if (!t?.dormant) return;
     this.wake(t);
     this.stats[chain].revivals++;
     if (!t.cto && this.devSoldAll(t) && world.rng.chance(0.5)) this.cto(t, now);
     else planRevival(simOf(t), world.rng, now, Math.log(world.marketCapUsd(t)));
   }
 
-  /** Keep at most MAX_TOKENS_PER_CHAIN: drop the oldest dormant tokens no human ever touched. */
+  /**
+   * Keep at most maxTokensPerChain: drop the oldest dormant tokens no human ever
+   * touched and no module pins (open orders, alerts), then sweep the single-use
+   * dev-side wallets left with nothing but positions in deleted tokens.
+   */
   private prune(chain: ChainId): void {
     const { world } = this;
     const addrs = world.tokensByChain[chain];
-    if (addrs.length <= MAX_TOKENS_PER_CHAIN) return;
-    let excess = addrs.length - Math.floor(MAX_TOKENS_PER_CHAIN * 0.96);
+    if (addrs.length <= this.maxTokensPerChain) return;
+    let excess = addrs.length - Math.floor(this.maxTokensPerChain * 0.96);
+    const pinned = world.pinnedTokens();
     let write = 0;
     for (const addr of addrs) {
       const t = world.tokens.get(addr);
       if (!t) continue;
-      if (excess > 0 && t.dormant && !this.touchedByUser(t)) {
+      if (excess > 0 && t.dormant && !pinned.has(addr) && !this.touchedByUser(t)) {
         world.tokens.delete(addr);
         excess--;
         this.stats[chain].pruned++;
@@ -701,6 +753,28 @@ export class MarketSim {
       addrs[write++] = addr;
     }
     addrs.length = write;
+    this.sweepInertWallets(chain);
+  }
+
+  /** Bundler/insider wallets are single-use: once all their tokens are gone they are dead weight. */
+  private sweepInertWallets(chain: ChainId): void {
+    const { world } = this;
+    const dead = new Set<string>();
+    for (const arch of ['bundler', 'insider'] as const) {
+      for (const addr of world.walletsOf(chain, arch)) {
+        const w = world.wallets.get(addr);
+        if (!w || w.accountId || w.positions.size === 0) continue;
+        let alive = false;
+        for (const token of w.positions.keys()) {
+          if (world.tokens.has(token)) {
+            alive = true;
+            break;
+          }
+        }
+        if (!alive) dead.add(addr);
+      }
+    }
+    world.removeWallets(dead);
   }
 
   private touchedByUser(t: TokenState): boolean {

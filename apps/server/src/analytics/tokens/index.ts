@@ -8,12 +8,15 @@
 //   - DTOs are cached per token and keyed by token.version + sim time:
 //       summary/detail : rebuilt at most once per SUMMARY_MIN_MS while the token
 //                        changes; idle tokens get a light refresh every
-//                        SUMMARY_MAX_MS (live price, rolling windows) that reuses
-//                        the holder-derived parts
-//       window stats   : one pass over minute buckets for all windows; while idle
+//                        SUMMARY_MAX_MS (+-1s per-token jitter so refreshes do not
+//                        all land on one tick) that reuses the holder-derived parts
+//       window stats   : sums over the immutable minute buckets are cached per sim
+//                        minute, a rebuild only adds the newest bucket; while idle
 //                        only priceChange is repriced until a bucket ages out
-//       holder scan    : O(holders), at most every SCAN_MIN_MS while changing
+//       holder scan    : O(holders), while changing at most every 2s (10ms per
+//                        holder for big holder bases, capped at 60s)
 //       dev history    : per creator, DEV_AGG_TTL_MS
+//       idle tokens    : caches dropped after CACHE_IDLE_MS without access
 //   - list candidates come from small per-chain indexes (active-in-24h set,
 //     near-completion set, migration order) instead of scanning every token
 //
@@ -68,18 +71,27 @@ import {
   type HolderScan,
   type RugInputs,
 } from './security';
-import { computeWindows, priceChangeAt, repriceWindows, volumeIn, WINDOW_MS, type WindowsSnapshot } from './stats';
+import { computeWindowsCached, priceChangeAt, repriceWindows, volumeIn, WINDOW_MS, type WindowsBase, type WindowsSnapshot } from './stats';
 import { backfillTrack, flowSince, newTrack, pruneTrack, recordTrade, tombstone, type TokenTrack } from './track';
 
 export const SUMMARY_MIN_MS = 1000;
 export const SUMMARY_MAX_MS = 5000;
 const SCAN_MIN_MS = 2000;
 const SCAN_MAX_MS = 120_000;
+/**
+ * A holder scan costs O(holders) (~1us per holder), and the busiest tokens are also
+ * the ones with the most holders, so while a token trades its scan floor grows with
+ * its holder base: 2s up to 200 holders, 10s at 1000, capped at 60s.
+ */
+const SCAN_MS_PER_HOLDER = 10;
+const SCAN_FLOOR_CAP_MS = 60_000;
 const ROWS_MIN_MS = 1000;
 const ROWS_MAX_MS = 10000;
 const DEV_AGG_TTL_MS = 10000;
 const NARRATIVE_TTL_MS = 5000;
 const SWEEP_EVERY_MS = 30000;
+/** Per-token caches untouched for this long are dropped (bounded memory as tokens go quiet). */
+const CACHE_IDLE_MS = 10 * 60_000;
 const DAY_MS = 24 * 3600_000;
 const ALMOST_PROGRESS = 0.35;
 const MAX_TRACKS = 80_000;
@@ -137,7 +149,15 @@ interface RowsCache {
 }
 
 interface TokenCaches {
+  /**
+   * Per-token offset (ms, +-1000) on the max-age refreshes. Lists summarise
+   * hundreds of tokens in one call, so without it every idle token would
+   * expire on the same tick (a periodic burst of rebuilds every 5s / 120s).
+   */
+  jitter: number;
   windows?: Cached<WindowsSnapshot> & { priceUsd: number };
+  /** Sums over the immutable minute buckets for the current sim minute (see computeWindowsCached). */
+  windowsBase?: WindowsBase;
   scan?: Cached<HolderScan>;
   summary?: Cached<TokenSummary>;
   detail?: Cached<TokenDetail>;
@@ -151,6 +171,13 @@ function fresh(c: { at: number; version: number } | undefined, version: number, 
   if (!c || now < c.at) return false;
   const age = now - c.at;
   return age < minMs || (c.version === version && age < maxMs);
+}
+
+/** Deterministic offset in [-1000, 1000) ms derived from the token address. */
+function jitterOf(address: string): number {
+  let h = 0;
+  for (let i = 0; i < address.length; i++) h = (Math.imul(h, 31) + address.charCodeAt(i)) | 0;
+  return ((h >>> 0) % 2000) - 1000;
 }
 
 const clampInt = (v: number | undefined, def: number, lo: number, hi: number) => {
@@ -304,6 +331,9 @@ export class TokenAnalytics {
         const t = world.tokens.get(addr);
         if (!t || t.status === 'migrated' || t.dormant) almost.delete(addr);
       }
+      // Forget migrations of tokens the simulator has since deleted.
+      const mig = this.migrated[c];
+      if (mig.some((addr) => !world.tokens.has(addr))) this.migrated[c] = mig.filter((addr) => world.tokens.has(addr));
     }
     for (const [addr, s] of this.tracks) {
       if (s.gone) continue;
@@ -329,9 +359,15 @@ export class TokenAnalytics {
     }
     for (const [k, v] of this.devAggs) if (now - v.at > DEV_AGG_TTL_MS * 6 || now < v.at) this.devAggs.delete(k);
     for (const [addr, c] of this.caches) {
-      if (!world.tokens.has(addr)) this.caches.delete(addr);
-      else if (c.traders && now - c.traders.at > 60_000) c.traders = undefined;
+      if (!world.tokens.has(addr)) {
+        this.caches.delete(addr);
+        continue;
+      }
+      if (c.traders && now - c.traders.at > 60_000) c.traders = undefined;
       if (c.holders && now - c.holders.at > 60_000) c.holders = undefined;
+      // Tokens nobody has looked at for a while (quiet / dormant) drop their DTO caches.
+      const last = Math.max(c.summary?.at ?? -Infinity, c.detail?.at ?? -Infinity, c.windows?.at ?? -Infinity, c.scan?.at ?? -Infinity);
+      if (now - last > CACHE_IDLE_MS && !c.holders && !c.traders) this.caches.delete(addr);
     }
   }
 
@@ -350,10 +386,16 @@ export class TokenAnalytics {
   private cachesOf(address: string): TokenCaches {
     let c = this.caches.get(address);
     if (!c) {
-      c = {};
+      c = { jitter: jitterOf(address) };
       this.caches.set(address, c);
     }
     return c;
+  }
+
+  /** Holder scan still usable: within the floor, or unchanged and younger than the (jittered) max age. */
+  private scanFresh(t: TokenState, c: TokenCaches, now: number): boolean {
+    const floor = Math.min(SCAN_FLOOR_CAP_MS, Math.max(SCAN_MIN_MS, t.holders.size * SCAN_MS_PER_HOLDER));
+    return fresh(c.scan, t.version, now, floor, SCAN_MAX_MS + 10 * c.jitter);
   }
 
   /** Cohort membership helper for one token (cheap; create one per batch of rows). */
@@ -379,13 +421,14 @@ export class TokenAnalytics {
       }
       if (!idle && now - w.at < SUMMARY_MIN_MS) return w.value.stats;
     }
-    const value = computeWindows(t, now, priceUsd);
+    const { snapshot: value, base } = computeWindowsCached(t, now, priceUsd, c.windowsBase);
+    c.windowsBase = base;
     c.windows = { at: now, version: t.version, value, priceUsd };
     return value.stats;
   }
 
   private scanOf(t: TokenState, c: TokenCaches, now: number, cohorts: Cohorts): HolderScan {
-    if (fresh(c.scan, t.version, now, SCAN_MIN_MS, SCAN_MAX_MS)) return c.scan!.value;
+    if (this.scanFresh(t, c, now)) return c.scan!.value;
     const value = scanHolders(this.ctx.world, t, cohorts, this.walletTagsOf);
     c.scan = { at: now, version: t.version, value };
     return value;
@@ -513,9 +556,9 @@ export class TokenAnalytics {
     const now = this.ctx.world.now;
     const c = this.cachesOf(t.address);
     const prev = c.summary;
-    if (fresh(prev, t.version, now, SUMMARY_MIN_MS, SUMMARY_MAX_MS)) return prev!.value;
+    if (fresh(prev, t.version, now, SUMMARY_MIN_MS, SUMMARY_MAX_MS + c.jitter)) return prev!.value;
     // Idle token (no trade since the last build) with holder-derived parts still fresh: light refresh.
-    const light = !!prev && prev.version === t.version && now >= prev.at && fresh(c.scan, t.version, now, SCAN_MIN_MS, SCAN_MAX_MS);
+    const light = !!prev && prev.version === t.version && now >= prev.at && this.scanFresh(t, c, now);
     const value = light ? this.lightSummary(t, c, prev!.value, now) : this.buildSummary(t, c, now);
     c.summary = { at: now, version: t.version, value };
     t.cache.volume24hUsd = value.stats['24h'].volumeUsd;
@@ -651,6 +694,10 @@ export class TokenAnalytics {
     const c = this.cachesOf(t.address);
     if (fresh(c.detail, t.version, now, SUMMARY_MIN_MS, SUMMARY_MAX_MS)) return c.detail!.value;
     const sum = this.summary(t);
+    // The summary may be served from its 1s floor and predate the latest trade: record the
+    // version it actually reflects so the next call past the floor rebuilds (and the token
+    // channel re-broadcasts) instead of treating this detail as current for SUMMARY_MAX_MS.
+    const version = c.summary && c.summary.value === sum ? c.summary.version : t.version;
     const nativeUsd = world.nativeUsd(t.chain);
     const curve =
       t.curve && t.status !== 'migrated'
@@ -690,9 +737,14 @@ export class TokenAnalytics {
       athPriceUsd: Math.max(t.athPriceUsd, sum.priceUsd),
       totalFeesUsd: t.totalFeesUsd,
     };
-    c.detail = { at: now, version: t.version, value };
+    c.detail = { at: now, version, value };
     return value;
   };
+
+  /** Token version the cached detail reflects (-1 when none); the token channel uses it to avoid stale broadcasts. */
+  detailVersion(t: TokenState): number {
+    return this.caches.get(t.address)?.detail?.version ?? -1;
+  }
 
   devInfo = (t: TokenState): DevInfo => {
     const { world } = this.ctx;

@@ -25,10 +25,18 @@ import type { TokenAnalytics } from './index';
 
 const TRENDING_SORTS = ['hot', 'volume', 'swaps', 'marketCap', 'liquidity', 'holders', 'priceChange', 'age', 'smartDegenCount', 'kolCount', 'netBuy'] as const;
 
+/** Positive integer; above the documented max of 100 it is clamped (same as REST). */
+const wsLimit = z
+  .number()
+  .int()
+  .min(1)
+  .transform((v) => Math.min(v, 100))
+  .optional();
+
 const trenchesParams = z
   .object({
     filters: z.unknown().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: wsLimit,
   })
   .strict();
 
@@ -38,14 +46,14 @@ const trendingParams = z
     sort: z.enum(TRENDING_SORTS).optional(),
     order: z.enum(['asc', 'desc']).optional(),
     filters: z.unknown().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: wsLimit,
   })
   .strict();
 
 const newPairsParams = z
   .object({
     filters: z.unknown().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: wsLimit,
   })
   .strict();
 
@@ -76,9 +84,16 @@ function parseOrThrow<T>(schema: z.ZodType<T>, p: unknown): T {
   return r.data;
 }
 
+const TRENCHES_COLUMNS = new Set(['new', 'almost', 'migrated']);
+
 export function parseTrenchesSub(ch: string, params: unknown): TrenchesQuery {
   const chain = chainOf(ch);
-  const p = parseOrThrow(trenchesParams, params);
+  // docs/API.md: params { filters?, limit? }. The types.ts channel comment describes the params as the
+  // per-column filters object itself, so accept that shape too ({ new?, almost?, migrated? }).
+  const raw = paramsObject(params);
+  const keys = Object.keys(raw);
+  const bare = keys.length > 0 && keys.every((k) => TRENCHES_COLUMNS.has(k));
+  const p = parseOrThrow(trenchesParams, bare ? { filters: raw } : raw);
   return { chain, filters: validateTrenchesFilters(p.filters), limit: p.limit };
 }
 
@@ -182,7 +197,7 @@ export class TokenChannels {
     this.parsed.set(`${sub.ch}|${sub.paramsKey}`, p);
     this.viewers.set(sub.ch, (this.viewers.get(sub.ch) ?? 0) + 1);
     const detail = this.ta.detail(t);
-    if (!this.sentVersion.has(sub.ch)) this.sentVersion.set(sub.ch, t.version);
+    if (!this.sentVersion.has(sub.ch)) this.sentVersion.set(sub.ch, this.ta.detailVersion(t));
     if (p.resolution) {
       // Start candle diffs from the current candle; the client loads history over REST.
       const arr = t.candles[p.resolution as Resolution];
@@ -245,9 +260,15 @@ export class TokenChannels {
         if (done.has(g.ch)) continue;
         done.add(g.ch);
         const t = this.tokenFor(g.ch);
-        if (!t || this.sentVersion.get(g.ch) === t.version) continue;
-        this.sentVersion.set(g.ch, t.version);
-        hub.publish(g.ch, 'token', this.ta.detail(t));
+        const sent = this.sentVersion.get(g.ch);
+        if (!t || sent === t.version) continue;
+        const detail = this.ta.detail(t);
+        // A detail cached within its 1s floor can predate the latest trades: remember the version
+        // it really reflects so the next pass re-sends once it is rebuilt (never strand the last update).
+        const version = this.ta.detailVersion(t);
+        if (version === sent) continue;
+        this.sentVersion.set(g.ch, version);
+        hub.publish(g.ch, 'token', detail);
       }
     }
   }
