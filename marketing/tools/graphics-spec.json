@@ -1,0 +1,416 @@
+[
+ {
+  "ref": "avatar",
+  "file": "/home/user/Gmgn/marketing/x/profile/avatar.png",
+  "width": 400,
+  "height": 400,
+  "template": "avatar",
+  "headline": "",
+  "subhead": "",
+  "body": "",
+  "footer": "",
+  "used_in": "X profile photo (PROFILE.md \u00a72 Phase C). Already built by tools/profile.py from brand/logo/mark-dark.svg (not the rounded tile) on a full-bleed #0A0C10 square with no transparent corners, so it works as a circle or a square crop. Use that file. Don't re-render it through cards.py, because that avatar template paints #0D1016. No text, coin, ticker or chain logo. PNG, sRGB, under 2 MB."
+ },
+ {
+  "ref": "header-main",
+  "file": "/home/user/Gmgn/marketing/x/profile/header-main.png",
+  "width": 1500,
+  "height": 500,
+  "template": "header",
+  "headline": "larp the trenches.",
+  "subhead": "",
+  "body": "SIMULATED MARKET \u00b7 PAPER TRADING \u00b7 NO TOKEN\nkey art: ai-generated",
+  "footer": "",
+  "art_prompt": "A weathered brass-and-glass trench periscope rising above an earthen parapet at night, its lens reflecting a field of distant amber signal flares over a dark, empty no-man's-land. Periscope in the left-centre third; right half calm dark sky and drifting haze for type; bottom-left corner in deep shadow. Cinematic night scene, deep navy-black shadows, a single warm amber rim light carving the periscope, faint cool cyan fill for depth, volumetric haze, horizontal anamorphic amber lens flare, 35mm film grain, shallow depth of field, low-key high-contrast lighting, dramatized movie-trailer still, low-angle 40mm anamorphic lens, generated at 21:9 and cropped to 3:1. No readable text, letters, numbers, logos, signage, UI or watermarks anywhere. Negative: text, letters, words, numbers, typography, watermark, signature, logo, brand, UI, screen text, real person, celebrity, recognizable face, face in focus, crypto logo, bitcoin symbol, ethereum symbol, coin with emblem, mascot, frog, dog, flag, military insignia, weapon pointed at people, gore, blood, money, cash, lamborghini, rocket, cartoon, low quality, oversaturated, neon rainbow.",
+  "used_in": "X profile header from day 0 once the key art passes QA (no stray glyphs, faces, logos or insignia). Use header-alt until then. Right-align all type at about x 1280, inside the centre 1100x360 safe area (x 200\u20131300, y 70\u2013430). Keep the bottom-left 400x200 dark and empty for the avatar. Darken behind the type, not the periscope. Lock the seed so it matches trailer K1 and d7-a. Render note: cards.py's header template right-aligns at about x 1410 (outside the safe area) and takes its background from a local 'art' file path. Set its right inset to 220 px and pass the approved art, or build this header the way header-alt is built in profile.py. Keep 'key art: ai-generated' inside the safe area so phone crops never cut the AI credit."
+ },
+ {
+  "ref": "header-alt",
+  "file": "/home/user/Gmgn/marketing/x/profile/header-alt.png",
+  "width": 1500,
+  "height": 500,
+  "template": "header",
+  "headline": "see who's *really* buying.",
+  "subhead": "SIM \u00b7 PAPER TRADING",
+  "body": "with fake money. simulated market \u00b7 paper trading \u00b7 no token",
+  "data": [
+   {
+    "label": "SMART MONEY",
+    "value": "",
+    "tone": "smart"
+   },
+   {
+    "label": "KOL",
+    "value": "",
+    "tone": "kol"
+   },
+   {
+    "label": "DEV",
+    "value": "",
+    "tone": "dev"
+   },
+   {
+    "label": "SNIPER",
+    "value": "",
+    "tone": "sniper"
+   },
+   {
+    "label": "INSIDER",
+    "value": "",
+    "tone": "insider"
+   },
+   {
+    "label": "BUNDLER",
+    "value": "",
+    "tone": "bundler"
+   },
+   {
+    "label": "WHALE",
+    "value": "",
+    "tone": "whale"
+   },
+   {
+    "label": "FRESH",
+    "value": "",
+    "tone": "fresh"
+   },
+   {
+    "label": "BOT",
+    "value": "",
+    "tone": "bot"
+   }
+  ],
+  "footer": "",
+  "used_in": "Already built by tools/profile.py to the copy approved in PROFILE.md \u00a77. Use it today if header-main isn't ready, and again for the post-launch refresh. No AI. The data rows are the wallet-tag chip row: labels only, no numbers, each in its tag colour on that colour at 12%, 6 px radius. Don't re-render through cards.py: its header template drops the chip row and right-aligns past x 1300. If profile.py re-renders it, take the chips and stamp up to 20\u201322 px and the subtext to 22 px so they're readable on phones. Same safe areas as header-main."
+ },
+ {
+  "ref": "og",
+  "file": "/home/user/Gmgn/marketing/x/posts/og.png",
+  "width": 1200,
+  "height": 630,
+  "template": "og",
+  "headline": "larp the trenches.",
+  "subhead": "",
+  "body": "a memecoin trading terminal on a simulated market. fake money, real-feeling rugs. no wallet. no token.",
+  "footer": "SIMULATED MARKET \u00b7 PAPER TRADING \u00b7 NOT FINANCIAL ADVICE",
+  "used_in": "Link-card image for [LINK] (og:image and twitter:image, summary_large_image). It shows wherever [LINK] is posted on launch day (T1 self-reply, T10). Must never say 'live now', 'deposit', 'connect wallet' or 'sign up'."
+ },
+ {
+  "ref": "d2-b",
+  "file": "/home/user/Gmgn/marketing/x/posts/d2-b.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "chip-explainer",
+  "headline": "SNIPER",
+  "subhead": "bought within the first 3 blocks after launch.",
+  "body": "how the sim tags it. the dev and launch-block bundlers don't count. a handful is normal.",
+  "data": [
+   {
+    "label": "tagged if",
+    "value": "bought in blocks 1\u20133 after creation",
+    "tone": "sniper"
+   },
+   {
+    "label": "0\u20134 snipers",
+    "value": "green \u00b7 normal",
+    "tone": "up"
+   },
+   {
+    "label": "5\u201320 snipers",
+    "value": "amber \u00b7 crowded",
+    "tone": "warn"
+   },
+   {
+    "label": "21+ snipers",
+    "value": "red \u00b7 a race",
+    "tone": "down"
+   }
+  ],
+  "footer": "trench dictionary: sniper \u00b7 SIM \u00b7 PAPER TRADING",
+  "used_in": "D2-P3, Wed Oct 21, 8:30 p.m. ET ('trench dictionary: sniper'). Claim SC-21. Matches the code: track.ts SNIPER_BLOCKS = 3 (buys 1\u20133 blocks after the creation block; dev group and creation-block bundlers excluded). The security.ts audit colours sniper count green under 5, amber 5\u201320, red over 20. Review changes: 'one or two is normal' became 'a handful is normal' so it matches the 0\u20134 green band and the post copy. The footer names the entry instead of '#1', because d3-b's 'vol. 1' clashed with the numbering."
+ },
+ {
+  "ref": "d3-a",
+  "file": "/home/user/Gmgn/marketing/x/posts/d3-a.png",
+  "width": 1200,
+  "height": 1200,
+  "template": "stat",
+  "headline": "~97 of 100",
+  "subhead": "TRENCH DATA \u00b7 REAL MARKET",
+  "body": "launches never leave the curve. lately, on the biggest solana launchpad. most go quiet.",
+  "data": [
+   {
+    "label": "graduate",
+    "value": "~3",
+    "tone": "accent"
+   },
+   {
+    "label": "never leave the curve",
+    "value": "~97",
+    "tone": "muted"
+   },
+   {
+    "label": "not graduating",
+    "value": "\u2260 rugged",
+    "tone": "muted"
+   }
+  ],
+  "footer": "source: launchpad lifecycle data, oct 2026 (secondary) \u00b7 approximate",
+  "used_in": "D3-P1, Thu Oct 22, 9:00 a.m. ET (stat KS-01). Render and post only if the owner re-verifies the stat by 8:30 a.m. Otherwise post reserve R2 and bench this card. Never name the launchpad. If the renderer supports it, add a 10x10 dot grid (97 dots in #2A303B, 3 in amber). Review change: 'most just go quiet' became 'most go quiet', because 'just' implied 'not rugs', which is unsourced. Update the WARMUP_WEEK D3-P1 alt text to match. The D3-P1 post line 'most of them aren't rugs' has the same problem (LAUNCH_DAY \u00a75 cut it). Replace it with 'not graduating isn't the same as getting rugged.'"
+ },
+ {
+  "ref": "d3-b",
+  "file": "/home/user/Gmgn/marketing/x/posts/d3-b.png",
+  "width": 1200,
+  "height": 675,
+  "template": "meme",
+  "headline": "launch, curve, migrate, *pray*.",
+  "subhead": "THE MEMECOIN LIFECYCLE",
+  "body": "new: minted on a bonding curve. no pool yet.\nnear grad: the curve is almost full.\nmigrated: liquidity moves to a dex pool.\nmost: go quiet.\nsome: rug.",
+  "footer": "trench dictionary: the lifecycle",
+  "used_in": "D3-P2, thread post 1 of 6, Thu Oct 22, 12:15 p.m. ET. Ideal layout: a curve-progress bar through NEW, NEAR GRAD and MIGRATED, amber fill turning green at 100%, with a grey 'most' branch and a red 'some' branch. Review changes: 'a real pool' became 'a dex pool' so 'real' isn't confused with sim and the line matches LAUNCH_DAY D2-A3. The footer dropped 'vol. 1', which clashed with the dictionary numbering; update the WARMUP_WEEK \u00a79 asset-table subtext to match."
+ },
+ {
+  "ref": "d5-a",
+  "file": "/home/user/Gmgn/marketing/x/posts/d5-a.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "chip-explainer",
+  "headline": "INSIDER",
+  "subhead": "it's about who paid for the wallet.",
+  "body": "how the sim tags insiders on each token, from wallet-funding links. any one rule is enough.",
+  "data": [
+   {
+    "label": "rule 1",
+    "value": "funded by the dev",
+    "tone": "insider"
+   },
+   {
+    "label": "rule 2",
+    "value": "funded by the dev's funder",
+    "tone": "insider"
+   },
+   {
+    "label": "rule 3",
+    "value": "3+ buyers, one funder, first 10 min",
+    "tone": "insider"
+   },
+   {
+    "label": "exchanges",
+    "value": "never count as the funder",
+    "tone": "muted"
+   }
+  ],
+  "footer": "trench dictionary: insider \u00b7 SIM \u00b7 PAPER TRADING",
+  "used_in": "D5-P1, Sat Oct 24, 10:30 a.m. ET ('trench dictionary: insider'). Claim SC-21: describe it as how the sim tags wallets, never as a real-chain detector. Matches classifyInsider in track.ts. Rules 1 and 2 apply to a wallet's first buy at any time. The 10-minute window (EARLY_WINDOW_MS) applies only to rule 3. Labelled public funders such as exchanges are skipped. Review change: the separate 'early' row read as if it applied to every rule, so the window moved into rule 3 and an exchanges row was added (the WARMUP note already mentions it)."
+ },
+ {
+  "ref": "d5-b",
+  "file": "/home/user/Gmgn/marketing/x/posts/d5-b.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "pnl-card",
+  "headline": "\u2212[N]%",
+  "subhead": "PAPER BAG DIARIES #1",
+  "body": "the dev agreed it looked ready. *to sell.*",
+  "data": [
+   {
+    "label": "entry mc",
+    "value": "$[from trade]",
+    "tone": "muted"
+   },
+   {
+    "label": "exit mc",
+    "value": "$[from trade]",
+    "tone": "down"
+   },
+   {
+    "label": "held",
+    "value": "[from trade]",
+    "tone": "muted"
+   },
+   {
+    "label": "dev",
+    "value": "[SOLD PART / SOLD ALL]",
+    "tone": "dev"
+   },
+   {
+    "label": "token",
+    "value": "fictional sim coin \u00b7 ticker hidden",
+    "tone": "muted"
+   }
+  ],
+  "footer": "SIMULATED \u00b7 PAPER TRADING \u00b7 nfa",
+  "used_in": "D5-P2, Sat Oct 24, 2:00 p.m. ET, paper bag diaries #1. Losses only, no flexing. Don't render until every [ ] value is filled from the operator's real paper trade (buy a near-grad sim coin, hold through the dev sell); never estimate a value. The dev chip uses the app's real status. No ticker, no $cashtag, no CA. DIS-04: burn a diagonal 'SIMULATED \u00b7 PAPER TRADE' band into the pixels over the hero number, at least 6% of image height and 25\u201335% opacity. cards.py's pnl band currently reads 'SIMULATED \u00b7 PAPER'. Change it to the full DIS-04 text before rendering, or burn the band by hand. Never call it an in-app share card."
+ },
+ {
+  "ref": "d5-c",
+  "file": "/home/user/Gmgn/marketing/x/posts/d5-c.png",
+  "width": 1600,
+  "height": 900,
+  "template": "teaser",
+  "headline": "",
+  "subhead": "",
+  "body": "",
+  "footer": "AI-GENERATED STILL \u00b7 FICTIONAL",
+  "art_prompt": "A long banquet table set with rows of blank, unbranded matte metal discs on an ornate patterned carpet in a dark, cavernous hall, frozen mid-moment as the carpet is yanked out from under the table and the discs fly into the air in slow motion, lit by a single amber spotlight from above. No people. A comic, self-aware movie-trailer beat. Cinematic night scene, deep navy-black shadows, warm amber key light, faint cool cyan fill, volumetric haze, horizontal anamorphic amber lens flare, 35mm film grain, shallow depth of field, low-key lighting, locked-off wide shot, 50mm anamorphic, 16:9 with dark top and bottom edges for letterbox bars added in post. No readable text, letters, numbers, logos, coin emblems or watermarks anywhere. Negative: text, letters, numbers, logo, crypto symbol, coin with emblem, person, face, mascot, money, cash, rocket, cartoon.",
+  "used_in": "D5-P3, Sat Oct 24, 8:30 p.m. ET (teaser still). This is trailer shot 11's K6 keyframe with the same seed, approved by Sat noon ET. Image only: the AI still full-bleed with letterbox bars, plus this corner label and the mark. No headline, no reticle. cards.py's teaser template always draws the big reticle, so composite this one by hand or disable the reticle. Turn on X's AI label."
+ },
+ {
+  "ref": "d6-c",
+  "file": "/home/user/Gmgn/marketing/x/posts/d6-c.png",
+  "width": 1920,
+  "height": 1080,
+  "template": "teaser",
+  "headline": "larp the trenches.",
+  "subhead": "AI-GENERATED \u00b7 DRAMATIZED \u00b7 PAPER-TRADING SIM",
+  "body": "",
+  "footer": "fictional people and coins \u00b7 no token \u00b7 nfa",
+  "used_in": "End slate (9.0\u201311.0 s) shared by two teaser clips, merged from a duplicate request: d6-c THE BUNDLER (D6-P2, Sun Oct 25, 2:00 p.m. ET) and d7-a 'tomorrow' (D7-P4, Mon Oct 26, 8:30 p.m. ET). Hold it static. Nothing moves over the disclaimer line."
+ },
+ {
+  "ref": "launch-1",
+  "file": "/home/user/Gmgn/marketing/x/posts/launch-1.png",
+  "width": 1920,
+  "height": 1080,
+  "template": "og",
+  "headline": "larp the trenches.",
+  "subhead": "",
+  "body": "PAPER TRADING \u00b7 SIMULATED MARKET \u00b7 NO TOKEN \u00b7 NFA\nAI-generated dramatization. Fictional people, tokens and events.\nTrenchscope is a simulated market with paper trading only. No real funds. No token. Not financial advice.\nno real bags were harmed in the making of this film.",
+  "footer": "all tokens, wallets and kols shown are fictional sim entities. \u00b7 not affiliated with any chain, launchpad or trading platform.",
+  "used_in": "End-card still for the 16:9 trailer master (SCRIPT shots 14\u201315). This is not the trailer itself: launch-1 in LAUNCH_DAY is the MP4. Trailer posts Tue Oct 27, 10:00 a.m. ET. DIS-06 verbatim, held at least 3 s with nothing moving over it, plus the pill, the parody line, DIS-11 and DIS-10 as the smallest lines (24 px or larger). Review changes: added the pill, DIS-10 and DIS-11 (SCRIPT \u00a79 requires them), and removed @trenchscope. Burn in the handle only once the owner has confirmed and holds it, otherwise leave it off. No URL on the card. cards.py's og template draws the horizontal lockup where SCRIPT wants the stacked one, and doesn't auto-fit the body, so check for overflow."
+ },
+ {
+  "ref": "launch-2",
+  "file": "/home/user/Gmgn/marketing/x/posts/launch-2.png",
+  "width": 1080,
+  "height": 1920,
+  "template": "og",
+  "headline": "larp the trenches.",
+  "subhead": "",
+  "body": "PAPER TRADING \u00b7 SIMULATED MARKET \u00b7 NO TOKEN \u00b7 NFA\nAI-generated dramatization. Fictional people, tokens and events.\nTrenchscope is a simulated market with paper trading only. No real funds. No token. Not financial advice.\nno real bags were harmed in the making of this film.\nall tokens, wallets and kols shown are fictional sim entities.\nnot affiliated with any chain, launchpad or trading platform.",
+  "footer": "",
+  "used_in": "End-card still for the 9:16 cut (QT-3, Tue Oct 27, 8:30 p.m. ET), held at least 3 s. Same copy as launch-1. DIS-10 and DIS-11 sit in the body because the og footer renders at about 25 px and 9:16 needs 36 px or more (DIS-06 40 px or more). Keep all type above y 1536 (the bottom 20%) and at least 140 px from the right edge, clear of X's action column. The og template's 91 px padding is too narrow, so widen it. Handle: same rule as launch-1."
+ },
+ {
+  "ref": "launch-12",
+  "file": "/home/user/Gmgn/marketing/x/posts/launch-12.png",
+  "width": 1600,
+  "height": 900,
+  "template": "teaser",
+  "headline": "reply with your *worst rug*.",
+  "subhead": "NO TICKERS \u00b7 NO CAS \u00b7 NO NAMES",
+  "body": "",
+  "footer": "ai-generated still \u00b7 fictional",
+  "art_prompt": "A long banquet table set with rows of blank, unbranded matte metal discs on an ornate patterned carpet in a dark, cavernous hall, at the peak of the moment after the carpet has been yanked out, the discs at their highest point mid-air in slow motion, lit by a single amber spotlight from above. No people. Cinematic night scene, deep navy-black shadows, warm amber key light, faint cool cyan fill, volumetric haze, horizontal anamorphic amber lens flare, 35mm film grain, shallow depth of field, low-key lighting, locked-off wide shot, 50mm anamorphic, 16:9. Keep the lower third dark and calm for a headline. No readable text, letters, numbers, logos, coin emblems or watermarks anywhere. Negative: text, letters, numbers, logo, crypto symbol, coin with emblem, person, face, mascot, money, cash, rocket, cartoon.",
+  "used_in": "COMM-1 (optional image), Tue Oct 27, 4:00 p.m. ET. Pull a frame from trailer shot 11's K6 clip at a different moment (discs mid-air). Don't reuse the d5-c still: LAUNCH_DAY says the warm-up already posted it, so it would be a repeat. Generate from the prompt only if no clip frame works. Turn on X's AI label. No prizes, and no follow or RT asks."
+ },
+ {
+  "ref": "launch-16",
+  "file": "/home/user/Gmgn/marketing/x/posts/launch-16.png",
+  "width": 1600,
+  "height": 900,
+  "template": "meme",
+  "headline": "the life of a launch",
+  "subhead": "TRENCH DICTIONARY \u00b7 REAL MARKET",
+  "body": "1 \u00b7 mint: anyone can launch a coin on a bonding curve in seconds.\n2 \u00b7 the curve: lately, fewer than ~3 in 100 launches on major launchpads fill it.\n3 \u00b7 migration: the curve fills and liquidity moves to a dex pool.\n4 \u00b7 first 20m: in one launchpad dataset, ~73% of graduates were down 60%+ within 20 min of migrating.\n5 \u00b7 after: whatever's left. a small club.",
+  "footer": "real-market figures: secondary lifecycle data, approximate",
+  "used_in": "D2-A1, Thu Oct 29, 10:00 a.m. ET, thread post 1. Source reply D2-A6 goes first. Uses KS-09 and KS-02, and the owner re-verifies both the day before. If one can't be verified, cut its line and re-render. If a spike month pushes graduation above 3%, cut line 2. Review changes: '~97 of 100 on major launchpads' became 'fewer than ~3 in 100', because 97% is the single-launchpad figure (LAUNCH_DAY \u00a75 and the launch-16 alt text already say this). 'a real pool' became 'a dex pool'. Line 4 now says 'launchpad dataset' and 'of migrating', matching D2-A4."
+ },
+ {
+  "ref": "meme-1",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-1.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "meme",
+  "headline": "trench bingo",
+  "subhead": "HOW MANY SQUARES DID YOUR LAST COIN HIT?",
+  "body": "dev \u201cstepping away for a bit\u201d\n30 buyers in the launch block\n\u201cit's a social experiment\u201d\nthe socials link to nothing\nfree square: you aped anyway\nsell tx fails twice\ntg admin says \u201ccto incoming\u201d\ntop 10 hold half the supply\n\u201cthe chart looks ready\u201d",
+  "footer": "",
+  "used_in": "Reserve meme for week 2 (Oct 28 onward), window C. No product and no stamp. The 9 lines form a 3x3 card with 'free square' in the centre (line 5). Use an amber-outlined centre cell if a grid layout is available. REPLY_BANK \u00a75 specs a 5x5 card, and its alt text describes 25 squares, so rewrite the alt for these 9. Never a real ticker, CA, project or person."
+ },
+ {
+  "ref": "meme-2",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-2.png",
+  "width": 1200,
+  "height": 1200,
+  "template": "meme",
+  "headline": "trench alignment chart",
+  "subhead": "EVERY WALLET HERE IS AN ARCHETYPE, NOT A PERSON",
+  "body": "smart money: lawful good. early, sized, sells on a plan.\nfresh wallet: neutral good. probably a newcomer. probably.\nyou: chaotic good. means well. aped anyway.\nwhale: lawful neutral. moves the chart. doesn't notice.\nsniper: true neutral. it was a race. you lost it.\nkol: chaotic neutral. the call is the content.\nbundler: lawful evil. 30 wallets, one block, a plan.\ninsider: neutral evil. had the address before the tweet.\nthe dev: chaotic evil. wrote the exit before the coin.",
+  "footer": "not about anyone in particular",
+  "used_in": "Reserve meme for week 2 (Oct 28 onward). The lines run row by row through a 3x3 grid (lawful/neutral/chaotic x good/neutral/evil). If a grid layout is available, put each tag label in its wallet-tag colour ('you' and 'the dev' as in the app). Review change: the bundler line now says 'one block', not 'one funder'. A shared funder is the app's insider rule, and the app defines a bundler as a buyer in the creation block (WARMUP D6-P2 note). The cell assignments differ from REPLY_BANK \u00a75, so rewrite that alt text to match this card."
+ },
+ {
+  "ref": "meme-3",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-3.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "meme",
+  "headline": "trench facts",
+  "subhead": "ONE SIM LAUNCH \u00b7 FICTIONAL TOKEN \u00b7 SIMULATED AUDIT",
+  "body": "serving size: 1 launch\nholders: 18\ntop 10: 50%\ndev: 15%\ninsiders: 40%\nbundlers: 48%\nfresh wallets: 83%\nrug ratio: 81%\nsmart money: 0\naudit: 7 flags \u00b7 high risk\nmay contain traces of a community.",
+  "footer": "fictional sim token \u00b7 SIM \u00b7 PAPER TRADING",
+  "used_in": "Nutrition-label meme, week 2 (after Wed Oct 21), REPLY_BANK \u00a75 meme-3. Review change: the values went back to marketing/x/posts/screen-token-audit.png (checked: 18 holders, dev 15%, insiders 40%, bundlers 48%, fresh 83%, rug ratio 81.2% bar / 81% row, top 10 50%, smart money 0, 7 flags, high risk). The earlier token-B version broke REPLY_BANK's 'never tie the card to the puzzle' rule and contradicted its caption and alt text. Its note about WARMUP still quoting old numbers was stale: D2-P2 and D2-P2r already show 13 holders and bundlers 53%. Ticker, name and launchpad stay hidden. Burn a SIM \u00b7 PAPER TRADING stamp top-right if the layout allows. The caption ends with DIS-02. If the audit is re-captured, update every number and the alt text. Claims SC-09, SC-10."
+ },
+ {
+  "ref": "meme-4",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-4.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "meme",
+  "headline": "trench translator",
+  "subhead": "WHAT THEY SAY \u2192 WHAT IT USUALLY MEANS",
+  "body": "stealth launch: the bundle knew first.\norganic volume: four wallets on a loop.\nwe're so early: you're buyer #200.\nhealthy dip: a dev sell, rebranded.\ncto: the dev left. you're the dev now.\nutility soon: soon.",
+  "footer": "not about anyone in particular",
+  "used_in": "Reserve meme for week 2 (Oct 28 onward). Two-column layout: the left label is what they say (fg), the right text is what it usually means (amber Mono). Every label is 14 characters or fewer, so cards.py puts it in the left column. REPLY_BANK \u00a75 lists 8 different rows, so rewrite that alt text for these 6."
+ },
+ {
+  "ref": "meme-6",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-6.png",
+  "width": 1080,
+  "height": 1350,
+  "template": "meme",
+  "headline": "wanted: *the bundler*",
+  "subhead": "TRENCH MOST WANTED \u00b7 PART 1 OF 4",
+  "body": "last seen: the creation block, again.\nassociates: 30 wallets, suspiciously in sync.\nmethod: buy the launch, sell into you.\nreward: none. it's fake money.",
+  "footer": "a fictional archetype, not a person",
+  "used_in": "Wanted-poster series, part 1 of 4 (sniper, insider and dev follow), posted after launch in week 2. If the layout allows: amber frame, a flat SVG hooded faceless silhouette inside a scope reticle (no AI), and a BUNDLER chip in #FACC15. Review change: 'associates: 30 wallets, one funder' became 'suspiciously in sync'. A shared funder is the app's insider rule, which D6-P2 says not to mix with bundlers. It also doesn't reuse the D6-P2 teaser line 'one guy. six wallets. same block.' Update the REPLY_BANK alt text to match."
+ },
+ {
+  "ref": "meme-8",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-8.png",
+  "width": 1200,
+  "height": 1200,
+  "template": "meme",
+  "headline": "trench newcomer starter pack",
+  "subhead": "WE'VE OWNED EVERY ITEM ON THIS CARD",
+  "body": "a ca from a stranger's reply\n\u201ctrust me, i know the dev\u201d\nanti-mev: off\n\u201ci'll just watch it\u201d (no stop-loss)\nslippage: 50%\na group chat with more bots than people",
+  "footer": "",
+  "used_in": "Reserve meme for week 2 (Oct 28 onward). Six items for a 2x3 tile grid with simple line icons if available. No real app icons or logos. Tile 2 differs from REPLY_BANK ('dev is based'), so update the alt text."
+ },
+ {
+  "ref": "meme-9",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-9.png",
+  "width": 1200,
+  "height": 1200,
+  "template": "meme",
+  "headline": "famous last words",
+  "subhead": "RANKED BY HOW FAST THEY AGE",
+  "body": "S tier: \u201cdev is based\u201d\nA tier: \u201cit's a cto now, it's different\u201d\nB tier: \u201ci'll sell at 2x\u201d\nC tier: \u201ci'm not selling, i'm a believer\u201d\nD tier: \u201cone more coin, then i'm done\u201d",
+  "footer": "",
+  "used_in": "Reserve meme for week 2 (Oct 28 onward). If the layout supports it, tier bands run from amber (S) to red (D)."
+ },
+ {
+  "ref": "meme-10",
+  "file": "/home/user/Gmgn/marketing/x/posts/meme-10.png",
+  "width": 1600,
+  "height": 900,
+  "template": "meme",
+  "headline": "trench forecast",
+  "subhead": "THIS WEEK: SAME AS LAST WEEK",
+  "body": "mon: scattered snipers\ntue: heavy bundling, clearing after migration\nwed: dev-sell advisory in effect\nthu: dense fog of fresh wallets\nfri: slow-rug drizzle\nsat: quiet. suspiciously quiet.\nsun: community takeover front moving in",
+  "footer": "not financial advice. not meteorological advice either.",
+  "used_in": "Reserve meme for a Monday morning in week 2 (e.g. Mon Nov 2), window A. A seven-day strip with candle-shaped vector weather icons if available. No numbers. The Fri and Sat lines differ slightly from REPLY_BANK, so update the alt text."
+ }
+]
