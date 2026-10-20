@@ -379,10 +379,10 @@ function installIpLimit(app: FastifyInstance, routes: string[], perWindow: numbe
   });
 }
 
-/** Live status for /api/meta: the market's health plus what the configuration disables (liveProblems). */
+/** Live status for /api/meta: the market's health plus what the configuration disables (liveProblems) and what the market reports now. */
 function liveStatusOf(ctx: AppContext): LiveStatus | undefined {
   const status = ctx.market.liveStatus();
-  return status ? { ...status, problems: [...ctx.config.liveProblems] } : undefined;
+  return status ? { ...status, problems: [...ctx.config.liveProblems, ...(status.problems ?? [])] } : undefined;
 }
 
 export function buildMeta(ctx: AppContext): MetaResponse {

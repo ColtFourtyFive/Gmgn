@@ -104,14 +104,33 @@ export interface ReportedReserves {
   mayhem?: boolean;
   /** Venue: 'pump' (bonding curve), 'pump-amm' (PumpSwap) or another launchpad. */
   pool?: string;
+  /**
+   * Post-trade real reserves of a pump.fun curve (UI units), when the source reports them (program
+   * logs: the TradeEvent carries them; a mayhem curve's real SOL does not follow from its virtual SOL).
+   */
+  realSolInBondingCurve?: number;
+  realTokensInBondingCurve?: number;
 }
 
-export interface CreateEvent extends ReportedReserves {
+/** What a source knows of an event beyond PumpPortal's frames (Solana program logs: feed/solana). */
+export interface EventProvenance {
+  /** Block time of the transaction (ms); absent = the time of receipt. */
+  at?: number;
+  slot?: number;
+  /** The source that delivered it. */
+  source?: 'pumpportal' | 'logs';
+}
+
+export interface CreateEvent extends ReportedReserves, EventProvenance {
   kind: 'create';
   signature: string;
   mint: string;
   /** The creator (dev) wallet. */
   trader: string;
+  /** The coin's creator when it is not `trader` (program logs: a create signed by one wallet for another). */
+  creator?: string;
+  /** SOL the dev buy cost the wallet, fees included, when the source knows it exactly (program logs). */
+  walletSol?: number;
   /** Tokens the creator bought in the creation transaction. */
   initialBuy: number;
   /** SOL that buy put into the curve (the creator paid the curve's fees on top). */
@@ -126,7 +145,7 @@ export interface CreateEvent extends ReportedReserves {
   curveFeeRate?: number;
 }
 
-export interface TradeEvent extends ReportedReserves {
+export interface TradeEvent extends ReportedReserves, EventProvenance {
   kind: 'trade';
   side: 'buy' | 'sell';
   signature: string;
@@ -135,13 +154,24 @@ export interface TradeEvent extends ReportedReserves {
   tokenAmount: number;
   /** SOL into (buy) / out of (sell) the curve or pool, before the venue's fees. */
   solAmount: number;
+  /**
+   * SOL the wallet paid (buy) / received (sell), fees included, when the source knows it exactly
+   * (program logs: the curve amount plus / less the protocol, creator and cashback fees the event
+   * reports; PumpSwap's user side). Without it ingest derives it from solAmount and the fee rate.
+   */
+  walletSol?: number;
 }
 
-export interface MigrateEvent {
+export interface MigrateEvent extends EventProvenance {
   kind: 'migrate';
   signature: string;
   mint: string;
   pool?: string;
+  /** The pool as the migration created it, when the source reports it (program logs: MigrateV2's event). */
+  poolAddress?: string;
+  /** SOL side (vault plus virtual quote reserve) and tokens the pool starts with (UI units). */
+  poolNative?: number;
+  poolTokens?: number;
 }
 
 export type FeedEvent = CreateEvent | TradeEvent | MigrateEvent;

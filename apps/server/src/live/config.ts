@@ -16,6 +16,12 @@ export interface LiveConfig {
     pumpPortalUrl: string;
     /** Tokens whose trades are streamed at once; the least active are dropped beyond this. */
     maxTrackedTokens: number;
+    /**
+     * Solana market-data sources (LIVE_SOLANA_SOURCES, default "logs,pumpportal"): 'logs' = the pump.fun
+     * and PumpSwap programs' logs over the RPC WebSocket (needs wsUrl), 'pumpportal' = PumpPortal's feed.
+     * Absent = the default.
+     */
+    solanaSources?: SolanaSource[];
   };
   jupiter: {
     /** Swap API base (https://lite-api.jup.ag free tier, https://api.jup.ag with a key). */
@@ -49,6 +55,30 @@ export interface LiveSecurityConfig {
   whitelistDelayMs: number;
   /** LIVE_SESSION_TTL_DAYS: a session expires after this long without use (ms, sliding). */
   sessionTtlMs: number;
+}
+
+export type SolanaSource = 'logs' | 'pumpportal';
+export const DEFAULT_SOLANA_SOURCES: SolanaSource[] = ['logs', 'pumpportal'];
+
+/**
+ * LIVE_SOLANA_SOURCES: a comma list of 'logs' and 'pumpportal' (order does not matter: program logs are
+ * the primary source whenever an RPC WebSocket is configured). Unknown names are reported and ignored;
+ * nothing usable means the default. 'logs' without a WebSocket URL is reported (PumpPortal then carries
+ * launches and migrations alone, and trades only with a funded key).
+ */
+export function parseSolanaSources(raw: string | null, wsUrl: string | null, problems: string[]): SolanaSource[] {
+  let sources = DEFAULT_SOLANA_SOURCES;
+  if (raw) {
+    const names = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const valid = names.filter((s): s is SolanaSource => s === 'logs' || s === 'pumpportal');
+    const unknown = names.filter((s) => s !== 'logs' && s !== 'pumpportal');
+    if (unknown.length) problems.push(`LIVE_SOLANA_SOURCES: unknown source(s) ${unknown.join(', ')} ignored (use logs, pumpportal)`);
+    if (valid.length) sources = [...new Set(valid)];
+  }
+  if (sources.includes('logs') && !wsUrl) {
+    problems.push('No Solana RPC WebSocket (SOLANA_WS_URL / SOLANA_RPC_URL): the program-log feed is off, so Solana trades stream only through PumpPortal with a funded PUMPPORTAL_API_KEY');
+  }
+  return sources;
 }
 
 export const DEFAULT_WHITELIST_DELAY_HOURS = 24;
@@ -132,16 +162,19 @@ export function loadLiveConfig(e: NodeJS.ProcessEnv = process.env): LoadedLiveCo
   // Kept as configured (swaps then answer 503 trading_unavailable) so a typo never silently drops fees.
   else if (feeWallet && platformFeeBps > 0 && !isSolanaAddress(feeWallet)) problems.push('FEE_WALLET_ADDRESS is not a valid Solana address: trading is disabled until it is fixed');
   const security = loadSecurityConfig(e, problems);
+  const wsUrl = env(e, 'SOLANA_WS_URL') ?? (rpcUrl ? wsFromHttp(rpcUrl) : null);
+  const solanaSources = parseSolanaSources(env(e, 'LIVE_SOLANA_SOURCES'), wsUrl, problems);
 
   return {
     problems,
     config: {
       chain: 'sol',
       rpcUrl,
-      wsUrl: env(e, 'SOLANA_WS_URL') ?? (rpcUrl ? wsFromHttp(rpcUrl) : null),
+      wsUrl,
       feed: {
         pumpPortalUrl: env(e, 'PUMPPORTAL_WS_URL') ?? 'wss://pumpportal.fun/api/data',
         maxTrackedTokens: Math.max(100, Number(env(e, 'LIVE_MAX_TRACKED_TOKENS') ?? 3000) || 3000),
+        solanaSources,
       },
       jupiter: {
         baseUrl: env(e, 'JUPITER_API_URL') ?? (env(e, 'JUPITER_API_KEY') ? 'https://api.jup.ag' : 'https://lite-api.jup.ag'),
