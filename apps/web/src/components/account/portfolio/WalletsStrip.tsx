@@ -29,7 +29,7 @@ function WalletCard({ chain, wallet, dim }: { chain: ChainId; wallet: UserWallet
           title={`Top the paper wallet back up to ${CHAINS[chain].starterBalance} ${CHAINS[chain].nativeSymbol} (once a minute)`}
           className="-mr-1 ml-auto !px-1.5 text-accent"
         >
-          Deposit
+          Faucet
         </Button>
       </div>
       <div className="flex min-w-0 items-baseline gap-1.5">
@@ -43,7 +43,7 @@ function WalletCard({ chain, wallet, dim }: { chain: ChainId; wallet: UserWallet
   );
 }
 
-/** The four paper wallets: native balance, address and faucet "Deposit". */
+/** The four paper wallets: native balance, address and faucet button. */
 export function WalletsStrip({ scope, className }: { scope: ChainScope; className?: string }) {
   const wallets = useSession((s) => s.account?.wallets);
   if (!wallets) return null;

@@ -97,7 +97,7 @@ export function AccountSection() {
           })}
         </ul>
         <p className="mt-2 text-xs text-faint">
-          Top wallets up from the <Link to={routes.portfolio()} className="text-accent hover:underline">Portfolio</Link> page (Deposit, once a minute per chain).
+          Top wallets up from the <Link to={routes.portfolio()} className="text-accent hover:underline">Portfolio</Link> page (Faucet, once a minute per chain).
         </p>
       </Panel>
 

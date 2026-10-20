@@ -83,7 +83,7 @@ export function MobileNavDrawer() {
               {wallet && <Native value={wallet.nativeBalance} chain={chain} className="text-sm text-muted" />}
             </div>
             <Button size="sm" variant="outline" icon={<Plus size={13} />} loading={pending} onClick={() => void deposit()}>
-              Deposit
+              Faucet
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-1">

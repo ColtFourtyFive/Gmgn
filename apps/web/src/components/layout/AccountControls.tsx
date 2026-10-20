@@ -23,7 +23,7 @@ export function useDeposit(chain: ChainId): { deposit: () => Promise<void>; pend
       useSession.getState().setAccountBalance(chain, w.nativeBalance, w.nativeBalanceUsd);
       toast.success('Paper wallet topped up', `${formatNativeFor(chain, w.nativeBalance)} available`);
     } catch (err) {
-      toast.error('Deposit failed', errorMessage(err));
+      toast.error('Faucet failed', errorMessage(err));
     } finally {
       setPending(false);
     }
@@ -31,7 +31,7 @@ export function useDeposit(chain: ChainId): { deposit: () => Promise<void>; pend
   return { deposit, pending };
 }
 
-/** Native balance of the signed-in user's paper wallet on `chain`, plus Deposit. */
+/** Native balance of the signed-in user's paper wallet on `chain`, plus the faucet. */
 export function BalancePill({ chain, compact, className }: { chain: ChainId; compact?: boolean; className?: string }) {
   const wallet = useSession((s) => s.account?.wallets[chain]);
   const { deposit, pending } = useDeposit(chain);
@@ -51,7 +51,7 @@ export function BalancePill({ chain, compact, className }: { chain: ChainId; com
           className="flex h-full items-center gap-1 border-l border-line px-2 text-xs font-semibold text-accent transition-colors hover:bg-panel-3 disabled:opacity-60"
         >
           {pending ? <Spinner size={12} label="" /> : <Plus size={12} strokeWidth={2.5} />}
-          Deposit
+          Faucet
         </button>
       )}
     </div>
