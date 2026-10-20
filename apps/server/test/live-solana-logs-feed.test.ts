@@ -220,6 +220,17 @@ describe('program-log client (fake RPC WebSocket)', () => {
     await until(() => rpc.sockets.length >= 2, 4000);
     expect(c.stats.disconnects).toBeGreaterThanOrEqual(1);
   });
+
+  it('reconnects when the subscriptions are acknowledged but deliver nothing (pongs alone do not count)', async () => {
+    const rpc = await fakeRpc();
+    const { c } = client(rpc.url, { pingEveryMs: 30, staleMs: 2000, silentMs: 150 });
+    c.start();
+    await until(() => c.connected);
+    await until(() => !c.connected, 2000);
+    await until(() => rpc.sockets.length >= 2 && c.stats.silent >= 1, 4000);
+    // the new connection subscribes again
+    await until(() => rpc.requests.filter((r) => r.method === 'logsSubscribe').length >= 4);
+  });
 });
 
 // ---- source -------------------------------------------------------------------

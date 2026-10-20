@@ -150,7 +150,11 @@ export interface LiveDiagnostics {
   security: OnchainSecurity['stats'];
   rpc: { started: number; refused: number; queued: number };
   pruned: { tokens: number; wallets: number };
-  /** Per-source health: which sources run, connected, last event, events/s, decode errors and drops. */
+  /**
+   * Per-source health: which sources run, connected, last event, events/s, decode errors and drops. Program
+   * logs' catch-up: gaps too long to catch up, and gaps given up because a newer one waited behind a running
+   * catch-up (busy); caught-up watched-wallet trades too old to book.
+   */
   sources: {
     configured: SolanaSource[];
     logs: (SourceHealth & { detail: SolanaLogHealth; queueDropped: number; shed: number; catchUp: { tooLong: number; busy: number; watchedSkipped: number } }) | null;
@@ -223,6 +227,8 @@ export class LiveMarket implements MarketSource {
   private logShed = 0;
   private readonly catchUpStats = { tooLong: 0, busy: 0, watchedSkipped: 0 };
   private catchUpRunning = false;
+  /** A gap reported while a catch-up runs, caught up next. */
+  private pendingGap: SlotGap | null = null;
   private startedAt = 0;
 
   constructor(
@@ -582,7 +588,9 @@ export class LiveMarket implements MarketSource {
       return;
     }
     if (this.catchUpRunning) {
-      this.catchUpStats.busy++;
+      // One gap waits for the running catch-up (the latest: an older waiting one is given up).
+      if (this.pendingGap) this.catchUpStats.busy++;
+      this.pendingGap = gap;
       return;
     }
     const mints = this.catchUpMints(this.env.logsCatchUpMints);
@@ -593,6 +601,9 @@ export class LiveMarket implements MarketSource {
       .catch((err: unknown) => this.log.warn(`[live] program-log catch-up failed: ${err instanceof Error ? err.message : 'error'}`))
       .finally(() => {
         this.catchUpRunning = false;
+        const next = this.pendingGap;
+        this.pendingGap = null;
+        if (next) this.onLogGap(next);
       });
   }
 

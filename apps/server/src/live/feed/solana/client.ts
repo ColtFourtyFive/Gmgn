@@ -7,9 +7,10 @@
 // transaction mentioning both programs arrives once per subscription and is
 // passed on once (signatures remembered over a bounded window).
 //
-// Resilience: a dropped or silent connection (nothing heard for `staleMs`
-// counts as dead; with hundreds of notifications a second that is generous)
-// reconnects with jittered exponential backoff and re-subscribes. The slots
+// Resilience: a dropped or dead connection (nothing heard, not even a pong, for
+// `staleMs`), or one whose subscriptions deliver nothing for `silentMs` (with
+// hundreds of notifications a second that is generous), reconnects with
+// jittered exponential backoff and re-subscribes. The slots
 // before the drop and after the reconnect bound a gap, reported through onGap
 // so the owner can catch up (feed/solana/catchup.ts). A subscription the RPC
 // refuses (method not offered on its plan, ...) is reported and retried on the
@@ -18,9 +19,10 @@
 //
 // Measured on 2026-10-20 (scripts/solana-logs-check.ts): api.mainnet-beta.solana.com
 // serves both subscriptions (~170 + ~800 notifications/s, ~2 MB/s of JSON) but
-// closes the socket every 30-70 s (code 1006); solana-rpc.publicnode.com serves them
-// without drops but delivers about half the transactions. Other public endpoints
-// refuse logsSubscribe. Production needs a provider WebSocket.
+// closes the socket every 20-70 s (code 1006); solana-rpc.publicnode.com served them
+// without drops but delivered about half the transactions, and an hour later
+// acknowledged them and delivered nothing. Other public endpoints refuse
+// logsSubscribe. Production needs a provider WebSocket.
 
 import WebSocket from 'ws';
 import { PUMP_AMM_PROGRAM_ID, PUMP_PROGRAM_ID, type DecodedLogs, type ProgramName } from './events';
@@ -58,6 +60,11 @@ export interface ProgramLogClientOptions {
   backoffMaxMs?: number;
   pingEveryMs?: number;
   staleMs?: number;
+  /**
+   * Subscribed but no notification for this long: the endpoint acknowledges and delivers nothing
+   * (seen on solana-rpc.publicnode.com): reconnect. pump.fun alone logs hundreds of transactions a second.
+   */
+  silentMs?: number;
   handshakeTimeoutMs?: number;
   /** Signatures remembered for the cross-subscription dedupe. */
   dedupeWindow?: number;
@@ -90,6 +97,8 @@ export interface ProgramLogClientStats {
   gapSlots: number;
   lastGap: SlotGap | null;
   bytes: number;
+  /** Connections dropped because they delivered nothing for silentMs. */
+  silent: number;
 }
 
 const OPEN = 1;
@@ -132,6 +141,7 @@ export class ProgramLogClient {
   private readonly maxMs: number;
   private readonly pingEveryMs: number;
   private readonly staleMs: number;
+  private readonly silentMs: number;
   private readonly dedupeWindow: number;
   private readonly random: () => number;
   private readonly now: () => number;
@@ -155,7 +165,10 @@ export class ProgramLogClient {
     gapSlots: 0,
     lastGap: null,
     bytes: 0,
+    silent: 0,
   };
+  /** When every subscription of the current connection was acknowledged (0 = not yet). */
+  private subscribedAt = 0;
 
   constructor(private readonly opts: ProgramLogClientOptions) {
     this.programs = opts.programs ?? [PUMP_PROGRAM_ID, PUMP_AMM_PROGRAM_ID];
@@ -163,6 +176,7 @@ export class ProgramLogClient {
     this.maxMs = opts.backoffMaxMs ?? 30_000;
     this.pingEveryMs = opts.pingEveryMs ?? 15_000;
     this.staleMs = opts.staleMs ?? 30_000;
+    this.silentMs = opts.silentMs ?? 30_000;
     this.dedupeWindow = opts.dedupeWindow ?? 20_000;
     this.random = opts.random ?? Math.random;
     this.now = opts.now ?? Date.now;
@@ -171,9 +185,14 @@ export class ProgramLogClient {
     for (const p of this.programs) this.state.set(p, 'pending');
   }
 
-  /** Connected, every subscription acknowledged, and heard from within staleMs. */
+  /** Connected, every subscription acknowledged, heard from within staleMs and notified within silentMs. */
   get connected(): boolean {
-    return this.open && this.now() - this.lastHeardAt < this.staleMs && [...this.state.values()].every((s) => s === 'active');
+    return this.open && this.now() - this.lastHeardAt < this.staleMs && this.subscribedAt > 0 && !this.silent();
+  }
+
+  /** Subscribed, and no notification since silentMs (or since the subscriptions, if later). */
+  private silent(): boolean {
+    return this.subscribedAt > 0 && this.now() - Math.max(this.lastNotificationAt ?? 0, this.subscribedAt) >= this.silentMs;
   }
 
   /** Highest slot seen in a notification (0 before the first). */
@@ -261,6 +280,7 @@ export class ProgramLogClient {
       if (this.ws !== ws) return;
       this.stats.connects++;
       this.openedAt = this.lastHeardAt = this.now();
+      this.subscribedAt = 0;
       this.requests.clear();
       this.subscriptionsById.clear();
       for (const p of this.programs) this.state.set(p, 'pending');
@@ -294,6 +314,7 @@ export class ProgramLogClient {
       if (this.open) this.stats.disconnects++;
       // Whatever arrives after the reconnect, the slots since the last one heard may be missing.
       if (this.highestSlot > 0) this.gapFrom ??= this.highestSlot;
+      this.subscribedAt = 0;
       this.setOpen(false);
       if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -325,6 +346,13 @@ export class ProgramLogClient {
       if (!ws || ws.readyState !== OPEN) return;
       if (this.now() - this.lastHeardAt >= this.staleMs) {
         this.note(`no data for ${Math.round((this.now() - this.lastHeardAt) / 1000)}s, reconnecting`);
+        ws.terminate();
+        return;
+      }
+      if (this.silent()) {
+        // Answers pings, delivers nothing: a subscription the endpoint stopped serving.
+        this.stats.silent++;
+        this.note(`subscribed but no notification for ${Math.round((this.now() - Math.max(this.lastNotificationAt ?? 0, this.subscribedAt)) / 1000)}s, reconnecting`);
         ws.terminate();
         return;
       }
@@ -438,6 +466,7 @@ export class ProgramLogClient {
     }
     this.subscriptionsById.set(result, program);
     this.state.set(program, 'active');
+    if ([...this.state.values()].every((s) => s === 'active')) this.subscribedAt = this.now();
   }
 
   /** Slot bookkeeping: the first slot after a reconnect closes the gap opened by the drop. */

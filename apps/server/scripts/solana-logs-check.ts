@@ -139,12 +139,30 @@ async function main(): Promise<void> {
     console.log(`connects ${h.connects}, disconnects ${h.disconnects}, gaps ${h.gaps} (${h.gapSlots} slots), refusals ${h.refusals}, malformed ${h.malformed}, handler errors ${h.handlerErrors}`);
     console.log('decoded events (total, per second):');
     for (const [k, v] of Object.entries(h.stats.decoded).sort((a, b) => b[1] - a[1])) console.log(`  ${k.padEnd(48)} ${String(v).padStart(7)}  ${(v / elapsed).toFixed(2)}/s`);
-    console.log(JSON.stringify({ decodeErrors: h.stats.decodeErrors, lastDecodeError: h.stats.lastDecodeError, truncated: h.stats.truncated, emitted: h.stats.emitted, filtered: h.stats.filtered, otherQuote: h.stats.otherQuote, roundTrips: h.stats.roundTrips, unresolvedPools: h.stats.unresolvedPools, poolLookups: h.stats.poolLookups, catchUp: h.stats.catchUp, catchUpSkipped: l.catchUp, shed: l.shed, queueDropped: l.queueDropped, maxQueue }, null, 1));
+    console.log(JSON.stringify({ decodeErrors: h.stats.decodeErrors, lastDecodeError: h.stats.lastDecodeError, truncated: h.stats.truncated, recovered: h.stats.recovered, recoveryFailed: h.stats.recoveryFailed, silent: h.silent, emitted: h.stats.emitted, filtered: h.stats.filtered, otherQuote: h.stats.otherQuote, roundTrips: h.stats.roundTrips, unresolvedPools: h.stats.unresolvedPools, poolLookups: h.stats.poolLookups, catchUp: h.stats.catchUp, catchUpSkipped: l.catchUp, shed: l.shed, queueDropped: l.queueDropped, maxQueue }, null, 1));
   }
   console.log(JSON.stringify({ verify: d.verify, ingest: d.ingest, staleReserves: d.staleReserves, parked: d.parked, applyErrors: d.applyErrors, lookup: d.lookup, rpc: d.rpc, problems: market.liveStatus().problems ?? [] }, null, 1));
   const tokens = world.tokensByChain.sol.map((a) => world.tokens.get(a)).filter((t): t is TokenState => !!t);
   const trades = tokens.reduce((s, t) => s + t.tradeCount, 0);
   console.log(`World: ${tokens.length} tokens (${tokens.filter((t) => t.status === 'migrated').length} migrated, ${tokens.filter((t) => t.totalSupply > 1e9).length} mayhem), ${trades} trades booked (${(trades / elapsed).toFixed(2)}/s), ${world.wallets.size} wallets, heap ${(process.memoryUsage().heapUsed / 1e6).toFixed(0)} MB`);
+
+  // ---- catch-up path: re-read a token's last booked slots as if they had been a gap ----
+  // (right away, and a token that is not the busiest: a page of signatures must still reach back)
+  console.log('\n=== catch-up read-back (getSignaturesForAddress + getTransaction event CPIs) ===');
+  const candidate = tokens.filter((t) => t.trades.length >= 10).sort((a, b) => a.tradeCount - b.tradeCount)[0];
+  if (candidate) {
+    const recent = candidate.trades.slice(-10);
+    const gap = { fromSlot: Math.min(...recent.map((t) => t.block)), toSlot: Math.max(...recent.map((t) => t.block)) };
+    const r = await catchUpGap(gap, [candidate.address], { connection, run: (fn) => patiently(fn).then((v) => (v === null ? Promise.reject(new Error('rpc')) : v)), seen: () => false, maxTransactions: 30, signaturesPerAddress: 1000, maxPages: 5 });
+    const booked = new Set(recent.map((t) => t.txHash));
+    let events = 0;
+    let found = 0;
+    for (const tx of r.transactions) {
+      events += tx.decoded?.events.length ?? 0;
+      if (booked.has(tx.signature)) found++;
+    }
+    console.log(`${candidate.symbol} slots ${gap.fromSlot}-${gap.toSlot}: ${r.missing} signatures in the window, ${r.transactions.length} transactions read (${r.skipped} beyond the cap, ${r.errors} errors, incomplete ${r.incomplete}), ${events} events decoded from their event CPIs; ${found} of the ${booked.size} booked trades' transactions among them`);
+  }
 
   // ---- booked trades vs the chain ----------------------------------------
   console.log('\n=== booked trades vs getTransaction ===');
@@ -199,23 +217,6 @@ async function main(): Promise<void> {
     );
   }
   console.log(`\n${exact} of ${sample.length} exact, ${explained} more exact once the account rent and Jito tips of the same transaction are counted; the rest also paid another instruction (a bot's fee, a transfer)`);
-
-  // ---- catch-up path: re-read a busy token's recent slots as if they had been a gap ----
-  console.log('\n=== catch-up read-back (getSignaturesForAddress + getTransaction) ===');
-  const busiest = [...tokens].sort((a, b) => b.tradeCount - a.tradeCount)[0];
-  if (busiest && busiest.trades.length > 0) {
-    const recent = busiest.trades.slice(-20);
-    const gap = { fromSlot: Math.min(...recent.map((t) => t.block)), toSlot: Math.max(...recent.map((t) => t.block)) };
-    const r = await catchUpGap(gap, [busiest.address], { connection, run: (fn) => patiently(fn).then((v) => (v === null ? Promise.reject(new Error('rpc')) : v)), seen: () => false, maxTransactions: 25, signaturesPerAddress: 1000, maxPages: 3 });
-    const booked = new Set(recent.map((t) => t.txHash));
-    let decoded = 0;
-    let found = 0;
-    for (const tx of r.transactions) {
-      decoded += decodeProgramLogs(tx.logs).events.length;
-      if (booked.has(tx.signature)) found++;
-    }
-    console.log(`${busiest.symbol} slots ${gap.fromSlot}-${gap.toSlot}: ${r.missing} signatures in the window, ${r.transactions.length} transactions read (${r.skipped} beyond the cap, ${r.errors} errors, incomplete pages ${r.incomplete}), ${decoded} events decoded; ${found} of the ${Math.min(r.transactions.length, booked.size)} booked trades' signatures among them`);
-  }
   market.tapLogs(null);
   await built.close();
   rmSync(dataDir, { recursive: true, force: true });
