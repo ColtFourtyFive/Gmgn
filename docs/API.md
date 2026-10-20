@@ -199,6 +199,7 @@ and loses the `user` channel).
 |---|---|---|---|
 | POST | `/api/trade/quote` 🔒 | `QuoteRequest` | `Quote` (400 `quote_unavailable` when the trade cannot be priced) |
 | POST | `/api/trade/swap` 🔒 | `SwapRequest` | `SwapReceipt` (200 with `ok:false` + `error` for trade-level failures like slippage; 429 `rate_limited` with `retry-after` past 10 manual swaps per account per second) |
+| POST | `/api/trade/initials` 🔒 | `SellInitialsRequest` `{ chain, token, presetId? }` | `SellInitialsQuote` (read-only sizing of "sell initials", see below) |
 | GET | `/api/orders` 🔒 | `?status=open\|history&chain=&token=` | `Order[]` |
 | POST | `/api/orders` 🔒 | `CreateOrderRequest` | `Order` |
 | DELETE | `/api/orders/:id` 🔒 | | `Order` |
@@ -210,6 +211,17 @@ and loses the `user` channel).
 | PATCH/DELETE | `/api/sniper/:id` 🔒 | | `SniperTask` / `{ ok: true }` |
 | GET/POST | `/api/alerts` 🔒 | POST body: `Omit<AlertRule,'id'\|'createdAt'\|'lastTriggeredAt'>` | `AlertRule[]` / `AlertRule` |
 | PATCH/DELETE | `/api/alerts/:id` 🔒 | | `AlertRule` / `{ ok: true }` |
+
+Sell initials (`/api/trade/initials`): the sell that takes out what the position cost and leaves the rest
+as a free ride. The target is the PnL engine's cost basis of the tokens still held (`costBasisUsd`: average
+cost incl. platform and network fees, already reduced by earlier sells), in native at the rate the position
+was bought at (`targetNative = costBasisUsd × boughtNative / boughtUsd`, exact for a single buy). The sale is
+priced like a manual sell with `presetId` (default: the active sell preset): venue curve or pool, sell tax,
+platform fee and the preset's network fee. `status`: `ok` with `tokens` = the smallest amount whose net
+proceeds (`expectedOutNative`) reach the target (`sellRate` = tokens / balance); `under_water` when selling
+the whole bag would return less (`exitValueNative` < `targetNative`); `no_position`; `nothing_to_recover`
+(no cost basis). Nothing is sold: clients place it as a swap with `amountKind: 'tokens'`, so the usual
+slippage check applies and a price move before it lands changes what comes back.
 
 Landing under congestion: the simulated confirmation latency (120-600ms, +150ms anti-MEV) is stretched
 × `(1 + 3·max(0, level − 0.2)·w)`, with `w` = 1 for a bid (priority fee, plus the tip on the anti-MEV route)

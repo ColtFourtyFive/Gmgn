@@ -12,6 +12,7 @@ import {
   type Order,
   type PortfolioSummary,
   type Quote,
+  type SellInitialsQuote,
   type SniperTask,
   type SwapReceipt,
   type SwapRequest,
@@ -356,6 +357,73 @@ describe('swaps', () => {
 // ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
+
+describe('sell initials', () => {
+  const initials = (user: User, token: TokenState) =>
+    call<SellInitialsQuote>('POST', '/api/trade/initials', { auth: user.auth, body: { chain: token.chain, token: token.address } });
+
+  it('sells exactly what takes out the native the bag cost, fees included, and keeps the rest', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const start = user.wallet().native;
+    await swap(user, token, { amount: 1 });
+    const spent = start - user.wallet().native;
+    pumpTo(token, whale(), price(token) * 2);
+
+    const q = (await initials(user, token)).body;
+    expect(q.status).toBe('ok');
+    expect(q.targetNative).toBeCloseTo(spent, 9);
+    expect(q.costBasisUsd).toBeCloseTo(user.wallet().positions.get(token.address)!.costBasisUsd, 9);
+    expect(q.sellRate).toBeGreaterThan(0.4);
+    expect(q.sellRate).toBeLessThan(0.65);
+    expect(q.expectedOutNative).toBeGreaterThanOrEqual(q.targetNative);
+    expect(q.exitValueNative).toBeGreaterThan(q.expectedOutNative);
+
+    const before = user.wallet().native;
+    const r = await swap(user, token, { side: 'sell', amount: q.tokens!, amountKind: 'tokens' });
+    expect(r.ok).toBe(true);
+    // the initial investment is back in the wallet, the rest of the bag is a free ride
+    expect(user.wallet().native - before).toBeCloseTo(spent, 6);
+    expect(user.wallet().native).toBeCloseTo(start, 6);
+    expect(balance(user.wallet(), token)).toBeCloseTo(q.balance - q.tokens!, 3);
+  });
+
+  it('recovers only what earlier sells left of the cost basis', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const start = user.wallet().native;
+    await swap(user, token, { amount: 1 });
+    const spent = start - user.wallet().native;
+    pumpTo(token, whale(), price(token) * 3);
+    await swap(user, token, { side: 'sell', amount: 50, amountKind: 'percent' });
+
+    const q = (await initials(user, token)).body;
+    expect(q.status).toBe('ok');
+    // average cost: half the bag sold takes half the cost basis with it
+    expect(q.targetNative).toBeCloseTo(spent / 2, 6);
+    const before = user.wallet().native;
+    await swap(user, token, { side: 'sell', amount: q.tokens!, amountKind: 'tokens' });
+    expect(user.wallet().native - before).toBeCloseTo(spent / 2, 6);
+  });
+
+  it('refuses an under-water bag and explains with the exit value; nothing held or unknown tokens', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const bag = whale();
+    world().executeSwap(bag, token, 'buy', 20);
+    await swap(user, token, { amount: 1 });
+    dumpTo(token, [bag], price(token) * 0.7);
+    const q = (await initials(user, token)).body;
+    expect(q).toMatchObject({ status: 'under_water', tokens: null, sellRate: null });
+    expect(q.exitValueNative).toBeGreaterThan(0);
+    expect(q.exitValueNative).toBeLessThan(q.targetNative);
+
+    const other = launch({ devBuy: 1 }).token;
+    expect((await initials(user, other)).body).toMatchObject({ status: 'no_position', balance: 0, tokens: null });
+    expect((await call('POST', '/api/trade/initials', { auth: user.auth, body: { chain: 'sol', token: 'missing' } })).status).toBe(404);
+    expect((await call('POST', '/api/trade/initials', { auth: user.auth, body: { chain: 'sol' } })).status).toBe(400);
+  });
+});
 
 describe('orders', () => {
   it('fills a dip limit buy and a market-cap breakout limit sell', async () => {
@@ -1306,6 +1374,7 @@ describe('access', () => {
     const routes: [Method, string][] = [
       ['POST', '/api/trade/quote'],
       ['POST', '/api/trade/swap'],
+      ['POST', '/api/trade/initials'],
       ['GET', '/api/orders'],
       ['POST', '/api/orders'],
       ['DELETE', '/api/orders/x'],

@@ -3,6 +3,7 @@ import type { TokenPositionRow } from '@trenchscope/shared';
 import { Boxes, Wallet } from 'lucide-react';
 import { AddressLink, Age, ChainIcon, Compact, FlashValue, Pct, Price, TokenLink, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
+import { SellInitialsButton } from '@/components/trade/sellInitials';
 import { DataTable, EmptyState, Popover, Skeleton, type Column } from '@/components/ui';
 import { serverNow, useIsMobile, useOpenLink } from '@/hooks';
 import { useDisplaySettings } from '@/hooks/useSettings';
@@ -54,11 +55,12 @@ function BundlesChip({ row }: { row: PortfolioRow }) {
   );
 }
 
-/** Quick sells (and share) for rows the launch wallet holds; bundle-only rows have nothing to sell from here. */
+/** Quick sells, sell initials (and share) for rows the launch wallet holds; bundle-only rows have nothing to sell from here. */
 function RowSell({ row, size, className }: { row: PortfolioRow; size?: 'xs' | 'sm'; className?: string }) {
   if (row.walletRole === 'bundle') return <span className="text-xs text-faint">Bundles only</span>;
   return (
     <>
+      <SellInitialsButton chain={row.chain} token={row.token} symbol={row.tokenInfo.symbol} underWater={row.valueUsd <= row.costBasisUsd} size={size} />
       <SellButtons row={row} size={size} className={className} />
       <ShareRow row={row} size={size} />
     </>
@@ -193,7 +195,7 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
         key: 'sell',
         header: 'Quick sell',
         align: 'right',
-        width: 180,
+        width: 252,
         render: (r) => (
           <span className="flex items-center justify-end gap-1">
             <RowSell row={r} />

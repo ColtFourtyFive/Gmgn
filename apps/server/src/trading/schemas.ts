@@ -49,6 +49,12 @@ export const quoteSchema = z.object({
   presetId: presetId.optional(),
 });
 
+export const initialsSchema = z.object({
+  chain: chainSchema,
+  token: address,
+  presetId: presetId.optional(),
+});
+
 export const swapSchema = quoteSchema
   .extend({
     slippage: positive.max(1).optional(),

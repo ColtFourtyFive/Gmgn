@@ -900,6 +900,41 @@ export interface SwapReceipt {
   orders: Order[];
 }
 
+/** POST /api/trade/initials: size a "sell initials" (recover what the bag cost, keep the rest as a free ride). */
+export interface SellInitialsRequest {
+  chain: ChainId;
+  token: string;
+  /** Sell preset whose fees the sale pays (default: the active sell preset). */
+  presetId?: PresetId;
+}
+
+/**
+ * ok = selling `tokens` returns `targetNative` (the bag's cost basis) after fees; under_water = even the
+ * whole bag returns less (`exitValueNative` < `targetNative`); no_position = nothing held;
+ * nothing_to_recover = the bag has no cost basis (it cost nothing).
+ */
+export type SellInitialsStatus = 'ok' | 'under_water' | 'no_position' | 'nothing_to_recover';
+
+export interface SellInitialsQuote {
+  chain: ChainId;
+  token: string;
+  status: SellInitialsStatus;
+  /** Tokens held. */
+  balance: number;
+  /** Cost basis of the tokens still held (USD, average cost incl. fees: what earlier sells left of it). */
+  costBasisUsd: number;
+  /** Native to take out: the cost basis at the native rate the position was bought at. */
+  targetNative: number;
+  /** Tokens to sell (status ok), else null. */
+  tokens: number | null;
+  /** tokens / balance (status ok), else null. */
+  sellRate: number | null;
+  /** Native that sale returns after tax, platform and network fees (>= targetNative when ok). */
+  expectedOutNative: number;
+  /** Native selling the whole bag would return now, after fees. */
+  exitValueNative: number;
+}
+
 export type OrderKind =
   | 'limit_buy' //       buy when price/mcap crosses trigger in `direction` (below = buy the dip, above = breakout)
   | 'limit_sell' //      sell when price/mcap crosses trigger in `direction` (above = take profit, below = stop loss)

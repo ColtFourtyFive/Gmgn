@@ -31,6 +31,8 @@ import type {
   Resolution,
   RewardsSummary,
   SearchResult,
+  SellInitialsQuote,
+  SellInitialsRequest,
   Signal,
   SniperTask,
   StatWindow,
@@ -205,6 +207,7 @@ export const api = {
   // trading
   quote: (body: QuoteRequest) => post<Quote>('/trade/quote', body),
   swap: (body: SwapRequest) => post<SwapReceipt>('/trade/swap', body),
+  sellInitials: (body: SellInitialsRequest) => post<SellInitialsQuote>('/trade/initials', body),
   orders: (q: { status?: 'open' | 'history'; chain?: ChainId; token?: string } = {}) => get<Order[]>('/orders', q),
   createOrder: (body: CreateOrderRequest) => post<Order>('/orders', body),
   cancelOrder: (id: string) => del<Order>(`/orders/${id}`),

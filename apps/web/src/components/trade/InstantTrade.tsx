@@ -73,8 +73,10 @@ function OrderButton({ order, chain, symbol, trade, disabled, className }: { ord
           <Zap size={11} className="shrink-0 fill-current" aria-hidden />
           {formatNative(order.amount)}
         </>
-      ) : (
+      ) : 'percent' in order ? (
         `${order.percent}%`
+      ) : (
+        quickOrderLabel(order, chain)
       )}
     </button>
   );
