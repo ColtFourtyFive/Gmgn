@@ -6,20 +6,24 @@
 //                  token programs. The World's native balance and positions follow the chain;
 //                  tokens held but unknown to the World are handed to the market to track. A read
 //                  that raced one of the account's own transactions is dropped (the next one wins).
-//   deposits       getSignaturesForAddress since the last seen signature; incoming SOL / SPL from
-//                  transactions others paid for become 'deposit' transfers (idempotent ids) and a
-//                  notification.
+//   deposits       getSignaturesForAddress since the last seen signature, for the wallet and for each
+//                  of its token accounts (a transfer into a token account the wallet already has does
+//                  not list the wallet itself); incoming SOL / SPL from transactions others paid for
+//                  become 'deposit' transfers (idempotent ids) and a notification. A token account is
+//                  re-read when its balance moved since its last scan (and every account on a slow
+//                  sweep); more signatures than one pass reads are caught up oldest first, so none
+//                  in between is skipped.
 //   withdrawals    see withdrawals.ts; open ones resume at start.
 
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, type Connection } from '@solana/web3.js';
 import { formatNative, shortAddress, type DepositInfo, type UserWallet, type WalletTransfer } from '@trenchscope/shared';
 import { HttpError, type AppContext } from '../../context';
 import type { TokenState, WalletState } from '../../sim/world';
 import { fromBaseUnits } from '../execution/amounts';
 import type { TxLike } from '../execution/fills';
 import { lanesFor } from '../execution/lanes';
-import { readChainBalances, uiAmount } from './balances';
-import { depositId, parseDeposits } from './deposits';
+import { readChainBalances, uiAmount, type ChainBalances } from './balances';
+import { depositId, parseDeposits, readTransaction } from './deposits';
 import { FEE_RESERVE_SOL, Withdrawals, type WithdrawalDeps } from './withdrawals';
 
 const SYNC_EVERY_MS = 20_000;
@@ -29,12 +33,26 @@ const REFRESH_MIN_INTERVAL_MS = 3000;
 const SIGNATURE_PAGE = 100;
 const MAX_PAGES = 5;
 const FIRST_SCAN_LIMIT = 20;
+/** Every token account of an active wallet is re-read at least this often, moved or not. */
+const TOKEN_SWEEP_EVERY_MS = 30 * 60_000;
+/** Signatures already read, per wallet: the wallet's and its token accounts' scans share them. */
+const READ_SIGNATURES_KEPT = 2000;
 const STATE_KEY = 'live-wallets';
 
 interface WalletsState {
   version: 1;
-  /** Wallet address -> newest signature already scanned for deposits. */
+  /** Wallet or token account address -> newest signature already scanned for deposits. */
   cursors: Record<string, string>;
+}
+
+interface ScanJob {
+  accountId: string;
+  wallet: string;
+  known: Set<string>;
+  found: WalletTransfer[];
+  /** Signatures of this wallet already read (bounded, oldest dropped first). */
+  read: Set<string>;
+  cursorsMoved: boolean;
 }
 
 export class LiveWallets {
@@ -46,6 +64,17 @@ export class LiveWallets {
   private readonly scanning = new Map<string, Promise<WalletTransfer[]>>();
   private readonly pendingAfterFill = new Set<string>();
   private readonly lastRefresh = new Map<string, number>();
+  /** Wallet address -> its token accounts and their raw balances at the last complete read. */
+  private readonly holdings = new Map<string, Map<string, bigint>>();
+  /** Token account -> raw balance when its signatures were last scanned. */
+  private readonly scannedRaw = new Map<string, bigint>();
+  /** Wallet address -> when all its token accounts were last scanned. */
+  private readonly sweptAt = new Map<string, number>();
+  /** Address -> oldest signature fetched while catching up on a backlog (read further back next pass). */
+  private readonly backlog = new Map<string, string>();
+  /** Wallet address -> signatures already read. */
+  private readonly readSignatures = new Map<string, Set<string>>();
+  private readonly warnedVersions = new Set<number>();
   private passRunning = false;
   private timer: NodeJS.Timeout | null = null;
   private now: () => number;
@@ -98,8 +127,9 @@ export class LiveWallets {
           this.active.delete(accountId);
           continue;
         }
-        await this.scanDeposits(accountId).catch((err) => console.warn('[wallets] deposit scan failed', errText(err)));
+        // Balances first: the deposit scan re-reads the token accounts whose balance moved.
         await this.sync(accountId).catch((err) => console.warn('[wallets] balance sync failed', errText(err)));
+        await this.scanDeposits(accountId).catch((err) => console.warn('[wallets] deposit scan failed', errText(err)));
       }
     } finally {
       this.passRunning = false;
@@ -141,6 +171,8 @@ export class LiveWallets {
     const lanes = lanesFor(ctx.live!);
     const version = lanes.version(accountId);
     const balances = await readChainBalances(connection, new PublicKey(ref.address));
+    // What the chain holds is true whatever raced it: the deposit scan uses it to pick token accounts.
+    if (balances.complete) this.noteHoldings(ref.address, balances);
     // One of the account's transactions moved its balances meanwhile: the next read will see them.
     if (lanes.busy(accountId) || lanes.version(accountId) !== version) return null;
     const wallet = ctx.accounts.walletFor(accountId, 'sol');
@@ -168,43 +200,128 @@ export class LiveWallets {
     const connection = ctx.live?.connection;
     const ref = ctx.accounts.walletRef(accountId, 'sol');
     if (!connection || !ref) return [];
-    const owner = new PublicKey(ref.address);
-    const cursor = this.cursors[ref.address];
-    // Newest first, down to the cursor (exclusive); paged when more landed than one page.
-    const sigs: { signature: string; err: unknown; blockTime?: number | null }[] = [];
-    let before: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const limit = cursor ? SIGNATURE_PAGE : FIRST_SCAN_LIMIT;
-      const batch = await connection.getSignaturesForAddress(owner, { until: cursor, before, limit }, 'confirmed');
+    const wallet = ref.address;
+    let read = this.readSignatures.get(wallet);
+    if (!read) this.readSignatures.set(wallet, (read = new Set()));
+    const job: ScanJob = {
+      accountId,
+      wallet,
+      known: new Set((ctx.store?.transfersFor(accountId, 500) ?? []).map((t) => t.id)),
+      found: [],
+      read,
+      cursorsMoved: false,
+    };
+    try {
+      // The wallet itself: SOL in, and token transfers that created one of its token accounts.
+      await this.scanAddress(connection, job, wallet);
+      // Its token accounts: a transfer into an existing one lists only the token account.
+      const { due, sweep } = this.tokenAccountsDue(wallet);
+      for (const [account, raw] of due) {
+        // One not caught up yet (a backlog, a transaction not readable yet) stays due.
+        if (await this.scanAddress(connection, job, account)) this.scannedRaw.set(account, raw);
+      }
+      if (sweep) this.sweptAt.set(wallet, this.now());
+    } finally {
+      if (job.cursorsMoved) this.persist();
+      while (read.size > READ_SIGNATURES_KEPT) read.delete(read.values().next().value as string);
+      if (job.found.length) void this.sync(accountId).catch(() => undefined);
+    }
+    return job.found;
+  }
+
+  /** Record the deposits among `address`'s signatures since its cursor (oldest first); true when caught up. */
+  private async scanAddress(connection: Connection, job: ScanJob, address: string): Promise<boolean> {
+    const cursor = this.cursors[address];
+    const key = new PublicKey(address);
+    // Newest first, down to the cursor (exclusive); paged when more landed than one page. A first
+    // scan (no cursor) looks at the newest few only.
+    const limit = cursor ? SIGNATURE_PAGE : FIRST_SCAN_LIMIT;
+    const sigs: { signature: string; err: unknown }[] = [];
+    let before = cursor ? this.backlog.get(address) : undefined;
+    let complete = !cursor;
+    for (let page = 0; cursor || page === 0; page++) {
+      // Past the last page: one probe for anything left between this window and the cursor.
+      const probe = page === MAX_PAGES;
+      const batch = await connection.getSignaturesForAddress(key, { until: cursor, before, limit: probe ? 1 : limit }, 'confirmed');
+      if (probe) {
+        complete = batch.length === 0;
+        break;
+      }
       sigs.push(...batch);
-      if (!cursor || batch.length < limit) break;
+      if (!cursor) break;
+      if (batch.length < limit) {
+        complete = true;
+        break;
+      }
       before = batch[batch.length - 1].signature;
     }
-    if (!sigs.length) return [];
-
-    const known = new Set((ctx.store?.transfersFor(accountId, 500) ?? []).map((t) => t.id));
-    const found: WalletTransfer[] = [];
+    if (!complete) {
+      // More landed since the cursor than one pass reads: go further back next pass and process
+      // from the cursor up, so nothing between the cursor and this window is skipped.
+      this.backlog.set(address, before!);
+      return false;
+    }
+    this.backlog.delete(address);
     let newest = cursor;
-    for (const s of [...sigs].reverse()) {
-      if (!s.err) {
-        const tx = (await connection.getTransaction(s.signature, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })) as TxLike | null;
-        if (!tx) break; // not readable yet: resume from here next pass
-        for (const d of parseDeposits(tx, ref.address)) {
-          const id = depositId(s.signature, d.mint);
-          if (known.has(id)) continue;
-          known.add(id);
-          const transfer = this.recordDeposit(accountId, id, s.signature, tx, d);
-          found.push(transfer);
+    let caughtUp = true;
+    try {
+      for (const s of [...sigs].reverse()) {
+        if (!s.err && !job.read.has(s.signature)) {
+          const res = await readTransaction(connection, s.signature);
+          if (res.status === 'missing') {
+            caughtUp = false; // not readable yet: resume from here next pass
+            break;
+          }
+          if (res.status === 'unsupported') {
+            if (!this.warnedVersions.has(res.version)) {
+              this.warnedVersions.add(res.version);
+              console.warn(`[wallets] transaction version ${res.version} is not readable yet (first: ${s.signature}); the deposit scan skips such transactions`);
+            }
+          } else {
+            for (const d of parseDeposits(res.tx, job.wallet)) {
+              const id = depositId(s.signature, d.mint);
+              if (job.known.has(id)) continue;
+              job.known.add(id);
+              job.found.push(this.recordDeposit(job.accountId, id, s.signature, res.tx, d));
+            }
+          }
+          job.read.add(s.signature);
         }
+        newest = s.signature;
       }
-      newest = s.signature;
+    } finally {
+      if (newest && newest !== cursor) {
+        this.cursors[address] = newest;
+        job.cursorsMoved = true;
+      }
     }
-    if (newest && newest !== cursor) {
-      this.cursors[ref.address] = newest;
-      this.persist();
+    return caughtUp;
+  }
+
+  /** The wallet's token accounts as of a complete read; closed ones forget their scan state. */
+  private noteHoldings(wallet: string, balances: ChainBalances): void {
+    const next = new Map<string, bigint>();
+    for (const b of balances.tokens.values()) for (const p of b.parts) next.set(p.address, p.raw);
+    let pruned = false;
+    for (const account of this.holdings.get(wallet)?.keys() ?? []) {
+      if (next.has(account)) continue;
+      this.scannedRaw.delete(account);
+      this.backlog.delete(account);
+      if (this.cursors[account] !== undefined) {
+        delete this.cursors[account];
+        pruned = true;
+      }
     }
-    if (found.length) void this.sync(accountId).catch(() => undefined);
-    return found;
+    this.holdings.set(wallet, next);
+    if (pruned) this.persist();
+  }
+
+  /** Token accounts to scan now: never scanned, balance moved since their last scan, or all of them on a sweep. */
+  private tokenAccountsDue(wallet: string): { due: [string, bigint][]; sweep: boolean } {
+    const held = this.holdings.get(wallet);
+    if (!held?.size) return { due: [], sweep: false };
+    const sweep = this.now() - (this.sweptAt.get(wallet) ?? -Infinity) >= TOKEN_SWEEP_EVERY_MS;
+    return { due: [...held].filter(([account, raw]) => sweep || this.cursors[account] === undefined || this.scannedRaw.get(account) !== raw), sweep };
   }
 
   private recordDeposit(accountId: string, id: string, signature: string, tx: TxLike, d: ReturnType<typeof parseDeposits>[number]): WalletTransfer {

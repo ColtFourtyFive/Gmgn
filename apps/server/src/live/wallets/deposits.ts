@@ -1,8 +1,36 @@
 // Deposit detection: incoming SOL and SPL transfers to an embedded wallet in
 // transactions someone else paid for. Transactions the wallet itself paid
 // for (its swaps and withdrawals) are never deposits.
+//
+// Verified on mainnet (scripts/sol-wallets-verify.ts, fixtures in test/fixtures/rpc/real):
+// pre/post token balances carry `owner` and `programId` for SPL and Token-2022; account keys
+// are the static keys then the lookup tables' writable, then readonly addresses; and a token
+// transfer into an account the wallet already has does not list the wallet among the keys
+// (only its token account), so the scanner reads the token accounts' signatures too.
 
+import type { Connection } from '@solana/web3.js';
 import { accountKeysOf, type TokenBalanceLike, type TxLike } from '../execution/fills';
+
+/**
+ * Newest transaction format read here. Mainnet carries v1 transactions (SIMD-0385: no lookup
+ * tables, compute budget in the message) besides legacy and v0; asking for less makes the RPC
+ * refuse the whole read ("Transaction version (1) is not supported by the requesting client").
+ */
+export const MAX_TX_VERSION = 1;
+
+export type TxRead = { status: 'ok'; tx: TxLike } | { status: 'missing' } | { status: 'unsupported'; version: number };
+
+/** getTransaction for any transaction a wallet may appear in; a format newer than MAX_TX_VERSION is reported, not thrown. */
+export async function readTransaction(connection: Connection, signature: string): Promise<TxRead> {
+  try {
+    const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: MAX_TX_VERSION, commitment: 'confirmed' });
+    return tx ? { status: 'ok', tx: tx as unknown as TxLike } : { status: 'missing' };
+  } catch (err) {
+    const m = /transaction version \((\d+)\) is not supported/i.exec(err instanceof Error ? err.message : String(err));
+    if (m) return { status: 'unsupported', version: Number(m[1]) };
+    throw err;
+  }
+}
 
 export interface ParsedDeposit {
   /** null = native SOL. */
