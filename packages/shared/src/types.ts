@@ -1095,6 +1095,13 @@ export interface PortfolioSummary {
   equity: { t: number; valueUsd: number }[];
 }
 
+/** GET /api/portfolio/calendar: the account's daily realized PnL (the wallet page's calendar, all its wallets summed). */
+export interface PortfolioCalendar {
+  chain: ChainId | 'all';
+  /** The last 30 UTC days, oldest first (day = UTC midnight, ms); zero on days without sells. */
+  days: { day: number; pnlUsd: number }[];
+}
+
 export interface FollowedWallet {
   chain: ChainId;
   address: string;

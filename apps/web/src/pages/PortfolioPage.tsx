@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { PortfolioSummary } from '@trenchscope/shared';
-import { Activity, ChartLine, History, ListChecks, Wallet } from 'lucide-react';
+import { Activity, CalendarDays, ChartLine, History, ListChecks, Wallet } from 'lucide-react';
 import { AccountGate, ChainFilter, EquityChart, accountKeys, parseScope, useSignedIn, type ChainScope } from '@/components/account';
 import { ActivityTable } from '@/components/account/portfolio/ActivityTable';
+import { CalendarPanel } from '@/components/account/portfolio/CalendarPanel';
 import { mergeBundleRows } from '@/components/account/portfolio/bundles';
 import { OrdersTable } from '@/components/account/portfolio/OrdersTable';
 import { PositionsTable } from '@/components/account/portfolio/PositionsTable';
@@ -15,8 +16,8 @@ import { ErrorState, Panel, SegmentedControl, Skeleton, Spinner, Tabs } from '@/
 import { serverNow, useIsMobile } from '@/hooks';
 import { api } from '@/lib/api';
 
-type PortfolioTab = 'positions' | 'open' | 'history' | 'activity';
-const TABS: PortfolioTab[] = ['positions', 'open', 'history', 'activity'];
+type PortfolioTab = 'positions' | 'open' | 'history' | 'activity' | 'calendar';
+const TABS: PortfolioTab[] = ['positions', 'open', 'history', 'activity', 'calendar'];
 
 type EquityRange = '1h' | '6h' | '24h' | '7d';
 const RANGE_MS: Record<EquityRange, number> = { '1h': 3_600_000, '6h': 6 * 3_600_000, '24h': 24 * 3_600_000, '7d': 7 * 24 * 3_600_000 };
@@ -56,7 +57,7 @@ export default function PortfolioPage() {
         icon={<Wallet size={22} />}
         title="Track your paper portfolio"
         description="Sign in to see your balances, open positions, PnL and every trade across Solana, BNB Chain, Base and Ethereum."
-        features={['Live PnL and equity curve', 'One-click 25 / 50 / 100% sells', 'Open orders, order history and trade log']}
+        features={['Live PnL, equity curve and a daily PnL calendar', 'One-click 25 / 50 / 100% sells and "sell initials"', 'Open orders, order history and trade log']}
       >
         <PortfolioBody scope={scope} tab={tab} onTab={(t) => setParam('tab', t === 'positions' ? null : t)} />
       </AccountGate>
@@ -98,6 +99,7 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
     { value: 'open' as const, label: 'Open orders', icon: <ListChecks size={13} />, count: open.data?.length },
     { value: 'history' as const, label: 'Order history', icon: <History size={13} /> },
     { value: 'activity' as const, label: 'Activity', icon: <Activity size={13} /> },
+    { value: 'calendar' as const, label: 'Calendar', icon: <CalendarDays size={13} /> },
   ];
 
   return (
@@ -142,6 +144,7 @@ function PortfolioBody({ scope, tab, onTab }: { scope: ChainScope; tab: Portfoli
             ) : (
               <ActivityTable rows={activity.data ?? []} loading={activity.isLoading} showChain={showChain} />
             ))}
+          {tab === 'calendar' && <CalendarPanel scope={scope} />}
         </div>
       </Panel>
     </div>

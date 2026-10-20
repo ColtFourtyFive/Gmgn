@@ -66,6 +66,11 @@ export async function registerTradingRoutes(app: FastifyInstance, ctx: AppContex
     return trading.portfolio.summary(id, parse(portfolioQuerySchema, req.query).chain);
   });
 
+  app.get('/api/portfolio/calendar', async (req) => {
+    const id = auth(req);
+    return trading.portfolio.calendar(id, parse(portfolioQuerySchema, req.query).chain);
+  });
+
   app.get('/api/portfolio/activity', async (req) => {
     const id = auth(req);
     const q = parse(activityQuerySchema, req.query);

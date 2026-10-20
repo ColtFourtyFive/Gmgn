@@ -10,6 +10,7 @@ import {
   type CopyTradeTask,
   type FeedItem,
   type Order,
+  type PortfolioCalendar,
   type PortfolioSummary,
   type Quote,
   type SellInitialsQuote,
@@ -1495,6 +1496,28 @@ describe('portfolio', () => {
     expect((await call('GET', '/api/portfolio?chain=doge', { auth: user.auth })).status).toBe(400);
   });
 
+  it('serves the daily realized PnL calendar of every wallet of the account (30 UTC days)', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    await swap(user, token, { amount: 1 });
+    pumpTo(token, whale(), price(token) * 2);
+    await swap(user, token, { side: 'sell', amount: 50, amountKind: 'percent' });
+    const realized = user.wallet().positions.get(token.address)!.realizedPnlUsd;
+    expect(realized).toBeGreaterThan(0);
+
+    const sol = (await call<PortfolioCalendar>('GET', '/api/portfolio/calendar?chain=sol', { auth: user.auth })).body;
+    expect(sol.chain).toBe('sol');
+    expect(sol.days).toHaveLength(30);
+    const day = 86_400_000;
+    expect(sol.days[29].day).toBe(Math.floor(world().now / day) * day);
+    expect(sol.days[29].pnlUsd).toBeCloseTo(realized, 6);
+    expect(sol.days.slice(0, 29).every((d) => d.pnlUsd === 0)).toBe(true);
+    const all = (await call<PortfolioCalendar>('GET', '/api/portfolio/calendar', { auth: user.auth })).body;
+    expect(all).toMatchObject({ chain: 'all' });
+    expect(all.days[29].pnlUsd).toBeCloseTo(realized, 6);
+    expect((await call('GET', '/api/portfolio/calendar?chain=doge', { auth: user.auth })).status).toBe(400);
+  });
+
   it('counts every position toward PnL and win rate, beyond the holdings row cap', async () => {
     useFakeAnalytics();
     const user = await signIn();
@@ -1531,6 +1554,7 @@ describe('access', () => {
       ['DELETE', '/api/orders/x'],
       ['GET', '/api/portfolio'],
       ['GET', '/api/portfolio/activity'],
+      ['GET', '/api/portfolio/calendar'],
       ['GET', '/api/copytrade'],
       ['POST', '/api/copytrade'],
       ['PATCH', '/api/copytrade/x'],

@@ -240,6 +240,7 @@ and loses the `user` channel).
 | DELETE | `/api/orders/:id` 🔒 | | `Order` |
 | GET | `/api/portfolio` 🔒 | `?chain=all\|sol\|...` | `PortfolioSummary` (positions carry `walletRole`) |
 | GET | `/api/portfolio/activity` 🔒 | `?chain=&limit=` | `FeedItem[]` |
+| GET | `/api/portfolio/calendar` 🔒 | `?chain=all\|sol\|...` | `PortfolioCalendar` `{ chain, days }`: daily realized PnL over the last 30 UTC days (oldest first), the wallet page's calendar series (`stats['30d'].dailyPnl`) summed over the account's wallets on those chains, bundle wallets included |
 | GET/POST | `/api/copytrade` 🔒 | POST body: `Omit<CopyTradeTask,'id'\|'createdAt'\|'stats'\|'consecutiveFailures'>` | `CopyTradeTask[]` / `CopyTradeTask` |
 | PATCH/DELETE | `/api/copytrade/:id` 🔒 | PATCH: partial task | `CopyTradeTask` / `{ ok: true }` |
 | GET/POST | `/api/sniper` 🔒 | POST body: `Omit<SniperTask,'id'\|'createdAt'\|'buysDone'\|'lastTriggeredAt'>` | `SniperTask[]` / `SniperTask` |
