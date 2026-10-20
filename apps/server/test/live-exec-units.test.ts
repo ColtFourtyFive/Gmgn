@@ -1,9 +1,16 @@
 // Live execution building blocks, offline: integer money math, transaction
-// assembly (fees, tip, compute budget), the Jupiter client against documented
-// response shapes, fill parsing from getTransaction fixtures, send routing and
+// assembly (fees, tip, compute budget), the Jupiter client against recorded
+// lite-api.jup.ag responses, fill parsing on real mainnet transactions and on
+// mainnet simulations of the venue's own swaps, rent, send routing and
 // confirmation, failure reasons.
 
+import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type * as PumpSdk from '@pump-fun/pump-sdk';
+import { NATIVE_MINT, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import {
   ComputeBudgetInstruction,
   ComputeBudgetProgram,
@@ -15,14 +22,21 @@ import {
   TransactionInstruction,
   TransactionMessage,
 } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { WSOL_MINT } from '@trenchscope/shared';
-import { bpsOf, fromBaseUnits, maxWithSlippage, minWithSlippage, percentOf, slippageToBps, solToLamports, toBaseUnits } from '../src/live/execution/amounts';
-import { describeTxError, walletDelta, type TxLike } from '../src/live/execution/fills';
+import { RENT_EXEMPT_MIN_LAMPORTS, TOKEN_ACCOUNT_RENT_LAMPORTS, bpsOf, fromBaseUnits, maxWithSlippage, minWithSlippage, percentOf, slippageToBps, solToLamports, toBaseUnits } from '../src/live/execution/amounts';
+import { accountKeysOf, describeTxError, walletDelta, type TxLike } from '../src/live/execution/fills';
 import { JITO_TIP_ACCOUNTS, jitoTransactionsUrl, pickTipAccount } from '../src/live/execution/jito';
-import { JupiterClient, JupiterRouteError, JupiterUnavailableError, routeComputeUnits, routeLabel, swapInstructionsSchema, toInstruction } from '../src/live/execution/jupiter';
+import { JupiterClient, JupiterRouteError, JupiterUnavailableError, routeComputeUnits, routeLabel, simulationFailure, swapInstructionsSchema, toInstruction, type JupiterQuote } from '../src/live/execution/jupiter';
+import { PUMP_PROGRAM_ID, pumpVolumeAccumulatorOf } from '../src/live/execution/pump';
+import { PUMPSWAP_PROGRAM_ID, poolVolumeAccumulatorOf } from '../src/live/execution/pumpswap';
+import { ACCOUNT_SIZE, LEGACY_LAMPORTS_PER_BYTE, RentSchedule, rentExemptMinimum } from '../src/live/execution/rent';
 import { confirmSignature, sendSigned, SendRefusedError } from '../src/live/execution/send';
 import { assertSignedAsBuilt, compileV0, computeUnitPrice, swapInstructions } from '../src/live/execution/tx';
-import { FakeConnection, fakeFetch, fixture, newAddress } from './fixtures/rpc/fake-chain';
+import { FIXTURES, FakeConnection, fakeFetch, fixture, newAddress } from './fixtures/rpc/fake-chain';
+
+// The SDK's ESM build does not load under Node's ESM loader (see live/execution/pump.ts): its CommonJS build.
+const { PUMP_SDK } = createRequire(import.meta.url)('@pump-fun/pump-sdk') as typeof PumpSdk;
 
 const addr = () => new PublicKey(newAddress());
 
@@ -137,114 +151,281 @@ describe('swap transaction assembly', () => {
   });
 });
 
-describe('Jupiter client', () => {
-  const vars = { MINT: newAddress(), AMM: newAddress() };
+describe('Jupiter client (recorded lite-api.jup.ag responses)', () => {
+  const vars = () => ({ MINT: newAddress(), OWNER: newAddress(), OWNER_ATA: newAddress(), WSOL_ATA: newAddress(), UVA_PUMP: newAddress(), UVA_AMM: newAddress() });
 
-  it('quotes ExactIn with the slippage bound and the API key header', async () => {
-    const ff = fakeFetch({ quote: () => fixture('jupiter/quote-buy.json', vars) });
+  it('quotes ExactIn with the slippage bound and the API key header; route steps may carry a null bps', async () => {
+    const v = vars();
+    const ff = fakeFetch({ quote: () => fixture('jupiter/quote-buy.json', v) });
     const client = new JupiterClient({ baseUrl: 'https://api.jup.test/', apiKey: 'secret-key' }, ff.fetch);
-    const q = await client.quote({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: 1_000_000_000n, slippageBps: 2500 });
+    const q = await client.quote({ inputMint: WSOL_MINT, outputMint: v.MINT, amount: 10_000_000n, slippageBps: 1000 });
     const req = ff.requests[0];
     expect(req.url.origin + req.url.pathname).toBe('https://api.jup.test/swap/v1/quote');
-    expect(Object.fromEntries(req.url.searchParams)).toMatchObject({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: '1000000000', slippageBps: '2500', swapMode: 'ExactIn' });
+    expect(Object.fromEntries(req.url.searchParams)).toMatchObject({ inputMint: WSOL_MINT, outputMint: v.MINT, amount: '10000000', slippageBps: '1000', swapMode: 'ExactIn', restrictIntermediateTokens: 'true', maxAccounts: '54' });
     expect(req.headers['x-api-key']).toBe('secret-key');
-    expect(q.outAmount).toBe('35000000000000');
+    expect(q).toMatchObject({ outAmount: '3806559599', otherAmountThreshold: '3425903640', slippageBps: 1000 });
+    expect(q.routePlan[0]).toMatchObject({ percent: 100, bps: null });
     expect(routeLabel(q)).toBe('Pump.fun Amm');
   });
 
   it('sends no API key on the free tier and posts the quote for instructions', async () => {
-    const ff = fakeFetch({ swapInstructions: () => fixture('jupiter/swap-instructions-sell.json', { ...vars, OWNER: newAddress(), WSOL_ATA: newAddress(), OWNER_ATA: newAddress(), POOL_BASE: newAddress(), POOL_QUOTE: newAddress() }) });
+    const v = vars();
+    const ff = fakeFetch({ swapInstructions: () => fixture('jupiter/swap-instructions-sell.json', v) });
     const client = new JupiterClient({ baseUrl: 'https://lite-api.jup.test', apiKey: null }, ff.fetch);
-    const quote = fixture<Parameters<JupiterClient['swapInstructions']>[0]>('jupiter/quote-sell.json', vars);
-    const owner = newAddress();
-    const res = await client.swapInstructions(quote, owner);
+    const quote = fixture<JupiterQuote>('jupiter/quote-sell.json', v);
+    const res = await client.swapInstructions(quote, v.OWNER);
     const req = ff.requests[0];
     expect(req.method).toBe('POST');
     expect(req.headers['x-api-key']).toBeUndefined();
-    expect(req.body).toMatchObject({ userPublicKey: owner, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, quoteResponse: { outAmount: '950000000' } });
-    // no computeUnitLimit field: read from the SetComputeUnitLimit instruction
-    expect(routeComputeUnits(res)).toBe(180_000);
+    expect(req.body).toMatchObject({ userPublicKey: v.OWNER, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, quoteResponse: { outAmount: '25204439' } });
+    expect(routeComputeUnits(res)).toBe(93_400);
+    // without the field, the limit is read from Jupiter's SetComputeUnitLimit instruction (the same number)
+    expect(routeComputeUnits({ ...res, computeUnitLimit: undefined })).toBe(93_400);
     expect(toInstruction(res.swapInstruction).programId.toBase58()).toBe('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4');
+    expect(res.addressLookupTableAddresses).toEqual(['3rUkY2dKAeg1MSywtHqSVZPUftaYKeAPi6aWYKoCCM2f']);
   });
 
-  it('tells "no route" apart from an unavailable router', async () => {
-    const noRoute = fakeFetch({ quote: () => ({ status: 400, json: fixture('jupiter/error-no-route.json') }) });
-    await expect(new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, noRoute.fetch).quote({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: 1n, slippageBps: 100 })).rejects.toBeInstanceOf(JupiterRouteError);
-    const limited = fakeFetch({ quote: () => ({ status: 429, json: { error: 'Too many requests' } }) });
-    await expect(new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, limited.fetch).quote({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: 1n, slippageBps: 100 })).rejects.toBeInstanceOf(JupiterUnavailableError);
-    const broken = fakeFetch({ quote: () => ({ inAmount: 'lots' }) });
-    await expect(new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, broken.fetch).quote({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: 1n, slippageBps: 100 })).rejects.toBeInstanceOf(JupiterUnavailableError);
+  it('tells "no route" (NO_ROUTES_FOUND, TOKEN_NOT_TRADABLE) apart from an unavailable router', async () => {
+    const quote = (fetchFn: typeof fetch) => new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, fetchFn).quote({ inputMint: WSOL_MINT, outputMint: newAddress(), amount: 1n, slippageBps: 100 });
+    for (const body of [fixture('jupiter/error-no-route.json'), fixture('jupiter/error-not-tradable.json', { MINT: newAddress() })]) {
+      await expect(quote(fakeFetch({ quote: () => ({ status: 400, json: body }) }).fetch)).rejects.toBeInstanceOf(JupiterRouteError);
+    }
+    // a 400 without a route code (a malformed request) is not the user's "no route"
+    await expect(quote(fakeFetch({ quote: () => ({ status: 400, json: { error: 'Query parameter outputMint cannot be parsed: WrongSize' } }) }).fetch)).rejects.toBeInstanceOf(JupiterUnavailableError);
+    await expect(quote(fakeFetch({ quote: () => ({ status: 429, json: { error: 'Too many requests' } }) }).fetch)).rejects.toBeInstanceOf(JupiterUnavailableError);
+    await expect(quote(fakeFetch({ quote: () => ({ inAmount: 'lots' }) }).fetch)).rejects.toBeInstanceOf(JupiterUnavailableError);
     const down = (async () => {
       throw new TypeError('fetch failed');
     }) as unknown as typeof fetch;
-    await expect(new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, down).quote({ inputMint: WSOL_MINT, outputMint: vars.MINT, amount: 1n, slippageBps: 100 })).rejects.toBeInstanceOf(JupiterUnavailableError);
+    await expect(quote(down)).rejects.toBeInstanceOf(JupiterUnavailableError);
   });
 
-  it('accepts the documented swap-instructions shape', () => {
-    const parsed = swapInstructionsSchema.safeParse(fixture('jupiter/swap-instructions-buy.json', { MINT: newAddress(), AMM: newAddress(), OWNER: newAddress(), WSOL_ATA: newAddress(), OWNER_ATA: newAddress(), POOL_BASE: newAddress(), POOL_QUOTE: newAddress(), ALT: newAddress() }));
+  it('accepts the recorded swap-instructions shape (lookup table, setup, cleanup, simulated limit)', () => {
+    const parsed = swapInstructionsSchema.safeParse(fixture('jupiter/swap-instructions-buy.json', vars()));
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.setupInstructions).toHaveLength(3);
-      expect(routeComputeUnits(parsed.data)).toBe(180_000);
+      expect(parsed.data.cleanupInstruction).toBeTruthy();
+      expect(parsed.data.simulationError).toBeNull();
+      expect(routeComputeUnits(parsed.data)).toBe(100_710);
+      expect(parsed.data.addressLookupTableAddresses).toEqual(['BbRnvbxKkFEDU85LX7xKyob3BgXYX4dsHNvVFEFTbLiQ']);
     }
+  });
+
+  it('a route that fails in Jupiter\'s simulation is refused; a simulation Jupiter could not run only drops its compute limit', async () => {
+    const v = vars();
+    const quote = fixture<JupiterQuote>('jupiter/quote-buy.json', v);
+    const answer = (simulationError: unknown) =>
+      new JupiterClient({ baseUrl: 'https://j.test', apiKey: null }, fakeFetch({ swapInstructions: () => ({ ...fixture<object>('jupiter/swap-instructions-buy.json', v), computeUnitLimit: 1_400_000, simulationError }) }).fetch).swapInstructions(quote, v.OWNER);
+    // seen on mainnet: a wallet short of SOL
+    await expect(answer({ errorCode: 'TRANSACTION_ERROR', error: 'Error processing Instruction 2: custom program error: 0x1' })).rejects.toThrow(new JupiterRouteError('the swap would fail: insufficient balance'));
+    await expect(answer({ errorCode: 'TRANSACTION_ERROR', error: 'Error processing Instruction 4: custom program error: 0x1771' })).rejects.toThrow(/slippage exceeded/);
+    // seen on mainnet: Jupiter's own RPC failed; the route stands, its 1.4M default limit does not
+    const res = await answer({ errorCode: 'SIMULATION_ERROR', error: 'Failed to simulate the swap: RPC failed' });
+    expect(res.computeUnitLimit).toBeUndefined();
+    expect(res.computeBudgetInstructions).toEqual([]);
+    expect(routeComputeUnits(res)).toBeNull();
+    expect(simulationFailure('Error processing Instruction 3: custom program error: 0x26')).toBe('the swap would fail: Error processing Instruction 3: custom program error: 0x26');
   });
 });
 
-describe('fill parsing (getTransaction fixtures)', () => {
+/** Trade events of the pump programs in a transaction's logs (what the program says the trader paid / got). */
+function tradeEventsOf(logs: string[]): { side: 'buy' | 'sell'; tokens: bigint; sol: bigint; user: string }[] {
+  const disc = (name: string) => createHash('sha256').update(`event:${name}`).digest().subarray(0, 8);
+  const out: ReturnType<typeof tradeEventsOf> = [];
+  for (const line of logs) {
+    if (!line.startsWith('Program data: ')) continue;
+    const data = Buffer.from(line.slice(14), 'base64');
+    const head = data.subarray(0, 8);
+    if (head.equals(disc('TradeEvent'))) {
+      const e = PUMP_SDK.decodeTradeEventBc(data.subarray(8));
+      const fees = BigInt(e.fee.toString()) + BigInt(e.creatorFee.toString());
+      const sol = BigInt(e.solAmount.toString());
+      out.push({ side: e.isBuy ? 'buy' : 'sell', tokens: BigInt(e.tokenAmount.toString()), sol: e.isBuy ? sol + fees : sol - fees, user: e.user.toBase58() });
+    } else if (head.equals(disc('BuyEvent'))) {
+      const e = PUMP_SDK.decodeBuyEventAmm(data.subarray(8));
+      const paid = e.ixName === 'buy_exact_quote_in' ? e.quoteAmountIn : e.userQuoteAmountIn;
+      out.push({ side: 'buy', tokens: BigInt(e.baseAmountOut.toString()), sol: BigInt(paid.toString()), user: e.user.toBase58() });
+    } else if (head.equals(disc('SellEvent'))) {
+      const e = PUMP_SDK.decodeSellEventAmm(data.subarray(8));
+      out.push({ side: 'sell', tokens: BigInt(e.baseAmountIn.toString()), sol: BigInt(e.userQuoteAmountOut.toString()), user: e.user.toBase58() });
+    }
+  }
+  return out;
+}
+
+/** Top-level System transfers from `from` to accounts that are not its own token accounts (tips, bot fees). */
+function transfersOut(tx: TxLike & { transaction: { message: { accountKeys: string[]; instructions: { programIdIndex: number; accounts: number[]; data: string }[] } } }, from: string): bigint {
+  const keys = accountKeysOf(tx);
+  const own = new Set([...(tx.meta!.preTokenBalances ?? []), ...(tx.meta!.postTokenBalances ?? [])].filter((b) => b.owner === from).map((b) => keys[b.accountIndex]));
+  own.add(getAssociatedTokenAddressSync(NATIVE_MINT, new PublicKey(from), true, TOKEN_PROGRAM_ID).toBase58());
+  let total = 0n;
+  for (const ix of tx.transaction.message.instructions) {
+    if (keys[ix.programIdIndex] !== SystemProgram.programId.toBase58()) continue;
+    const data = Buffer.from(bs58.decode(ix.data));
+    if (data.length === 12 && data.readUInt32LE(0) === 2 && keys[ix.accounts[0]] === from && !own.has(keys[ix.accounts[1]])) total += data.readBigUInt64LE(4);
+  }
+  return total;
+}
+
+describe('fill parsing on real mainnet transactions (test/fixtures/rpc/real-*.json)', () => {
+  const real = readdirSync(join(FIXTURES, 'rpc')).filter((f) => f.startsWith('real-'));
+
+  it('covers legacy and v0 (with lookup tables), pump.fun, PumpSwap and Jupiter, buys and sells', () => {
+    for (const pattern of [/^real-pump-buy-/, /^real-pump-sell-/, /^real-pumpswap-buy-/, /^real-pumpswap-sell-/, /^real-jupiter-/, /-legacy/, /-v0-alt/]) {
+      expect(real.some((f) => pattern.test(f)), String(pattern)).toBe(true);
+    }
+  });
+
+  it.each(real)('%s: token and SOL legs match what the program reports', (file) => {
+    const tx = fixture<Parameters<typeof transfersOut>[0]>(`rpc/${file}`);
+    const signer = tx.transaction.message.accountKeys[0];
+    const mint = [...(tx.meta!.postTokenBalances ?? []), ...(tx.meta!.preTokenBalances ?? [])].find((b) => b.owner === signer && b.mint !== WSOL_MINT)!.mint;
+    const d = walletDelta(tx, 'sig', signer, mint, [pumpVolumeAccumulatorOf(new PublicKey(signer)).toBase58(), poolVolumeAccumulatorOf(new PublicKey(signer)).toBase58()]);
+    expect(d.ok).toBe(true);
+    expect(d.decimals).toBe(6);
+    const tokenDelta = d.tokenPostRaw - d.tokenPreRaw;
+    expect(tokenDelta).not.toBe(0n);
+    // The same answer from web3.js's parsed shape (PublicKey objects instead of strings).
+    const parsedShape = {
+      ...tx,
+      transaction: { ...tx.transaction, message: { staticAccountKeys: tx.transaction.message.accountKeys.map((k) => new PublicKey(k)) } },
+      meta: { ...tx.meta!, loadedAddresses: tx.meta!.loadedAddresses ? { writable: tx.meta!.loadedAddresses.writable.map((k) => new PublicKey(String(k))), readonly: tx.meta!.loadedAddresses.readonly.map((k) => new PublicKey(String(k))) } : null },
+    } as unknown as TxLike;
+    const d2 = walletDelta(parsedShape, 'sig', signer, mint);
+    expect(d2.tokenPostRaw - d2.tokenPreRaw).toBe(tokenDelta);
+    expect(d2.ownerPostLamports).toBe(d.ownerPostLamports);
+    if (file.startsWith('real-jupiter')) return; // a Jupiter route may take an integrator fee inside it
+    const [ev] = tradeEventsOf(tx.meta!.logMessages ?? []).filter((e) => e.user === signer);
+    const sol = d.ownerPostLamports - d.ownerPreLamports;
+    const leg = ev.side === 'buy' ? -sol - d.feeLamports - d.rentLamports - transfersOut(tx, signer) : sol + d.feeLamports + d.rentLamports + transfersOut(tx, signer);
+    expect(ev.side === 'buy' ? tokenDelta : -tokenDelta).toBe(ev.tokens);
+    expect(leg).toBe(ev.sol);
+  });
+
+  it('counts a closed token account\'s refund as rent, not proceeds (PumpSwap sell that closed the emptied account)', () => {
+    const tx = fixture<TxLike>('rpc/real-pumpswap-sell-legacy.json');
+    const signer = accountKeysOf(tx)[0];
+    const mint = (tx.meta!.preTokenBalances ?? []).find((b) => b.owner === signer && b.mint !== WSOL_MINT)!.mint;
+    const d = walletDelta(tx, 'sig', signer, mint);
+    expect(d.tokenPostRaw - d.tokenPreRaw).toBe(-4_430_493_669n);
+    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(70_347_581n);
+    expect(d.rentLamports).toBe(-1_513_840n); // the Token-2022 account's rent came back
+  });
+
+  it('reads token accounts addressed through lookup tables at their writable indexes (static, then loaded writable, then readonly)', () => {
+    const tx = fixture<TxLike & { transaction: { message: { accountKeys: string[] } } }>('rpc/real-jupiter-v0-alt.json');
+    const keys = accountKeysOf(tx);
+    const loaded = tx.meta!.loadedAddresses!;
+    expect(keys.length).toBe(tx.transaction.message.accountKeys.length + loaded.writable.length + loaded.readonly.length);
+    expect(keys.slice(tx.transaction.message.accountKeys.length, tx.transaction.message.accountKeys.length + loaded.writable.length)).toEqual(loaded.writable);
+    const viaTables = (tx.meta!.postTokenBalances ?? []).filter((b) => b.accountIndex >= tx.transaction.message.accountKeys.length);
+    expect(viaTables.length).toBeGreaterThan(0);
+  });
+});
+
+describe('fill parsing of the venue\'s own swaps (mainnet simulations in getTransaction\'s shape)', () => {
   const vars = {
     OWNER: newAddress(),
     MINT: newAddress(),
     FEE_WALLET: newAddress(),
     WSOL_ATA: newAddress(),
     OWNER_ATA: newAddress(),
-    AMM: newAddress(),
-    POOL_BASE: newAddress(),
-    POOL_QUOTE: newAddress(),
-    ALT: newAddress(),
+    UVA_PUMP: newAddress(),
+    UVA_AMM: newAddress(),
     TIP: JITO_TIP_ACCOUNTS[3],
     SIG: 'sig',
     BLOCKHASH: newAddress(),
   };
 
-  it('reads a buy: token delta, owner SOL delta, fee, created token account rent, platform fee received', () => {
+  it('reads a Jupiter buy: token delta, SOL delta, fee, rent of the accounts opened less the wSOL account closed, platform fee and tip received', () => {
     const tx = fixture<TxLike>('rpc/tx-jupiter-buy.json', vars);
-    const d = walletDelta(tx, 'sig', vars.OWNER, vars.MINT);
+    const d = walletDelta(tx, 'sig', vars.OWNER, vars.MINT, [vars.UVA_PUMP, vars.UVA_AMM]);
     expect(d.ok).toBe(true);
-    expect(d.tokenPostRaw - d.tokenPreRaw).toBe(35_000_000_000_000n);
+    expect(d.tokenPostRaw - d.tokenPreRaw).toBe(3_602_664_396n);
     expect(d.decimals).toBe(6);
-    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(-1_010_844_280n);
-    expect(d.feeLamports).toBe(805_000n);
-    expect(d.rentLamports).toBe(2_039_280n);
-    expect(d.received(vars.FEE_WALLET)).toBe(8_000_000n);
-    // lookup-table accounts are indexed after the static keys
-    expect(d.received(vars.POOL_QUOTE)).toBe(1_000_000_000n);
-    // the venue leg: SOL out minus network fee, platform fee and refundable rent
-    expect(-(d.ownerPostLamports - d.ownerPreLamports) - d.feeLamports - 8_000_000n - d.rentLamports).toBe(1_000_000_000n);
+    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(-11_105_760n);
+    expect(d.feeLamports).toBe(105_000n);
+    // 1513840 (token account) + 1346200 (pump-amm volume accumulator Jupiter's PumpSwap step opened) - 2039280 (wSOL account closed)
+    expect(d.rentLamports).toBe(820_760n);
+    expect(d.received(vars.FEE_WALLET)).toBe(80_000n);
+    expect(d.received(vars.TIP)).toBe(100_000n);
+    // the venue leg: SOL out less network fee, tip, platform fee and rent
+    expect(-(d.ownerPostLamports - d.ownerPreLamports) - d.feeLamports - 100_000n - 80_000n - d.rentLamports).toBe(10_000_000n);
+    // without the accumulator, its rent would have been booked as price
+    expect(walletDelta(tx, 'sig', vars.OWNER, vars.MINT).rentLamports).toBe(820_760n - 1_346_200n);
   });
 
-  it('reads a sell, including the tip paid to the block engine', () => {
+  it('reads a Jupiter sell, including the tip paid to the block engine', () => {
     const d = walletDelta(fixture<TxLike>('rpc/tx-jupiter-sell.json', vars), 'sig', vars.OWNER, vars.MINT);
-    expect(d.tokenPostRaw - d.tokenPreRaw).toBe(-35_000_000_000_000n);
-    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(937_975_000n);
-    expect(d.received(vars.TIP)).toBe(2_000_000n);
-    expect(d.received(vars.FEE_WALLET)).toBe(7_220_000n);
+    expect(d.tokenPostRaw - d.tokenPreRaw).toBe(-25_341_017_950n);
+    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(24_817_968n);
+    expect(d.received(vars.TIP)).toBe(100_000n);
+    expect(d.received(vars.FEE_WALLET)).toBe(181_471n);
     expect(d.rentLamports).toBe(0n);
   });
 
-  it('reads a failed swap as a readable slippage failure that still cost the network fee', () => {
+  it('reads a real failed Jupiter swap as a readable slippage failure that still cost the network fee', () => {
     const d = walletDelta(fixture<TxLike>('rpc/tx-jupiter-failed.json', vars), 'sig', vars.OWNER, vars.MINT);
     expect(d.ok).toBe(false);
     expect(d.error).toMatch(/slippage exceeded/);
-    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(-805_000n);
+    expect(d.ownerPostLamports - d.ownerPreLamports).toBe(-d.feeLamports);
   });
 
-  it('describes common failures in words', () => {
+  it('describes common failures in words (codes confirmed by mainnet simulation)', () => {
     expect(describeTxError('BlockhashNotFound', null)).toMatch(/expired/);
     expect(describeTxError({ InstructionError: [2, { Custom: 1 }] }, [], ['', '', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'])).toBe('insufficient token balance');
-    expect(describeTxError({ InstructionError: [3, { Custom: 6002 }] }, [], ['', '', '', '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'])).toMatch(/slippage/);
-    expect(describeTxError({ InstructionError: [3, { Custom: 6005 }] }, [], ['', '', '', '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'])).toMatch(/migrating/);
+    // pump.fun TooMuchSolRequired / TooLittleSolReceived, BondingCurveComplete, SellZeroAmount
+    expect(describeTxError({ InstructionError: [4, { Custom: 6002 }] }, [], ['', '', '', '', PUMP_PROGRAM_ID])).toMatch(/slippage/);
+    expect(describeTxError({ InstructionError: [2, { Custom: 6003 }] }, [], ['', '', PUMP_PROGRAM_ID])).toMatch(/slippage/);
+    expect(describeTxError({ InstructionError: [3, { Custom: 6005 }] }, [], ['', '', '', PUMP_PROGRAM_ID])).toMatch(/migrating/);
+    expect(describeTxError({ InstructionError: [2, { Custom: 6022 }] }, [], ['', '', PUMP_PROGRAM_ID])).toBe('pump.fun: Sell zero amount');
+    // pump-amm ExceededSlippage, and another of its errors by name
+    expect(describeTxError({ InstructionError: [3, { Custom: 6004 }] }, [], ['', '', '', PUMPSWAP_PROGRAM_ID])).toMatch(/slippage/);
+    expect(describeTxError({ InstructionError: [3, { Custom: 6020 }] }, [], ['', '', '', PUMPSWAP_PROGRAM_ID])).toMatch(/^PumpSwap: /);
+    // Jupiter SlippageToleranceExceeded
+    expect(describeTxError({ InstructionError: [4, { Custom: 6001 }] }, [], ['', '', '', '', 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'])).toMatch(/slippage/);
     expect(describeTxError({ InstructionError: [0, 'InsufficientFundsForRent'] }, null)).toMatch(/rent/);
     expect(describeTxError({ InstructionError: [2, { Custom: 1 }] }, ['Transfer: insufficient lamports 100, need 2000'])).toBe('insufficient SOL balance');
+  });
+});
+
+describe('rent schedule', () => {
+  it('reads the per-byte rate from the cluster and prices every account the swaps open', async () => {
+    const conn = new FakeConnection();
+    const rates = await new RentSchedule().rates(conn.asConnection());
+    expect(rates).toEqual({ lamportsPerByte: 5080n, live: true });
+    // mainnet, October 2026
+    expect(rentExemptMinimum(ACCOUNT_SIZE.system, rates.lamportsPerByte)).toBe(650_240n);
+    expect(rentExemptMinimum(ACCOUNT_SIZE.token, rates.lamportsPerByte)).toBe(1_488_440n);
+    expect(rentExemptMinimum(ACCOUNT_SIZE.token2022, rates.lamportsPerByte)).toBe(1_513_840n);
+    expect(rentExemptMinimum(ACCOUNT_SIZE.volumeAccumulator, rates.lamportsPerByte)).toBe(1_346_200n);
+  });
+
+  it('caches for an hour, keeps the last rate on RPC errors and never under-reserves before the first answer', async () => {
+    let now = 0;
+    let calls = 0;
+    let fail = false;
+    const conn = {
+      getMinimumBalanceForRentExemption: async (bytes: number) => {
+        calls++;
+        if (fail) throw new Error('503');
+        return (128 + bytes) * 5080;
+      },
+    };
+    const schedule = new RentSchedule(() => now);
+    expect((await schedule.rates(conn as never)).lamportsPerByte).toBe(5080n);
+    now += 30 * 60_000;
+    await schedule.rates(conn as never);
+    expect(calls).toBe(1);
+    now += 31 * 60_000;
+    fail = true;
+    expect(await schedule.rates(conn as never)).toEqual({ lamportsPerByte: 5080n, live: true });
+    expect(calls).toBe(2);
+    const cold = new RentSchedule();
+    expect(await cold.rates(conn as never)).toEqual({ lamportsPerByte: LEGACY_LAMPORTS_PER_BYTE, live: false });
+    expect(rentExemptMinimum(0, LEGACY_LAMPORTS_PER_BYTE)).toBe(RENT_EXEMPT_MIN_LAMPORTS);
+    expect(rentExemptMinimum(165, LEGACY_LAMPORTS_PER_BYTE)).toBe(TOKEN_ACCOUNT_RENT_LAMPORTS);
   });
 });
 

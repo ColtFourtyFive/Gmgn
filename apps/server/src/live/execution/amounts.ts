@@ -7,9 +7,12 @@ import { LAMPORTS_PER_SOL } from '@trenchscope/shared';
 export const SOL_DECIMALS = 9;
 /** Base fee per signature (lamports). */
 export const SIGNATURE_FEE_LAMPORTS = 5000n;
-/** Rent-exempt minimum of a plain system account (0 bytes of data). */
+/**
+ * Rent-exempt minimum of a plain system account (0 bytes of data) at the rate before mainnet lowered
+ * rent: an upper bound (650,240 on mainnet in October 2026). The venue reads the cluster's rate (rent.ts).
+ */
 export const RENT_EXEMPT_MIN_LAMPORTS = 890_880n;
-/** Rent of a new SPL / Token-2022 associated token account (165 bytes). */
+/** Rent of a new SPL token account (165 bytes) at the same pre-reduction rate (1,488,440 on mainnet now). */
 export const TOKEN_ACCOUNT_RENT_LAMPORTS = 2_039_280n;
 
 /**

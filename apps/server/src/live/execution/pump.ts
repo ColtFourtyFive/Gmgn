@@ -1,9 +1,19 @@
 // Direct pump.fun bonding-curve route (tokens still on their curve): curve
 // state from the chain, quotes from the SDK's fee-aware curve math and the
-// SDK's buy / sell instruction builders. Buys are exact-token buys bounded by
-// a max SOL cost (the requested amount plus slippage); sells are bounded by a
-// minimum SOL out. The slippage bound is computed here in integers and handed
-// to the SDK with its own slippage at 0, so the instruction carries it exactly.
+// SDK's buy / sell instruction builders (the legacy `buy` / `sell`, with the
+// bonding-curve v2 PDA and a buyback fee recipient as remaining accounts).
+// Buys are exact-token buys bounded by a max SOL cost (the requested amount
+// plus slippage); sells are bounded by a minimum SOL out. The slippage bound is
+// computed here in integers and handed to the SDK with its own slippage at 0, so
+// the instruction carries it exactly.
+//
+// Verified against mainnet by simulation (October 2026, scripts/sol-exec-verify.ts):
+// both instructions are accepted on Token-2022 (create_v2) mints, normal and
+// mayhem curves; a buy costs exactly the quoted lamports and a sell pays exactly
+// the quote, except that the first trade into a launch whose creator vault is
+// unfunded also pays the vault's rent-exempt minimum (outside the bounds); a
+// wallet's first buy also creates its user volume accumulator PDA (137 bytes of
+// rent paid by the user).
 
 import { createRequire } from 'node:module';
 import type * as PumpSdk from '@pump-fun/pump-sdk';
@@ -21,7 +31,10 @@ function sdk(): typeof PumpSdk {
 }
 
 export const PUMP_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
-/** Compute unit limits of the direct curve swaps (a buy may also create the user's token account). */
+/**
+ * Compute unit limits of the direct curve swaps (a buy may also create the user's token account and
+ * volume accumulator). Measured by simulation: about 85-100k for such a buy, 50-70k for a sell.
+ */
 export const PUMP_BUY_COMPUTE_UNITS = 200_000;
 export const PUMP_SELL_COMPUTE_UNITS = 150_000;
 
@@ -35,6 +48,9 @@ export interface PumpCurveState {
   associatedUserAccountInfo: AccountInfo<Buffer> | null;
   /** Token program owning the mint (SPL Token or Token-2022). */
   tokenProgram: PublicKey;
+  /** The user's pump volume accumulator: a buy creates it when missing, at the user's expense. */
+  volumeAccumulator: PublicKey;
+  volumeAccumulatorExists: boolean;
 }
 
 export interface PumpStateLoader {
@@ -42,7 +58,17 @@ export interface PumpStateLoader {
   load(mint: PublicKey, user: PublicKey): Promise<PumpCurveState | null>;
 }
 
-/** Reads mint, curve, global and fee config (and both possible user token accounts) in one RPC round trip. */
+/** The mint's bonding curve PDA. */
+export function pumpBondingCurveOf(mint: PublicKey): PublicKey {
+  return sdk().bondingCurvePda(mint);
+}
+
+/** The wallet's pump.fun user volume accumulator PDA (a first buy creates it). */
+export function pumpVolumeAccumulatorOf(user: PublicKey): PublicKey {
+  return sdk().userVolumeAccumulatorPda(user);
+}
+
+/** Reads mint, curve, global, fee config, both possible user token accounts and the user's volume accumulator in one RPC round trip. */
 export class OnlinePumpLoader implements PumpStateLoader {
   constructor(private readonly connection: Connection) {}
 
@@ -50,8 +76,9 @@ export class OnlinePumpLoader implements PumpStateLoader {
     const pump = sdk();
     const ataToken = getAssociatedTokenAddressSync(mint, user, true, TOKEN_PROGRAM_ID);
     const ata2022 = getAssociatedTokenAddressSync(mint, user, true, TOKEN_2022_PROGRAM_ID);
-    const [mintInfo, curveInfo, globalInfo, feeConfigInfo, userToken, user2022] = await this.connection.getMultipleAccountsInfo(
-      [mint, pump.bondingCurvePda(mint), pump.GLOBAL_PDA, pump.PUMP_FEE_CONFIG_PDA, ataToken, ata2022],
+    const volumeAccumulator = pumpVolumeAccumulatorOf(user);
+    const [mintInfo, curveInfo, globalInfo, feeConfigInfo, userToken, user2022, volumeInfo] = await this.connection.getMultipleAccountsInfo(
+      [mint, pumpBondingCurveOf(mint), pump.GLOBAL_PDA, pump.PUMP_FEE_CONFIG_PDA, ataToken, ata2022, volumeAccumulator],
       'confirmed',
     );
     if (!mintInfo || !curveInfo || !globalInfo) return null;
@@ -65,6 +92,8 @@ export class OnlinePumpLoader implements PumpStateLoader {
       bondingCurveAccountInfo: curveInfo,
       associatedUserAccountInfo: tokenProgram.equals(TOKEN_2022_PROGRAM_ID) ? user2022 : userToken,
       tokenProgram,
+      volumeAccumulator,
+      volumeAccumulatorExists: !!volumeInfo,
     };
   }
 }

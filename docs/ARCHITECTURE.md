@@ -41,7 +41,7 @@ TP / SL / trailing orders, token launches). It runs in one of two modes per depl
 │ live/       config.ts · services.ts (RPC connection, signer) · market.ts (LiveMarket)  │
 │             feed/       PumpPortal client, message schemas, ingest, tracked-token cap  │
 │             enrich/     metadata (SSRF-guarded), prices, on-chain security, lookup     │
-│             execution/  LiveVenue: pump curve / Jupiter, tx assembly, Jito, confirm,   │
+│             execution/  LiveVenue: pump curve / PumpSwap / Jupiter, tx, Jito, confirm, │
 │                         fill parsing, per-account send lanes                           │
 │             signer/     Turnkey (production), local-dev keystore (development)         │
 │             wallets/    balance sync, deposits, withdrawals, /api/wallet/* routes      │
@@ -174,9 +174,10 @@ feed/tracker.ts: at most LIVE_MAX_TRACKED_TOKENS streamed; idle ones dropped; to
 ```
 POST /api/trade/swap (or an order / copy / snipe) ─► Executor ─► LiveVenue.run
   per-account lane (shared with withdrawals):
-    plan   pump curve (SDK math on chain reserves) while on a SOL-quoted curve, else Jupiter v1 quote
+    plan   pump curve (SDK math on chain reserves) while on a SOL-quoted curve, the canonical PumpSwap
+           pool (SDK pool math) once migrated, else Jupiter v1 quote (also the pool's fallback)
     check  SOL balance − lamports committed to this account's unconfirmed sends ≥ spend + fees + rent
-    build  v0 tx: compute budget · [buy: platform fee] · swap (curve or Jupiter route + lookup tables)
+    build  v0 tx: compute budget · [buy: platform fee] · swap (curve, pool or Jupiter route + lookup tables)
            · [sell: platform fee on min-out, after unwrap] · [anti-MEV: Jito tip last]
     sign   SignerApi (Turnkey) → same message bytes + valid ed25519 signature checked
     send   Jito block engine (anti-MEV, bundleOnly) or RPC with preflight; refusals vs ambiguous errors

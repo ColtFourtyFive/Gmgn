@@ -2,11 +2,25 @@
 // instructions (POST {base}/swap/v1/swap-instructions) that the venue
 // assembles into its own transaction, with our compute budget, platform fee
 // and Jito tip around them. Responses are validated before use.
+//
+// Checked against lite-api.jup.ag (October 2026; trimmed real responses in
+// test/fixtures/jupiter): route steps carry `percent` and a `bps` that may be
+// null; refusals are 400 {error, errorCode} (seen: NO_ROUTES_FOUND,
+// TOKEN_NOT_TRADABLE, CIRCULAR_ARBITRAGE_IS_DISABLED; the older
+// COULD_NOT_FIND_ANY_ROUTE is still accepted);
+// swap-instructions answers 200 even when its own simulation of the route
+// fails, with `simulationError` {errorCode, error} and computeUnitLimit 1,400,000:
+// TRANSACTION_ERROR when the route fails for the wallet, other codes when Jupiter
+// could not simulate ("Failed to simulate the swap: RPC failed"). The route
+// instruction carries quoted_out_amount and slippage_bps and checks its minimum on
+// chain (Jupiter error 6001); the quote's otherAmountThreshold is not sent.
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { z } from 'zod';
 
 const TIMEOUT_MS = 8000;
+/** errorCode values of a 400 that mean "this pair / size cannot be routed" (seen on lite-api.jup.ag). */
+const ROUTE_ERROR_CODES = new Set(['NO_ROUTES_FOUND', 'COULD_NOT_FIND_ANY_ROUTE', 'TOKEN_NOT_TRADABLE', 'CIRCULAR_ARBITRAGE_IS_DISABLED']);
 /** Leaves room in the 1232-byte transaction for our fee, tip and compute budget instructions. */
 const MAX_ROUTE_ACCOUNTS = 54;
 
@@ -26,7 +40,8 @@ export const jupiterQuoteSchema = z
       z
         .object({
           swapInfo: z.object({ ammKey: z.string().optional(), label: z.string().optional(), inputMint: z.string(), outputMint: z.string() }).passthrough(),
-          percent: z.number().optional(),
+          percent: z.number().nullish(),
+          bps: z.number().nullish(),
         })
         .passthrough(),
     ),
@@ -52,12 +67,14 @@ export const swapInstructionsSchema = z
     otherInstructions: z.array(instructionSchema).optional().default([]),
     addressLookupTableAddresses: z.array(z.string()).optional().default([]),
     computeUnitLimit: z.number().optional(),
+    /** Jupiter's own simulation of the route for this user failed (the route would fail for us too). */
+    simulationError: z.object({ errorCode: z.string().optional(), error: z.string().optional() }).passthrough().nullish(),
   })
   .passthrough();
 
 export type JupiterSwapInstructions = z.infer<typeof swapInstructionsSchema>;
 
-/** No route for this pair / size (a business failure the user can act on). */
+/** No route for this pair / size, or a route that fails for this wallet (a business failure the user can act on). */
 export class JupiterRouteError extends Error {}
 /** Router unreachable, rate limited or misbehaving (an infrastructure failure). */
 export class JupiterUnavailableError extends Error {}
@@ -108,7 +125,14 @@ export class JupiterClient {
     const json = await this.request(this.url('swap-instructions'), { method: 'POST', headers: this.headers(true), body: JSON.stringify(body) });
     const parsed = swapInstructionsSchema.safeParse(json);
     if (!parsed.success) throw new JupiterUnavailableError(`unexpected swap-instructions response: ${parsed.error.issues[0]?.message ?? 'invalid'}`);
-    return parsed.data;
+    const failed = parsed.data.simulationError;
+    if (!failed) return parsed.data;
+    // The route itself failed for this wallet (TRANSACTION_ERROR: insufficient funds, ...): ours would too.
+    const error = failed.error ?? failed.errorCode ?? 'unknown error';
+    if (failed.errorCode === 'TRANSACTION_ERROR' || /Error processing Instruction|custom program error/i.test(error)) throw new JupiterRouteError(simulationFailure(error));
+    // Jupiter could not simulate at all ("Failed to simulate the swap: RPC failed"): the instructions stand,
+    // but the compute limit it reports (1,400,000) is a default, not a measurement.
+    return { ...parsed.data, computeUnitLimit: undefined, computeBudgetInstructions: [] };
   }
 
   private async request(url: string, init: RequestInit): Promise<unknown> {
@@ -122,12 +146,20 @@ export class JupiterClient {
     if (res.ok && json) return json;
     const message = typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`;
     const code = typeof json?.errorCode === 'string' ? json.errorCode : '';
-    // 4xx with a route complaint: the pair or size cannot be routed (e.g. COULD_NOT_FIND_ANY_ROUTE, TOKEN_NOT_TRADABLE).
+    // 4xx with a route complaint: the pair or size cannot be routed (e.g. NO_ROUTES_FOUND, TOKEN_NOT_TRADABLE).
     if (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 403 && res.status !== 429) {
-      if (/route|tradable|liquidity|amount/i.test(`${code} ${message}`)) throw new JupiterRouteError(`no route: ${message}`);
+      if (ROUTE_ERROR_CODES.has(code) || /route|tradable|liquidity|amount/i.test(`${code} ${message}`)) throw new JupiterRouteError(`no route: ${message}`);
     }
     throw new JupiterUnavailableError(`swap router error: ${message}`);
   }
+}
+
+/** Jupiter's simulation error ("Error processing Instruction 3: custom program error: 0x1771") in words. */
+export function simulationFailure(error: string): string {
+  const code = /custom program error: 0x([0-9a-f]+)/i.exec(error);
+  if (code && parseInt(code[1], 16) === 6001) return 'slippage exceeded: the price moved past your tolerance';
+  if (code && parseInt(code[1], 16) === 1) return 'the swap would fail: insufficient balance';
+  return `the swap would fail: ${error}`;
 }
 
 /** A Jupiter instruction (base64 data) as a web3.js instruction. */

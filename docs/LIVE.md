@@ -44,7 +44,8 @@ never loaded in the other. Set `DEMO_URL` on the live site to show users a "Try 
                                │   (pump curve / PumpSwap pool / Jupiter-priced), all under LIVE_RPC_RPS
                                │
   trading/execution.ts Executor (idempotency, rate limit) ──► live/execution/venue.ts LiveVenue
-     quote: pump.fun curve (SDK math on chain reserves) while on the curve, else Jupiter Swap API v1
+     quote: pump.fun curve (SDK math on chain reserves) while on the curve, the token's canonical PumpSwap
+        pool once migrated (SDK pool math), else (and whenever the pool cannot be used) Jupiter Swap API v1
      run (per-account lane): fresh quote → SOL check net of unconfirmed sends → v0 tx
         [compute budget][platform fee → FEE_WALLET_ADDRESS (buys: before swap)][swap][unwrap]
         [platform fee (sells: on min-out, after unwrap)][Jito tip, anti-MEV only]
@@ -160,9 +161,10 @@ Each account gets one wallet in the organization named `trenchscope:<accountId>:
    Token-2022 `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`, Associated Token Account
    `ATokenGPvbdGVxr1b2hvZbsiqW5xUFvdN3SiNiDvZRd2bG1N`, Jupiter v6
    `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`, pump.fun `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`,
-   plus every program a Jupiter route may touch (AMMs; this is why a strict allow-list can refuse some
-   routes) and the instructions' own program ids for PumpSwap if a direct route is added. Jito tips are
-   plain System transfers. A sketch of the condition (Turnkey's Solana policy language; **check the
+   PumpSwap `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` (direct pool route; both pump programs call
+   pump-fees `pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ` themselves), plus every program a Jupiter route
+   may touch (AMMs; this is why a strict allow-list can refuse some routes). Jito tips are plain System
+   transfers. A sketch of the condition (Turnkey's Solana policy language; **check the
    current syntax in Turnkey's docs**, it could not be fetched from the build environment):
 
    ```json
@@ -207,7 +209,8 @@ transfer before the swap) and on the quote's minimum SOL out for sells (after th
 the fee never exceeds what the user is guaranteed. Requirements:
 
 - a plain system account you control (a cold or multisig wallet), **pre-funded above the rent-exempt
-  minimum** (0.00089088 SOL): a transfer that would leave a new account below it fails the whole swap;
+  minimum** (0.00065024 SOL on mainnet since its rent reduction; it was 0.00089088 SOL): a transfer that
+  would leave a new account below it fails the whole swap;
 - a malformed address is reported at boot (`live.problems`) and makes swaps answer
   `503 trading_unavailable` (fees are never silently dropped); funding is not checked at boot;
 - unset (or `PLATFORM_FEE_BPS=0`): no fee instruction is added and the problem is reported.
@@ -300,7 +303,22 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 ## 9. Known limits
 
 - Solana only; pump.fun launches only (other launchpads' creates are ignored; their tokens load on
-  demand when Jupiter can price them). Migrated tokens trade through Jupiter (no direct PumpSwap route).
+  demand when Jupiter can price them). Migrated pump.fun tokens trade on their canonical PumpSwap pool (v1
+  `buy` / `sell`); a token without one (e.g. migrated to Raydium before PumpSwap existed), a pool the loader
+  cannot read, or a pool swap too large for one transaction goes through Jupiter.
+- A full sell leaves the emptied token account open: its rent (0.0015 SOL at today's rate) stays locked in
+  it. A wallet's first pump.fun and first PumpSwap buy each also open a volume accumulator (0.0013462 SOL of
+  rent, kept by the program); both are reserved by the balance check and booked as rent, not price.
+- The first trade into a launch whose creator vault is still unfunded (common right after a create) pays
+  the vault's rent-exempt minimum (0.00065024 SOL): a buy on top of the curve cost and outside
+  `max_sol_cost`, a sell out of its proceeds; the SDK's quote includes neither. The balance check reserves
+  it on every curve buy; when it is paid it shows in that fill's price.
+- Mainnet carries v1 transactions (a third to a half of recent pump.fun / PumpSwap traffic in October
+  2026); `getTransaction` with `maxSupportedTransactionVersion: 0` refuses them (`-32015`). The venue
+  builds and reads only its own v0 swaps; anything scanning other wallets' transactions (deposits) must
+  allow for them.
+- `lite-api.jup.ag` without a key allows a handful of requests per window (`x-ratelimit-remaining` drops to
+  0 after ~5 quick calls): a 429 is a 503 `trading_unavailable`. Use `JUPITER_API_KEY` in production.
 - Swap `clientId` idempotency is in memory for 15 minutes: a client that retries the same `clientId`
   after a server restart could send again (the web client mints a new id per click and never retries).
 - Position cost basis lives in the World (snapshot). After a restart without a recent snapshot,
@@ -331,7 +349,9 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 
 ## 10. Must be verified before launch
 
-None of these could be checked from the build environment. Verify each in staging, then run a
+The execution items marked verified below were checked read-only against mainnet (simulation, nothing
+sent) with `apps/server/scripts/sol-exec-verify.ts`; re-run it after SDK or program upgrades. The rest
+could not be checked from the build environment. Verify each in staging, then run a
 tiny-amount mainnet smoke test (pump buy/sell, Jupiter buy/sell, Jito send, SOL and SPL withdrawal,
 deposit detection, Turnkey signing) before enabling the site for users.
 
@@ -355,30 +375,48 @@ deposit detection, Turnkey signing) before enabling the site for users.
   250 ms). Run `scripts/pumpportal-check.ts --capture frames.jsonl` with `PUMPPORTAL_API_KEY` set and
   replace the reconstructed trade frames in the fixtures with captured ones.
 
-**pump.fun / PumpSwap**
-- Curve constants (30 SOL / 1.073B virtual, 793.1M curve tokens, 6 decimals, 1.25% fee) and the
-  migration model (all real SOL + 206.9M tokens into the canonical pool, LP burned).
-- `@pump-fun/pump-sdk` 4.2.0 offline `buyInstructions` / `sellInstructions` accepted by the current
-  program (fee recipient, bonding-curve v2 and remaining accounts, Token-2022 mints); 200k / 150k
-  compute units are enough; Global / FeeConfig / BondingCurve decoding on real accounts.
+**pump.fun / PumpSwap**: verified read-only on mainnet with `apps/server/scripts/sol-exec-verify.ts`
+(October 2026; every swap built by the venue for a real funded wallet and run through
+`simulateTransaction`, nothing sent; captured accounts and simulated landings in
+`apps/server/test/fixtures/rpc/sim-*.json`):
+- Curve constants decoded from Global / FeeConfig / BondingCurve with the SDK: 30 SOL / 1.073B virtual,
+  793.1M curve tokens, 1B supply, 6 decimals, fee 0.95% protocol + 0.30% creator = 1.25%; the SDK's
+  buyback fee recipients match `Global.buybackFeeRecipients`.
+- `@pump-fun/pump-sdk` 4.2.0 legacy `buy` / `sell` (18 accounts with the bonding-curve v2 PDA and a buyback
+  recipient) and `@pump-fun/pump-swap-sdk` 2.2.0 v1 pool `buy` / `sell` accepted on Token-2022 mints, normal
+  and mayhem curves; a curve buy costs exactly the quoted lamports and a sell pays exactly the quote;
+  slippage refusals are pump 6002 / 6003 and pump-amm 6004. Compute used: curve buy ~85-100k (with the
+  token account and volume accumulator), sell ~50-70k; pool buy ~100-125k, sell ~90k: well inside the
+  200k / 150k (curve) and 200k / 160k (pool) limits. A pool buy with fee and tip is ~1180 bytes.
+- Not verified: the migration itself (all real SOL + 206.9M tokens into the pool, LP burned) beyond the
+  constants; a pool or curve created after the SDK version (re-run the script after SDK upgrades).
 
-**Jupiter**
-- Swap API v1 quote and swap-instructions request/response fields, error bodies
-  (`COULD_NOT_FIND_ANY_ROUTE`), `x-api-key`, whether `lite-api.jup.ag` is still served; slippage error
-  code 6001; Price API v3 response shape and 50-id limit.
+**Jupiter**: verified on `lite-api.jup.ag` (served, no key) with recorded responses in
+`apps/server/test/fixtures/jupiter`: quote and swap-instructions fields (`routePlan[].bps` may be null;
+new `loadedAccountsDataSize`, `addressesByLookupTableAddress`, `simulationError`), lookup tables resolved
+and used, refusals `400 {error, errorCode}` with `NO_ROUTES_FOUND` / `TOKEN_NOT_TRADABLE` (the code formerly
+documented as `COULD_NOT_FIND_ANY_ROUTE` is still accepted), slippage error 6001 on chain. swap-instructions
+answers 200 with `simulationError` and a 1,400,000 limit when its own simulation fails: the venue refuses a
+`TRANSACTION_ERROR` before signing and ignores the limit otherwise. The route instruction carries
+`quoted_out_amount` and `slippage_bps` (not `otherAmountThreshold`). Not verified here: `x-api-key` on
+`api.jup.ag` and the Price API v3 (no key available; enrichment's area).
 
-**Solana RPC**
-- `getTransaction` pre/post token balances with `owner`, account-key ordering with lookup tables;
-  `getSignaturesForAddress` paging; `getParsedTokenAccountsByOwner` shapes; web3.js
-  `SendTransactionError` as the marker of a definite preflight refusal; Metaplex / Token-2022 metadata
-  decoding.
+**Solana RPC**: `getTransaction` pre/post token balances with `owner` and lookup-table account ordering
+checked on real legacy and v0 transactions (`test/fixtures/rpc/real-*.json`), web3.js's parsed response
+reading the same; a sell that closes its token account refunds the rent (booked as rent, not proceeds).
+Still to check: `getSignaturesForAddress` paging, `getParsedTokenAccountsByOwner` shapes (public endpoints
+refuse "indexed" methods: use a provider), `SendTransactionError` on a real refusal, metadata decoding.
 
-**Jito**
-- `POST /api/v1/transactions?bundleOnly=true` behaviour and response, tip accounts, minimum tip,
-  rate limits for rebroadcasting every 2 s.
+**Jito**: `getTipAccounts` returns exactly the 8 accounts in `JITO_TIP_ACCOUNTS`; landed tips (bundles.jito.wtf
+tip floor, October 2026) run p25 ~2-6k, p50 ~4-11k, p95 ~30-150k lamports, so the 1000-lamport minimum is a
+floor and the presets' 0.001-0.004 SOL tips are generous. Not verified (nothing may be sent from the
+verification environment): `sendTransaction?bundleOnly=true` responses and rate limits for rebroadcasting
+every 2 s.
 
-**Turnkey**
-- `createWallet` / `getWallets` / `getWalletAccounts` shapes, wallet-name uniqueness on retry, latency
+**Turnkey** (no credentials available: request and response shapes are checked at compile time against
+`@turnkey/sdk-server` 8.7.1 and `@turnkey/solana` 1.1.47, which signs the serialized v0 transaction through
+`ACTIVITY_TYPE_SIGN_TRANSACTION_V2` / `TRANSACTION_TYPE_SOLANA`; everything below needs a real organization)
+- `createWallet` / `getWallets` / `getWalletAccounts` behaviour, wallet-name uniqueness on retry, latency
   of `createWallet` inline in registration (no timeout of our own), `@turnkey/solana` signing of v0
   transactions, and the policy syntax in section 3.
 

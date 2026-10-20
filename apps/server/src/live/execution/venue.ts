@@ -1,8 +1,10 @@
 // Live venue: real Solana swaps from the account's embedded wallet.
 //
 //   quote   route by token state: tokens on their pump.fun curve trade directly on the curve
-//           (SDK curve math from on-chain reserves); everything else (migrated tokens included,
-//           whose PumpSwap pools Jupiter routes) goes through the Jupiter Swap API v1.
+//           (SDK curve math from on-chain reserves); migrated pump.fun tokens trade directly on
+//           their canonical PumpSwap pool (SDK pool math from on-chain reserves); everything else,
+//           and any pool the loader cannot read or whose swap does not fit one transaction, goes
+//           through the Jupiter Swap API v1.
 //   run     per account, one at a time: fresh quote, guard, SOL balance check net of what earlier
 //           unconfirmed sends may still spend, one v0 transaction (compute budget, platform fee,
 //           route, Jito tip), signer, signature check, send (Jito block engine only for anti-MEV,
@@ -24,15 +26,14 @@ import {
   type SwapReceipt,
   type Trade,
 } from '@trenchscope/shared';
-import { PublicKey, type AddressLookupTableAccount, type Connection, type VersionedTransaction } from '@solana/web3.js';
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { PublicKey, type AddressLookupTableAccount, type Connection, type TransactionInstruction, type VersionedTransaction } from '@solana/web3.js';
 import { HttpError, type AppContext, type EmbeddedWalletRef, type LiveServices, type SignerApi } from '../../context';
 import type { TokenState, WalletState } from '../../sim/world';
 import { autoSlippageFor, failedReceipt, PROCEEDS_BELOW_FEES, type ExecOptions, type ExecResult, type Ticket, type Venue, type VenueHost } from '../../trading/execution';
 import { readTokenBalance } from '../wallets/balances';
 import {
-  RENT_EXEMPT_MIN_LAMPORTS,
   SIGNATURE_FEE_LAMPORTS,
-  TOKEN_ACCOUNT_RENT_LAMPORTS,
   bpsOf,
   fromBaseUnits,
   lamportsToSol,
@@ -43,7 +44,7 @@ import {
   solToLamports,
   toBaseUnits,
 } from './amounts';
-import { describeTxError, walletDelta, type TxLike } from './fills';
+import { describeTxError, walletDelta, type TxLike, type WalletDelta } from './fills';
 import { JITO_MIN_TIP_LAMPORTS, pickTipAccount } from './jito';
 import { JupiterClient, JupiterRouteError, JupiterUnavailableError, routeComputeUnits, routeLabel, toInstruction, type JupiterQuote } from './jupiter';
 import { AccountLanes, lanesFor } from './lanes';
@@ -54,11 +55,26 @@ import {
   curveBuyInstructions,
   curveIsTradable,
   curveSellInstructions,
+  pumpVolumeAccumulatorOf,
   quoteCurveBuy,
   quoteCurveSell,
   type PumpCurveState,
   type PumpStateLoader,
 } from './pump';
+import {
+  OnlinePumpSwapLoader,
+  PUMPSWAP_BUY_COMPUTE_UNITS,
+  PUMPSWAP_SELL_COMPUTE_UNITS,
+  poolBuyInstructions,
+  poolIsTradable,
+  poolSellInstructions,
+  poolVolumeAccumulatorOf,
+  quotePoolBuy,
+  quotePoolSell,
+  type PumpSwapLoader,
+  type PumpSwapState,
+} from './pumpswap';
+import { ACCOUNT_SIZE, RentSchedule, rentExemptMinimum } from './rent';
 import { confirmSignature, sendSigned, SendRefusedError, type ConfirmOptions, type SendDeps, type SendRoute } from './send';
 import { EXTRA_COMPUTE_UNITS, assertSignedAsBuilt, compileV0, signatureOf, swapInstructions, type SwapInstructionParts } from './tx';
 
@@ -74,6 +90,12 @@ const BACKGROUND_FETCH_ATTEMPTS = 60;
 
 /** A business failure of a trade (no liquidity, no balance, migrating...): a failed receipt, not an HTTP error. */
 export class PlanError extends Error {}
+/** The route's instructions do not fit in one 1232-byte transaction. */
+export class TransactionTooLargeError extends PlanError {
+  constructor() {
+    super('the route does not fit in one transaction; try again or use a smaller amount');
+  }
+}
 
 export interface LiveVenueDeps {
   fetch: typeof fetch;
@@ -83,6 +105,8 @@ export interface LiveVenueDeps {
   random: () => number;
   /** Curve state source (defaults to the chain through the SDK's accounts). */
   pump: PumpStateLoader | null;
+  /** PumpSwap pool state source (defaults to the chain through the SDK's accounts). */
+  pumpSwap: PumpSwapLoader | null;
   confirm: ConfirmOptions;
   /** Attempts (one poll interval apart) to read a confirmed transaction: RPC indexes trail its status. */
   fetchTxAttempts: number;
@@ -94,13 +118,14 @@ const defaultDeps = (): LiveVenueDeps => ({
   now: () => Date.now(),
   random: Math.random,
   pump: null,
+  pumpSwap: null,
   confirm: { pollMs: 400, timeoutMs: 60_000, rebroadcastMs: 2000 },
   fetchTxAttempts: 10,
 });
 
 /** A priced trade with everything execution needs, in base units. */
 export interface SwapPlan {
-  route: 'pump' | 'jupiter';
+  route: 'pump' | 'pumpswap' | 'jupiter';
   side: Side;
   owner: PublicKey;
   mint: PublicKey;
@@ -122,11 +147,27 @@ export interface SwapPlan {
   via: SendRoute;
   /** Rent the transaction moves into accounts it creates (needed up front; mostly refundable). */
   rentLamports: bigint;
+  /** Accounts other than token accounts the route may create at the owner's expense (fill parsing counts their rent). */
+  rentAccounts: string[];
+  /** The wallet's own rent-exempt minimum: never spent. */
+  reserveLamports: bigint;
   /** Sells: the chain balance the size came from. */
   heldRaw: bigint;
   pump: PumpCurveState | null;
+  pool: PumpSwapState | null;
   jupiter: JupiterQuote | null;
   quote: Quote;
+}
+
+/** A swap's transaction as built, before signing. */
+export interface BuiltSwap {
+  tx: VersionedTransaction;
+  /** The serialized message the signer must return unchanged. */
+  message: Uint8Array;
+  instructions: TransactionInstruction[];
+  lookupTables: AddressLookupTableAccount[];
+  computeUnits: number;
+  lastValidBlockHeight: number;
 }
 
 interface Sent {
@@ -149,6 +190,7 @@ export class LiveVenue implements Venue {
   readonly idempotencyWindowMs = LIVE_IDEMPOTENCY_WINDOW_MS;
   deps: LiveVenueDeps;
   private readonly lookupTables = new Map<string, { at: number; table: AddressLookupTableAccount }>();
+  private readonly rent = new RentSchedule(() => this.deps.now());
   /** Signatures confirming in the background (their swap returned before they settled). */
   private readonly tracking = new Map<string, Promise<void>>();
 
@@ -215,21 +257,41 @@ export class LiveVenue implements Venue {
     return unavailable(`Solana RPC error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  /** Price a ticket from the chain (and the router) now. Throws PlanError for business failures. */
-  async plan(ticket: Ticket, connection: Connection, owner: PublicKey): Promise<SwapPlan> {
+  /**
+   * Price a ticket from the chain (and the router) now. Throws PlanError for business failures.
+   * `directPool: false` skips the direct PumpSwap route (its swap did not fit one transaction).
+   */
+  async plan(ticket: Ticket, connection: Connection, owner: PublicKey, opts: { directPool?: boolean } = {}): Promise<SwapPlan> {
     const { world } = this.ctx;
     const live = this.ctx.live!;
     const { token, side, preset, wallet } = ticket;
     if (token.chain !== 'sol') throw new HttpError(400, 'live trading supports Solana only', 'invalid_input');
     if (token.status === 'migrating') throw new PlanError('token is migrating; try again in a few seconds');
     const mint = new PublicKey(token.address);
+    const directPool = opts.directPool !== false;
 
-    // Route: pump.fun curve while the token is on it (and the curve is SOL-quoted), else Jupiter.
+    // Route: pump.fun curve while the token is on it (and the curve is SOL-quoted); its canonical
+    // PumpSwap pool once it migrated (a completed curve too, when the feed has not caught up yet);
+    // Jupiter for everything else and whenever the pool cannot be read.
     let pump: PumpCurveState | null = null;
-    if (token.status === 'curve' && token.launchpad === 'pump') {
-      pump = await this.pumpLoader(connection).load(mint, owner);
-      if (pump && !curveIsTradable(pump)) throw new PlanError('token is migrating; try again in a few seconds');
+    let pool: PumpSwapState | null = null;
+    if (token.launchpad === 'pump') {
+      if (token.status === 'curve') {
+        pump = await this.pumpLoader(connection).load(mint, owner);
+        if (pump && !curveIsTradable(pump)) {
+          pump = null;
+          if (directPool) {
+            pool = await this.loadPool(connection, mint, owner);
+            if (!pool) throw new PlanError('token is migrating; try again in a few seconds');
+          }
+        }
+      } else if (directPool) {
+        pool = await this.loadPool(connection, mint, owner);
+      }
     }
+    const rates = await this.rent.rates(connection);
+    const rent = (bytes: number) => rentExemptMinimum(bytes, rates.lamportsPerByte);
+    const tokenAccountRent = (program: PublicKey) => rent(program.equals(TOKEN_2022_PROGRAM_ID) ? ACCOUNT_SIZE.token2022 : ACCOUNT_SIZE.token);
 
     // Size: lamports for buys; for sells the chain balance net of sells still in flight.
     let decimals = token.decimals;
@@ -267,6 +329,7 @@ export class LiveVenue implements Venue {
     let slippageBps: number;
     let jupiter: JupiterQuote | null = null;
     let rentLamports = 0n;
+    const rentAccounts: string[] = [];
     if (pump) {
       if (side === 'buy') {
         const q = quoteCurveBuy(pump, inRaw);
@@ -276,7 +339,13 @@ export class LiveVenue implements Venue {
         outRaw = q.tokens;
         minOutRaw = q.tokens; // exact-token buy: the bound is on the SOL side
         maxInRaw = maxWithSlippage(inRaw, slippageBps);
-        if (!pump.associatedUserAccountInfo) rentLamports = TOKEN_ACCOUNT_RENT_LAMPORTS;
+        if (!pump.associatedUserAccountInfo) rentLamports += tokenAccountRent(pump.tokenProgram);
+        // A wallet's first pump buy also opens its volume accumulator.
+        if (!pump.volumeAccumulatorExists) rentLamports += rent(ACCOUNT_SIZE.volumeAccumulator);
+        rentAccounts.push(pump.volumeAccumulator.toBase58());
+        // The first buy into a launch whose creator vault is still unfunded pays the vault's rent-exempt
+        // minimum on top of the curve cost, outside max_sol_cost (seen on mainnet): reserved, not read.
+        rentLamports += rent(ACCOUNT_SIZE.system);
       } else {
         const q = quoteCurveSell(pump, inRaw);
         if (q.lamports <= 0n) throw new PlanError('no liquidity');
@@ -285,6 +354,29 @@ export class LiveVenue implements Venue {
         outRaw = q.lamports;
         minOutRaw = minWithSlippage(q.lamports, slippageBps);
       }
+    } else if (pool) {
+      const { swap } = pool;
+      if (side === 'buy') {
+        const q = quotePoolBuy(pool, inRaw);
+        if (q.tokens <= 0n) throw new PlanError('no liquidity');
+        priceImpact = q.priceImpact;
+        slippageBps = estimateImpact(priceImpact);
+        outRaw = q.tokens;
+        minOutRaw = q.tokens; // exact-token buy: the bound is on the SOL side
+        maxInRaw = maxWithSlippage(inRaw, slippageBps);
+        if (!swap.userBaseAccountInfo) rentLamports += tokenAccountRent(swap.baseTokenProgram);
+        if (!pool.volumeAccumulatorExists) rentLamports += rent(ACCOUNT_SIZE.volumeAccumulator);
+        rentAccounts.push(pool.volumeAccumulator.toBase58());
+      } else {
+        const q = quotePoolSell(pool, inRaw);
+        if (q.lamports <= 0n) throw new PlanError('no liquidity');
+        priceImpact = q.priceImpact;
+        slippageBps = estimateImpact(priceImpact);
+        outRaw = q.lamports;
+        minOutRaw = minWithSlippage(q.lamports, slippageBps);
+      }
+      // The wrapped-SOL account the swap opens and closes again needs its rent while it runs.
+      if (!swap.userQuoteAccountInfo) rentLamports += rent(ACCOUNT_SIZE.token);
     } else {
       const uiIn = side === 'buy' ? ticket.amount : fromBaseUnits(inRaw, decimals);
       slippageBps = estimateImpact(world.quote(token, side, uiIn)?.priceImpact ?? 0);
@@ -299,7 +391,11 @@ export class LiveVenue implements Venue {
       const impact = Number(jupiter.priceImpactPct ?? 0);
       priceImpact = Number.isFinite(impact) ? Math.min(1, Math.max(0, Math.abs(impact))) : 0;
       // The wrapped-SOL account (and a new token account on buys) needs rent while the swap runs.
-      rentLamports = side === 'buy' ? 2n * TOKEN_ACCOUNT_RENT_LAMPORTS : TOKEN_ACCOUNT_RENT_LAMPORTS;
+      rentLamports = rent(ACCOUNT_SIZE.token) + (side === 'buy' ? rent(ACCOUNT_SIZE.token2022) : 0n);
+      // A route through a pump.fun curve or PumpSwap pool opens the wallet's volume accumulator on its
+      // first trade there (seen on mainnet: Jupiter's PumpSwap step tracks volume), at the user's expense.
+      if (side === 'buy' && jupiter.routePlan.some((step) => /pump/i.test(step.swapInfo.label ?? ''))) rentLamports += rent(ACCOUNT_SIZE.volumeAccumulator);
+      rentAccounts.push(...volumeAccumulatorsOf(owner));
     }
 
     const platformFee = bpsOf(side === 'buy' ? inRaw : minOutRaw, feeBps);
@@ -326,7 +422,7 @@ export class LiveVenue implements Venue {
         networkFeeNative: lamportsToSol(networkFee),
         slippage,
         route: pump ? 'curve' : 'pool',
-        venue: pump ? 'pump.fun' : routeLabel(jupiter!),
+        venue: venueLabel(pump, pool, jupiter),
         balanceBefore: wallet.native,
       };
     } else {
@@ -346,12 +442,12 @@ export class LiveVenue implements Venue {
         networkFeeNative: lamportsToSol(networkFee),
         slippage,
         route: pump ? 'curve' : 'pool',
-        venue: pump ? 'pump.fun' : routeLabel(jupiter!),
+        venue: venueLabel(pump, pool, jupiter),
         balanceBefore: fromBaseUnits(heldRaw, decimals),
       };
     }
     return {
-      route: pump ? 'pump' : 'jupiter',
+      route: pump ? 'pump' : pool ? 'pumpswap' : 'jupiter',
       side,
       owner,
       mint,
@@ -368,8 +464,11 @@ export class LiveVenue implements Venue {
       tipLamports,
       via,
       rentLamports,
+      rentAccounts,
+      reserveLamports: rent(ACCOUNT_SIZE.system),
       heldRaw,
       pump,
+      pool,
       jupiter,
       quote,
     };
@@ -377,6 +476,16 @@ export class LiveVenue implements Venue {
 
   private pumpLoader(connection: Connection): PumpStateLoader {
     return this.deps.pump ?? new OnlinePumpLoader(connection);
+  }
+
+  /** The mint's canonical PumpSwap pool, or null (none, unreadable, empty): the trade then goes through Jupiter. */
+  private async loadPool(connection: Connection, mint: PublicKey, owner: PublicKey): Promise<PumpSwapState | null> {
+    try {
+      const pool = await (this.deps.pumpSwap ?? new OnlinePumpSwapLoader(connection)).load(mint, owner);
+      return pool && poolIsTradable(pool) ? pool : null;
+    } catch {
+      return null;
+    }
   }
 
   private jupiter(): JupiterClient {
@@ -411,48 +520,42 @@ export class LiveVenue implements Venue {
     const { connection, signer, ref } = svc;
     const { accountId, token, side } = ticket;
     const owner = new PublicKey(ref.address);
-    const plan = await this.plan(ticket, connection, owner);
+    let plan = await this.plan(ticket, connection, owner);
     const elapsed = () => this.deps.now() - started;
 
     const aborted = opts.guard?.() ?? null;
     if (aborted) return { receipt: failedReceipt(aborted, elapsed(), plan.quote), aborted };
 
-    // SOL check, net of what this account's unconfirmed sends may still spend.
+    // SOL check, net of what this account's unconfirmed sends may still spend (before the router is
+    // asked for instructions: its own simulation of an unfunded swap answers less clearly).
     const balance = BigInt(await connection.getBalance(owner, 'confirmed'));
-    const networkFee = SIGNATURE_FEE_LAMPORTS + plan.priorityLamports + plan.tipLamports;
-    // Buys spend at most the max SOL in plus the fee on it; a sell's fee comes out of its proceeds.
-    const spend = (side === 'buy' ? plan.maxInRaw + plan.platformFee : 0n) + networkFee + plan.rentLamports;
-    const available = balance - this.lanes.committed(accountId) - RENT_EXEMPT_MIN_LAMPORTS;
-    if (available < spend) {
+    const short = (p: SwapPlan): ExecResult | null => {
+      const spend = lamportsNeeded(p);
+      if (balance - this.lanes.committed(accountId) - p.reserveLamports >= spend) return null;
       const symbol = CHAINS.sol.nativeSymbol;
-      const needed = lamportsToSol(spend + RENT_EXEMPT_MIN_LAMPORTS);
-      return { receipt: failedReceipt(`insufficient ${symbol} balance: ${formatNative(needed, symbol)} needed incl. fees`, elapsed(), plan.quote), aborted: null };
-    }
+      const needed = lamportsToSol(spend + p.reserveLamports);
+      return { receipt: failedReceipt(`insufficient ${symbol} balance: ${formatNative(needed, symbol)} needed incl. fees`, elapsed(), p.quote), aborted: null };
+    };
+    const shortOf = short(plan);
+    if (shortOf) return shortOf;
 
-    const { parts, computeUnits, lookupTables } = await this.routeInstructions(plan, connection);
-    const instructions = swapInstructions({
-      owner,
-      side,
-      parts,
-      computeUnits,
-      priorityLamports: plan.priorityLamports,
-      platformFee: plan.feeWallet ? { wallet: plan.feeWallet, lamports: plan.platformFee } : null,
-      tip: plan.tipLamports > 0n ? { account: pickTipAccount(this.deps.random), lamports: plan.tipLamports } : null,
-    });
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-    let tx: VersionedTransaction;
-    let builtMessage: Uint8Array;
+    let built: BuiltSwap;
     try {
-      tx = compileV0(owner, blockhash, instructions, lookupTables);
-      builtMessage = tx.message.serialize();
-      tx.serialize(); // over 1232 bytes throws here, before anything is signed
-    } catch {
-      throw new PlanError('the route does not fit in one transaction; try again or use a smaller amount');
+      built = await this.buildTransaction(plan, connection);
+    } catch (err) {
+      // A direct pool swap too large for one transaction: Jupiter routes it with lookup tables.
+      if (!(err instanceof TransactionTooLargeError) || plan.route !== 'pumpswap') throw err;
+      plan = await this.plan(ticket, connection, owner, { directPool: false });
+      const shortOfRouted = short(plan);
+      if (shortOfRouted) return shortOfRouted;
+      built = await this.buildTransaction(plan, connection);
     }
+    const { tx, instructions, lastValidBlockHeight } = built;
+
     let signed: VersionedTransaction;
     try {
       signed = await signer.signTransaction(ref, tx);
-      assertSignedAsBuilt(builtMessage, signed, owner);
+      assertSignedAsBuilt(built.message, signed, owner);
     } catch (err) {
       this.ctx.accounts.audit(accountId, 'swap_sign_failed', { token: token.address, side, reason: err instanceof Error ? err.message : String(err) });
       throw unavailable(`signing failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -460,7 +563,7 @@ export class LiveVenue implements Venue {
     const signature = signatureOf(signed);
     const raw = signed.serialize();
 
-    const releaseLamports = this.lanes.commit(accountId, spend);
+    const releaseLamports = this.lanes.commit(accountId, lamportsNeeded(plan));
     const releaseTokens = side === 'sell' ? this.host.reserve(ticket.wallet, token, fromBaseUnits(plan.inRaw, plan.decimals)) : () => {};
     const release = () => {
       releaseLamports();
@@ -491,8 +594,48 @@ export class LiveVenue implements Venue {
     return { ticket, plan, ref, signature, raw, lastValidBlockHeight, programIds: instructions.map((ix) => ix.programId.toBase58()), started, release };
   }
 
+  /**
+   * The plan's v0 transaction, unsigned: compute budget, platform fee, the route's instructions,
+   * Jito tip. Throws TransactionTooLargeError when it does not fit in 1232 bytes.
+   */
+  async buildTransaction(plan: SwapPlan, connection: Connection): Promise<BuiltSwap> {
+    const { parts, computeUnits, lookupTables } = await this.routeInstructions(plan, connection);
+    const instructions = swapInstructions({
+      owner: plan.owner,
+      side: plan.side,
+      parts,
+      computeUnits,
+      priorityLamports: plan.priorityLamports,
+      platformFee: plan.feeWallet ? { wallet: plan.feeWallet, lamports: plan.platformFee } : null,
+      tip: plan.tipLamports > 0n ? { account: pickTipAccount(this.deps.random), lamports: plan.tipLamports } : null,
+    });
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+    let tx: VersionedTransaction;
+    let message: Uint8Array;
+    try {
+      tx = compileV0(plan.owner, blockhash, instructions, lookupTables);
+      message = tx.message.serialize();
+      tx.serialize(); // over 1232 bytes throws here, before anything is signed
+    } catch {
+      throw new TransactionTooLargeError();
+    }
+    return { tx, message, instructions, lookupTables, computeUnits, lastValidBlockHeight };
+  }
+
   /** The route's own instructions, its compute budget and the lookup tables it needs. */
   private async routeInstructions(plan: SwapPlan, connection: Connection): Promise<{ parts: SwapInstructionParts; computeUnits: number; lookupTables: AddressLookupTableAccount[] }> {
+    if (plan.route === 'pumpswap') {
+      const state = plan.pool!;
+      const swap =
+        plan.side === 'buy'
+          ? await poolBuyInstructions(state, plan.outRaw, plan.maxInRaw)
+          : await poolSellInstructions(state, plan.inRaw, plan.minOutRaw);
+      return {
+        parts: { setup: [], swap, cleanup: [] },
+        computeUnits: (plan.side === 'buy' ? PUMPSWAP_BUY_COMPUTE_UNITS : PUMPSWAP_SELL_COMPUTE_UNITS) + EXTRA_COMPUTE_UNITS,
+        lookupTables: [],
+      };
+    }
     if (plan.route === 'pump') {
       const state = plan.pump!;
       const swap =
@@ -630,7 +773,7 @@ export class LiveVenue implements Venue {
     this.lanes.touch(accountId);
     let delta: ReturnType<typeof walletDelta>;
     try {
-      delta = walletDelta(tx, signature, ref.address, token.address);
+      delta = walletDelta(tx, signature, ref.address, token.address, plan.rentAccounts);
     } catch (err) {
       // Landed, but the response cannot be read as our swap: book nothing; the balance sync shows the result.
       accounts.audit(accountId, 'swap_unreadable', { signature, token: token.address, side, reason: err instanceof Error ? err.message : String(err) });
@@ -646,15 +789,10 @@ export class LiveVenue implements Venue {
       throw new HttpError(502, reason, 'tx_failed');
     }
 
-    const tokenDelta = delta.tokenPostRaw - delta.tokenPreRaw;
-    const decimals = delta.decimals ?? plan.decimals;
-    const solDelta = delta.ownerPostLamports - delta.ownerPreLamports;
-    const networkFee = delta.feeLamports + plan.tipLamports;
-    const platformFee = plan.feeWallet ? plan.platformFee : 0n;
-    // The venue leg: what went into (buy) or came out of (sell) the swap, fees and refundable rent excluded.
-    const nativeLeg = side === 'buy' ? -solDelta - networkFee - platformFee - delta.rentLamports : solDelta + networkFee + platformFee + delta.rentLamports;
-    const tokenAmount = fromBaseUnits(side === 'buy' ? tokenDelta : -tokenDelta, decimals);
-    const nativeAmount = lamportsToSol(maxBig(0n, nativeLeg));
+    const legs = fillLegs(plan, delta);
+    const { decimals, networkFee, platformFee } = legs;
+    const tokenAmount = fromBaseUnits(legs.tokenRaw, decimals);
+    const nativeAmount = lamportsToSol(maxBig(0n, legs.nativeLamports));
     const latencyMs = this.deps.now() - sent.started;
     if (!(tokenAmount > 0)) {
       // Landed without moving the token (should not happen for a swap): balances are synced, nothing is booked.
@@ -736,6 +874,53 @@ function addFeesToBooked(wallet: WalletState, token: TokenState, side: Side, fee
   }
   if (Number.isFinite(balanceAfter) && balanceAfter >= 0 && pos.balance > 0) pos.balance = balanceAfter;
   token.version++;
+}
+
+/** What a landed swap traded, read from the owner's balance changes. */
+export interface FillLegs {
+  /** Tokens bought (buy) or sold (sell), base units. */
+  tokenRaw: bigint;
+  /** Lamports that went into (buy) or came out of (sell) the swap itself: fees, tip and refundable rent excluded. */
+  nativeLamports: bigint;
+  /** Network fee (meta.fee) plus the Jito tip. */
+  networkFee: bigint;
+  platformFee: bigint;
+  decimals: number;
+}
+
+export function fillLegs(plan: Pick<SwapPlan, 'side' | 'tipLamports' | 'platformFee' | 'feeWallet' | 'decimals'>, delta: WalletDelta): FillLegs {
+  const tokenDelta = delta.tokenPostRaw - delta.tokenPreRaw;
+  const solDelta = delta.ownerPostLamports - delta.ownerPreLamports;
+  const networkFee = delta.feeLamports + plan.tipLamports;
+  const platformFee = plan.feeWallet ? plan.platformFee : 0n;
+  const buy = plan.side === 'buy';
+  return {
+    tokenRaw: buy ? tokenDelta : -tokenDelta,
+    nativeLamports: buy ? -solDelta - networkFee - platformFee - delta.rentLamports : solDelta + networkFee + platformFee + delta.rentLamports,
+    networkFee,
+    platformFee,
+    decimals: delta.decimals ?? plan.decimals,
+  };
+}
+
+/**
+ * Lamports a plan may take from the wallet: buys spend at most the max SOL in plus the fee on it (a
+ * sell's fee comes out of its proceeds), the network fee and tip, and the rent of accounts it opens.
+ */
+export function lamportsNeeded(plan: Pick<SwapPlan, 'side' | 'maxInRaw' | 'platformFee' | 'priorityLamports' | 'tipLamports' | 'rentLamports'>): bigint {
+  const networkFee = SIGNATURE_FEE_LAMPORTS + plan.priorityLamports + plan.tipLamports;
+  return (plan.side === 'buy' ? plan.maxInRaw + plan.platformFee : 0n) + networkFee + plan.rentLamports;
+}
+
+/** The wallet's pump.fun and pump-amm volume accumulators (a routed swap may open either). */
+function volumeAccumulatorsOf(owner: PublicKey): string[] {
+  return [pumpVolumeAccumulatorOf(owner).toBase58(), poolVolumeAccumulatorOf(owner).toBase58()];
+}
+
+function venueLabel(pump: PumpCurveState | null, pool: PumpSwapState | null, jupiter: JupiterQuote | null): string {
+  if (pump) return 'pump.fun';
+  if (pool) return 'PumpSwap';
+  return routeLabel(jupiter!);
 }
 
 /** A display amount as base units; malformed amounts are a business failure, not a crash. */

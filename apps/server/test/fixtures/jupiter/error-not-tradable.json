@@ -1,0 +1,4 @@
+{
+ "error": "The token <MINT> is not tradable",
+ "errorCode": "TOKEN_NOT_TRADABLE"
+}

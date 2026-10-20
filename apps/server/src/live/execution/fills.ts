@@ -1,10 +1,16 @@
 // Reading what a landed transaction did to a wallet: SOL delta of the owner
 // (pre/post balances), token delta for (owner, mint) from the pre/post token
-// balances, rent locked in token accounts it created, the network fee. Failed
-// transactions get a readable reason from their error and program logs.
+// balances, rent locked in accounts it created for the owner (token accounts,
+// and the volume accumulators the pump programs create on a first buy), the
+// network fee. Failed transactions get a readable reason from their error and
+// program logs.
+//
+// Checked against real confirmed mainnet transactions (legacy and v0 with lookup
+// tables, SPL and Token-2022 mints; fixtures in test/fixtures/rpc/real-*.json).
 
 import type { TransactionError } from '@solana/web3.js';
 import { pumpErrorMessage, PUMP_PROGRAM_ID } from './pump';
+import { pumpSwapErrorMessage, PUMPSWAP_PROGRAM_ID } from './pumpswap';
 
 /** The parts of getTransaction's response (any encoding of the message) this module reads. */
 export interface TxLike {
@@ -53,7 +59,10 @@ export interface WalletDelta {
   tokenPreRaw: bigint;
   tokenPostRaw: bigint;
   decimals: number | null;
-  /** Rent moved into token accounts of the owner this transaction created (refundable, not a cost). */
+  /**
+   * Lamports moved into accounts of the owner this transaction created (rent: refundable deposits, not a
+   * cost), less what accounts it closed refunded to the owner. Negative when a close refunded more.
+   */
   rentLamports: bigint;
   /** Lamports `address` received (for checking the platform fee transfer). */
   received(address: string): bigint;
@@ -62,8 +71,12 @@ export interface WalletDelta {
 const sumRaw = (balances: TokenBalanceLike[] | null | undefined, owner: string, mint: string) =>
   (balances ?? []).filter((b) => b.owner === owner && b.mint === mint).reduce((s, b) => s + BigInt(b.uiTokenAmount.amount), 0n);
 
-/** What the transaction did to `owner`'s SOL and `mint` balances. */
-export function walletDelta(tx: TxLike, signature: string, owner: string, mint: string | null): WalletDelta {
+/**
+ * What the transaction did to `owner`'s SOL and `mint` balances. `rentAccounts` are other accounts the
+ * owner pays rent for when the transaction creates them (e.g. a pump volume accumulator): their
+ * opening balance counts as rent, like a created token account's.
+ */
+export function walletDelta(tx: TxLike, signature: string, owner: string, mint: string | null, rentAccounts: readonly string[] = []): WalletDelta {
   const meta = tx.meta;
   if (!meta) throw new Error('transaction has no status metadata');
   const keys = accountKeysOf(tx);
@@ -77,10 +90,21 @@ export function walletDelta(tx: TxLike, signature: string, owner: string, mint: 
     const any = [...post, ...pre].find((b) => b.owner === owner && b.mint === mint);
     decimals = any?.uiTokenAmount.decimals ?? null;
   }
-  // Token accounts of the owner that exist after but not before were created (and funded with rent) here.
+  // Token accounts of the owner that exist after but not before were created (and funded with rent) here;
+  // ones that existed before but not after were closed, refunding their lamports (rent, and the SOL of
+  // a wrapped-SOL account) to the owner: neither is part of the trade.
   for (const b of post) {
     if (b.owner !== owner || pre.some((p) => p.accountIndex === b.accountIndex)) continue;
     rent += BigInt(meta.postBalances[b.accountIndex] ?? 0) - BigInt(meta.preBalances[b.accountIndex] ?? 0);
+  }
+  for (const b of pre) {
+    if (b.owner !== owner || post.some((p) => p.accountIndex === b.accountIndex)) continue;
+    rent += BigInt(meta.postBalances[b.accountIndex] ?? 0) - BigInt(meta.preBalances[b.accountIndex] ?? 0);
+  }
+  for (const address of new Set(rentAccounts)) {
+    const i = keys.indexOf(address);
+    if (i < 0 || i === idx || BigInt(meta.preBalances[i] ?? 0) !== 0n) continue;
+    rent += BigInt(meta.postBalances[i] ?? 0);
   }
   const error = meta.err ? describeTxError(meta.err, meta.logMessages ?? null) : null;
   return {
@@ -95,7 +119,7 @@ export function walletDelta(tx: TxLike, signature: string, owner: string, mint: 
     tokenPreRaw: mint ? sumRaw(pre, owner, mint) : 0n,
     tokenPostRaw: mint ? sumRaw(post, owner, mint) : 0n,
     decimals,
-    rentLamports: rent > 0n ? rent : 0n,
+    rentLamports: rent,
     received(address: string) {
       const i = keys.indexOf(address);
       return i < 0 ? 0n : BigInt(meta.postBalances[i] ?? 0) - BigInt(meta.preBalances[i] ?? 0);
@@ -106,6 +130,8 @@ export function walletDelta(tx: TxLike, signature: string, owner: string, mint: 
 /** Jupiter aggregator program and its slippage error (SlippageToleranceExceeded = 6001). */
 const JUPITER_PROGRAM_ID = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
 const JUPITER_SLIPPAGE_CODE = 6001;
+/** pump-amm (PumpSwap) ExceededSlippage. */
+const PUMPSWAP_SLIPPAGE_CODE = 6004;
 
 /**
  * A readable reason for a failed (or refused) transaction: slippage, balances, expiry, else the
@@ -128,6 +154,11 @@ export function describeTxError(err: unknown, logs: string[] | null, programIds:
       if (custom.code === 6005) return 'the bonding curve completed: the token is migrating';
       const msg = pumpErrorMessage(custom.code);
       if (msg) return `pump.fun: ${msg}`;
+    }
+    if (program === PUMPSWAP_PROGRAM_ID) {
+      if (custom.code === PUMPSWAP_SLIPPAGE_CODE) return 'slippage exceeded: the price moved past your tolerance';
+      const msg = pumpSwapErrorMessage(custom.code);
+      if (msg) return `PumpSwap: ${msg}`;
     }
     if (program === JUPITER_PROGRAM_ID && custom.code === JUPITER_SLIPPAGE_CODE) return 'slippage exceeded: the price moved past your tolerance';
     if (program === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || program === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
