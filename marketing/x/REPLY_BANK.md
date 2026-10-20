@@ -1351,6 +1351,14 @@ A toe tag styled as a coroner's report for one launch, made from demo data. Dece
 
 **[truth]** The caption and every field must match the recording: the sniper sells land before the dev and bundler sells, which land in the same minute, all visible in the Activity tab. Fill the caption slot with the real gap. If the recording tells a different story, rewrite the fields and the caption to match it, and re-measure. The audit frame is read **after** the cliff, hence "read after death": never claim the panel was red before the dump unless a frame shows it. "Snipers in blocks 1–3" is the tag rule (`SNIPER_BLOCKS = 3`, `server/analytics/tokens/track.ts:21`). Fill every `[N]` with the real value and match the alt text. Not within a week of L1-A (the launch-day rug autopsy). **Claims:** SC-09, SC-10, SC-18, SC-21, SC-26.
 
+**As built** (`x/posts/meme-5.png`, `x/posts/meme-7.png`, `tools/memes/build.py`): both cards come from one demo launch that no other post uses, recorded from mint by `tools/launch/capture_watch.mjs` and captured right after the dump by `tools/memes/capture_rug.mjs` (`screens/live/watch.json`, `rug.json`). The dev and the bundle sold in the **same second**, so meme-5's second pin reads "bundlers selling, the same second" and meme-7's cause of death says "the same second". Some snipers bought back in and one sold after the dump, so the caption says "the first snipers". "Holders at time of death" became **holders left**, read from the post-dump frame. The filled meme-7 caption · `170/280` · after launch `+RISK 264/280`:
+
+```text
+coroner's report on one launch. demo data.
+
+the first snipers left over 2 minutes early. the dev and the bundle left together, same second. the chart stayed behind alone.
+```
+
 ### meme-8 · trench newcomer starter pack · 1200 × 1200 · `tiles` 2×3
 
 **Image.** Six tiles, each with a simple line icon (stroke icons in fg, one amber detail) and a caption: `a ca from a stranger's reply` (speech bubble) · `seed phrase saved in the notes app` (notepad, blank lines, no words) · `anti-mev: off` (toggle switched off) · `"i'll watch it, no stop-loss"` (eye) · `slippage: 50%` (slider maxed out) · `a group chat with more bots than people` (chat bubbles with a tiny robot). No real apps' icons, no logos, and no seed words drawn anywhere.
@@ -1417,7 +1425,7 @@ Best posted on a Monday morning (window A). Weekday names are fine; a date never
 
 ## 6. Assets needed
 
-All status **NEW**. Build with `marketing/tools/cards.py`, export PNG to `marketing/x/posts/<ref>.png`. Brand rules in §5. **AI credits: 0.** Nothing in this bank needs a generation; the ~3 pre-approved Higgsfield credits stay with the trailer's VO take.
+**Status (as built):** READY: `meme-1`, `meme-2`, `meme-3`, `meme-4`, `meme-5`, `meme-6`, `meme-7`, `meme-8`, `meme-9`, `meme-10`, all in `marketing/x/posts/` with alt texts in `x/posts/alt/`, built by `marketing/tools/memes/build.py` (not `cards.py`). Brand rules in §5. **AI credits: 0.** Nothing in this bank needs a generation; the ~3 pre-approved Higgsfield credits stay with the trailer's VO take.
 
 | Ref | Size | Template | Source data | Concept | Headline (on image) | Subtext (on image) | Footer |
 |---|---|---|---|---|---|---|---|

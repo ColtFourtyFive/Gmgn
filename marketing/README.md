@@ -51,7 +51,7 @@ Everything for the X account: the brand, the warm-up week, launch day, the trail
 | `trailer/` | Trailer v4: `capture_v4.mjs` (desktop), `capture_v4m.mjs` (phone layout), `ovl_v4.py`, `edit_v4.py`, `edit_v4v.py`, `mix_v4.py` |
 | `stills/` | Warm-up captures and framing: `capture_live.mjs`, `capture_videos.mjs`, `capture_peeks2.mjs`, `frame_posts.py`, `frame_posts2.py`, `peek_videos.py` |
 | `launch/` | Launch captures and framing: `capture_launch2.mjs`, `capture_watch.mjs` (waits for real dev dumps), `frame_launch.py`, `cards_launch.py`, `video_launch.py` |
-| `cards2/`, `memes/`, `teasers/`, `d1/`, `profile.py` | Cards, memes, teasers, the Day-1 image, the profile header |
+| `cards2/`, `memes/`, `teasers/`, `d1/`, `profile.py` | Cards, memes (`memes/capture_facts.mjs` and `memes/capture_rug.mjs` feed the data-backed ones), teasers, the Day-1 image, the profile header |
 | `coin-kit/ca_card.py` | CA-day cards; refuses to render a postable card without a valid CA and both sign-offs |
 | `vedit.py`, `render.mjs`, `chips.py` | The cut-list video editor (crops, blurs, zooms, windows, timed overlays), HTML → PNG, the real tag chips |
 

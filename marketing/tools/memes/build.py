@@ -2,7 +2,8 @@
 
 Usage: python3 build.py scratch_dir [ref ...]
 Refs: meme-1 (bingo), meme-2 (alignment), meme-4 (translator), meme-6 (wanted), meme-8 (starter pack),
-      meme-9 (tier list), meme-10 (forecast). meme-3/5/7 need demo-data captures: tools/memes/capture_memes.py.
+      meme-9 (tier list), meme-10 (forecast). meme-3 needs memes/capture_facts.mjs; meme-5 and meme-7 need one demo rug:
+      launch/capture_watch.mjs, then memes/capture_rug.mjs.
 """
 import json
 import os
@@ -240,7 +241,113 @@ def facts():
     return cards.stage(w, h, body), w, h
 
 
-BUILD = {"meme-1": bingo, "meme-3": facts, "meme-2": alignment, "meme-4": translator, "meme-6": wanted, "meme-8": starter, "meme-9": tiers, "meme-10": forecast}
+def rug_facts():
+    """One demo rug: the last take in screens/live/watch.json (capture_watch.mjs) + its post-dump stills (capture_rug.mjs)."""
+    r = json.load(open(f"{M}/screens/live/rug.json"))
+    t = next(x for x in json.load(open(f"{M}/screens/live/watch.json"))["takes"] if x["address"] == r["address"])
+    tr = sorted(t["trades"], key=lambda x: x["t"])
+    c, dump = t["createdAt"], t["dumpAt"] or t["devSellAt"]
+    tags = lambda x: set(x["tags"] or [])
+    bundled = any(x["side"] == "buy" and "bundler" in tags(x) and x["t"] - c < 1 for x in tr)
+    sniped = any(x["side"] == "buy" and "sniper" in tags(x) for x in tr)
+    sniper_out = [x for x in tr if x["side"] == "sell" and "sniper" in tags(x) and x["t"] < dump]
+    b_sell = [x for x in tr if x["side"] == "sell" and "bundler" in tags(x) and not x["isDev"]]
+    b_gap = min((abs(x["t"] - dump) for x in b_sell), default=None)
+    return {"r": r, "t": t, "c": c, "dump": dump, "age_min": round((dump - c) / 60), "bundled": bundled, "sniped": sniped,
+            "sniper_gap": (dump - sniper_out[0]["t"]) if sniper_out else None,
+            "bundle_with_dev": "the same second" if b_gap is not None and b_gap <= 1 else ("the same minute" if b_gap is not None and b_gap <= 60 else None)}
+
+
+def human(sec):
+    # Never round a gap up: "over 2 minutes" for 158 s.
+    m = int(sec // 60)
+    return "under a minute" if m < 1 else ("over a minute" if m == 1 else f"over {m} minutes")
+
+
+def chart_head():
+    # The real cliff: a 3x crop of the 1 s candles from mint through the dump (at 3x the life spans ~600 CSS px).
+    from PIL import Image
+    r = json.load(open(f"{M}/screens/live/rug.json"))
+    x, y, w, h = r["chart"]
+    box = (x + 4, y + 52, x + 4 + 640, y + h - 40)
+    im = Image.open(f"{M}/screens/live/rug-page.png").crop(tuple(v * 3 for v in box))
+    # The dump candle: the column with the longest red run.
+    px = im.load()
+    best = (0, 0, 0)
+    for cx in range(im.width):
+        run = top = 0
+        for cy in range(im.height):
+            rr, gg, bb = px[cx, cy][:3]
+            if rr > 180 and gg < 120 and bb < 130:
+                run += 1
+                top = top or cy
+        if run > best[0]:
+            best = (run, cx, top)
+    out = f"{S}/rug-chart.png"
+    im.save(out)
+    return out, im.size, best
+
+
+def chart_vs():
+    """meme-5: the chart in your head vs the chart (one real demo rug, pins only where the Activity tab shows them)."""
+    w, h = 1600, 900
+    f = rug_facts()
+    src, (iw, ih), (run, cx, top) = chart_head()
+    pw, ph = 700, 560
+    k = min(pw / iw, ph / ih)
+    dw, dh = iw * k, ih * k
+    ox, oy = 840 + (pw - dw) / 2, 250 + (ph - dh) / 2
+    px_, py_ = ox + cx * k, oy + (top + run / 2) * k   # the middle of the dump candle
+    left = (f'<div style="position:absolute;left:60px;top:250px;width:{pw}px;height:{ph}px;background:{PANEL};border:1px solid {LINE};border-radius:14px">'
+            f'<svg viewBox="0 0 700 560" style="position:absolute;inset:0"><path d="M60 480 C 200 470, 260 400, 360 330 S 560 140, 650 80" '
+            f'fill="none" stroke="{AMBER}" stroke-width="7" stroke-linecap="round"/></svg>'
+            f'<div style="position:absolute;left:44px;top:452px;width:32px;height:32px;border-radius:50%;background:{AMBER};box-shadow:0 0 18px {AMBER}"></div>'
+            f'<div class="mono" style="position:absolute;left:38px;top:404px;font-weight:700;font-size:26px;color:{AMBER}">you</div></div>'
+            f'<div style="position:absolute;left:60px;top:200px;font-weight:700;font-size:32px">the chart in your head</div>')
+    # Labels sit left of the cliff, in the empty space under the plateau, with a leader line to the candle.
+    pin = lambda label, dy: (f'<div style="position:absolute;left:{px_ - 16:.0f}px;top:{py_ + dy:.0f}px;transform:translateX(-100%);display:flex;'
+                             f'align-items:center"><div style="background:{AMBER};color:#0A0C10;font-weight:700;font-size:24px;padding:5px 12px;'
+                             f'border-radius:8px;white-space:nowrap">{label}</div><div style="width:36px;height:3px;background:{AMBER}"></div></div>')
+    same = f["bundle_with_dev"]
+    pins = pin("dev sells", -40) + (pin(f"bundlers selling, {same}", 10) if same else "")
+    right = (f'<div style="position:absolute;left:840px;top:250px;width:{pw}px;height:{ph}px;background:#0D0F14;border:1px solid {LINE};border-radius:14px;overflow:hidden">'
+             f'<img src="file://{src}" style="position:absolute;left:{ox - 840:.0f}px;top:{oy - 250:.0f}px;width:{dw:.0f}px;height:{dh:.0f}px"></div>'
+             + pins
+             + f'<div class="mono" style="position:absolute;left:{840 + pw - 300}px;top:{250 + 14}px;font-weight:500;font-size:18px;color:rgba(230,233,240,.85);'
+             f'background:rgba(10,12,16,.85);border:1px solid {LINE};border-radius:6px;padding:.45em .8em">UI shown with demo data</div>'
+             f'<div style="position:absolute;left:840px;top:200px;font-weight:700;font-size:32px">the chart</div>')
+    body = (head("the chart in your head / the chart", "right panel: a real capture, demo data. left panel: your imagination.", 60, 64)
+            + left + right + footer("UI shown with demo data · high risk · nfa", 60, 20))
+    return cards.stage(w, h, body), w, h
+
+
+def toe_tag():
+    """meme-7: rug autopsy report, every field from the same launch as meme-5 (audit read after the dump)."""
+    w, h = 1080, 1350
+    f = rug_facts()
+    r = f["r"]
+    cause = "dev sell" + (f", bundle sold {f['bundle_with_dev']}" if f["bundle_with_dev"] else "")
+    factors = ", ".join(x for x in ["bundled at launch" if f["bundled"] else "",
+                                    "snipers in <span style=\"white-space:nowrap\">blocks 1–3</span>" + (", out early" if f["sniper_gap"] else "") if f["sniped"] else ""] if x)
+    rows = [("deceased", '<span style="display:inline-block;width:150px;height:30px;vertical-align:middle;background:#2A303B;border-radius:4px;filter:blur(1px)"></span>'
+             f', age {f["age_min"]} min'),
+            ("cause of death", cause), ("contributing factors", factors), ("time of death", f'{f["age_min"]} min after launch'),
+            ("holders left", str(r["holders"])),
+            ("coroner's note", f'audit, {r["flags"]} flags · {r["risk"].lower()} risk · rug ratio {r["rugRatio"]} (read after death)')]
+    rr = "".join(f'<div style="padding:16px 0;border-top:1px dashed #3A4150"><div class="mono" style="font-size:20px;color:{MUTED};letter-spacing:.1em">{k.upper()}</div>'
+                 f'<div class="mono" style="margin-top:6px;font-weight:600;font-size:29px;line-height:1.3">{v}</div></div>' for k, v in rows)
+    tag = (f'<div style="position:absolute;left:150px;right:110px;top:300px;background:{PANEL};border:2px solid {LINE};border-radius:22px 22px 22px 90px;'
+           f'padding:70px 48px 30px 60px;box-shadow:0 30px 80px rgba(0,0,0,.6)">'
+           f'<div style="position:absolute;left:44px;top:34px;width:34px;height:34px;border-radius:50%;background:#0A0C10;border:3px solid {LINE}"></div>'
+           f'<div class="mono" style="font-weight:800;font-size:36px;color:{AMBER};letter-spacing:.06em">CORONER\'S TAG · DEMO DATA</div>{rr}</div>'
+           f'<svg viewBox="0 0 400 400" style="position:absolute;left:0;top:0;width:400px;height:400px"><path d="M211 351 C 180 300, 70 280, 40 236" '
+           f'fill="none" stroke="{AMBER}" stroke-width="5" stroke-linecap="round"/></svg>')
+    body = (head("rug autopsy report", "every field from one launch · demo data", 80, 78) + tag
+            + footer("UI shown with demo data · high risk · nfa", 80, 22))
+    return cards.stage(w, h, body), w, h
+
+
+BUILD = {"meme-5": chart_vs, "meme-7": toe_tag, "meme-1": bingo, "meme-3": facts, "meme-2": alignment, "meme-4": translator, "meme-6": wanted, "meme-8": starter, "meme-9": tiers, "meme-10": forecast}
 
 if __name__ == "__main__":
     jobs = []

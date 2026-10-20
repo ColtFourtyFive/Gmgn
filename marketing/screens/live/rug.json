@@ -1,0 +1,22 @@
+{
+ "token": "LAND",
+ "address": "49Mjh6xHqy3XsBMKkvBH3yhcmZ3ypwhSZPpUHTeCbonk",
+ "capturedAt": 1792537410.206,
+ "chart": [
+  16,
+  349,
+  1540,
+  507
+ ],
+ "audit": [
+  1564,
+  412,
+  340,
+  308
+ ],
+ "auditText": "Audit\n3 flags\nHigh risk\nRug ratio\n90.5%\nRug ratio\n91%\nBundlers\n23%\nFresh wallets\n27%\nLP burned\nOn curve\nSmart money\n1\nMint authority\nRenounced\nFreeze authority\nRenounced\n\nAudit — reference only.\n\nAll 14",
+ "flags": "3",
+ "risk": "High",
+ "rugRatio": "90.5%",
+ "holders": 30
+}
