@@ -2,7 +2,7 @@
 // preset with inline editor, then the form of the selected order type.
 
 import { useEffect, useRef, useState } from 'react';
-import { CHAINS, type PresetId, type TokenDetail, type TokenPositionRow, type UserSettings } from '@trenchscope/shared';
+import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type PresetId, type TokenDetail, type TokenPositionRow, type UserSettings } from '@trenchscope/shared';
 import { FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import { Tabs } from '@/components/ui';
@@ -156,7 +156,7 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
       </div>
       <p className="flex items-center gap-1 border-t border-line px-2.5 py-1.5 text-2xs text-faint">
         <FlaskConical size={11} className="text-accent" aria-hidden />
-        Paper trading on simulated markets · 1% platform fee
+        Paper trading on simulated markets · {formatPercent(PLATFORM_FEE_RATE, { sign: false, digits: 1 })} platform fee
       </p>
     </section>
   );
