@@ -1,6 +1,7 @@
 # Trenchscope API contract
 
-All types referenced here live in `packages/shared/src/types.ts`. JSON everywhere.
+All types referenced here live in `packages/shared/src/types/` (one module per domain, re-exported by
+`types.ts`). JSON everywhere.
 Auth: `Authorization: Bearer <token>` (token from `/api/auth/*`). Endpoints marked 🔒 return
 `401 {error}` without it; others accept anonymous callers but return viewer-relative fields
 (`following`/`you` tags, remarks, `isFollowed`) when a token is present.
