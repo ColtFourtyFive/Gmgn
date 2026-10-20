@@ -185,9 +185,9 @@ POST /api/trade/swap (or an order / copy / snipe) ─► Executor ─► LiveVen
 Embedded wallets: registration calls `SignerApi.createWallet` first and creates the account's World
 wallet **at the embedded address**, so feed trades of that address and our own fills land on one
 position. `live/wallets/` keeps balances in sync from chain (`World.syncWalletBalances`, reads that
-raced the account's own transaction dropped), scans deposits from a persisted cursor, and runs
-withdrawals (2FA, whitelist, rate limit; recorded `pending` → `sent` with signature before broadcast →
-`confirmed` / `failed`; resumed after a restart, never re-sent).
+raced the account's own transaction dropped), scans deposits from persisted cursors (the wallet and
+each of its token accounts), and runs withdrawals (2FA, whitelist, rate limit; recorded `pending` →
+`sent` with signature before broadcast → `confirmed` / `failed`; resumed after a restart, never re-sent).
 
 ### Durable store (live)
 

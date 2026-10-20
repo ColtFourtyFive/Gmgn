@@ -211,7 +211,7 @@ by `/readyz` (`live.problems`).
 | `JUPITER_API_URL` | `https://lite-api.jup.ag`, or `https://api.jup.ag` with a key | Swap routing API |
 | `JUPITER_API_KEY` | none | Jupiter API key |
 | `JITO_BLOCK_ENGINE_URL` | `https://mainnet.block-engine.jito.wtf` | MEV-protected sends |
-| `IPFS_GATEWAYS` | `https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/` | Gateways tried in order for token metadata |
+| `IPFS_GATEWAYS` | `https://ipfs.filebase.io/ipfs/,https://gateway.pinata.cloud/ipfs/` | Gateways tried in order for token metadata; the first also serves token images |
 
 ### Live: fees and EVM chains
 
