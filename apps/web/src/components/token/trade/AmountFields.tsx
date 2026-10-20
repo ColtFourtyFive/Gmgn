@@ -5,7 +5,7 @@ import { forwardRef } from 'react';
 import { CHAINS, formatCompact, type ChainId, type TokenPositionRow } from '@trenchscope/shared';
 import { Wallet } from 'lucide-react';
 import clsx from 'clsx';
-import { Compact, Native, Usd } from '@/components/common';
+import { Compact, Native, Pct, Price, Usd } from '@/components/common';
 import { Button, NumberInput, SegmentedControl } from '@/components/ui';
 
 function quickClass(active: boolean, tone: 'buy' | 'sell') {
@@ -94,6 +94,7 @@ export const SellAmount = forwardRef<HTMLInputElement, SellAmountProps>(function
 ) {
   const balance = position?.balance ?? 0;
   const tokens = unit === 'percent' ? (value ?? 0) * 0.01 * balance : (value ?? 0);
+  const unrealized = position && balance > 0 ? balance * priceUsd - position.costBasisUsd : null;
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2 text-xs">
@@ -114,6 +115,22 @@ export const SellAmount = forwardRef<HTMLInputElement, SellAmountProps>(function
           )}
         </span>
       </div>
+      {position && balance > 0 && unrealized !== null && (
+        <p className="num flex items-center justify-between gap-2 rounded bg-panel-2 px-2 py-1 text-2xs text-muted">
+          <span>
+            Avg buy <Price value={position.avgBuyPriceUsd} className="text-fg" />
+          </span>
+          <span>
+            PnL <Usd value={unrealized} colored signed />
+            {position.costBasisUsd > 0 && (
+              <>
+                {' '}
+                (<Pct value={unrealized / position.costBasisUsd} digits={1} />)
+              </>
+            )}
+          </span>
+        </p>
+      )}
       <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(quickPercents.length, 4)}, minmax(0, 1fr))` }}>
         {quickPercents.slice(0, 4).map((p) => {
           const active = unit === 'percent' && value === p;

@@ -84,23 +84,22 @@ export function LimitForm(props: TradeFormProps & { defaultTrigger: TriggerType 
 
   return (
     <div className="flex flex-col gap-2.5">
-      <Field
-        label={
-          <span className="flex items-center justify-between gap-2">
-            <span>Trigger</span>
-            <SegmentedControl
-              size="sm"
-              value={triggerType}
-              onChange={setTriggerType}
-              items={[
-                { value: 'mcap', label: 'MC' },
-                { value: 'price', label: 'Price' },
-              ]}
-              aria-label="Trigger on"
-            />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted">
+            Trigger
           </span>
-        }
-      >
+          <SegmentedControl
+            size="sm"
+            value={triggerType}
+            onChange={setTriggerType}
+            items={[
+              { value: 'mcap', label: 'MC' },
+              { value: 'price', label: 'Price' },
+            ]}
+            aria-label="Trigger on"
+          />
+        </div>
         <NumberInput
           value={trigger}
           onChange={setTrigger}
@@ -122,7 +121,7 @@ export function LimitForm(props: TradeFormProps & { defaultTrigger: TriggerType 
             </button>
           ))}
         </div>
-      </Field>
+      </div>
       <div className="flex flex-col gap-0.5 rounded bg-panel-2 px-2 py-1.5 text-xs">
         <span className="flex items-center justify-between gap-2 text-muted">
           Current {triggerType === 'mcap' ? 'MC' : 'price'}

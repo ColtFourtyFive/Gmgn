@@ -76,7 +76,7 @@ export function HoldersTab({ token, maxHeight }: { token: TokenDetail; maxHeight
       {
         key: 'share',
         header: '% supply',
-        width: 130,
+        width: 116,
         sortable: true,
         sortValue: (p) => p.holdRate,
         render: (p) => (
@@ -173,7 +173,7 @@ export function HoldersTab({ token, maxHeight }: { token: TokenDetail; maxHeight
           loading={q.isPending}
           compact
           maxHeight={maxHeight}
-          minWidth={1080}
+          minWidth={1000}
         />
       )}
     </div>

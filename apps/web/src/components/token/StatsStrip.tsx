@@ -77,15 +77,14 @@ export const StatsStrip = memo(function StatsStrip({ token: t, className }: { to
         </Kpi>
       </div>
       <div className="border-t border-line">
-        <div role="tablist" aria-label="Stats window" className="grid grid-cols-5">
+        <div role="group" aria-label="Stats window" className="grid grid-cols-5">
           {STAT_WINDOWS.map((k) => {
             const active = k === win;
             return (
               <button
                 key={k}
                 type="button"
-                role="tab"
-                aria-selected={active}
+                aria-pressed={active}
                 onClick={() => setWin(k)}
                 className={clsx(
                   'flex flex-col items-center gap-0 border-b-2 py-1 transition-colors',

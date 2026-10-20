@@ -51,7 +51,8 @@ export function toBar(c: Candle, unit: ChartUnit, supply: number): Bar {
 
 /** Axis / crosshair label for a value in the chart unit. */
 export function formatAxis(value: number, unit: ChartUnit): string {
-  if (!Number.isFinite(value)) return '';
+  // Prices and market caps are never negative; the scale margins can still show values below 0.
+  if (!Number.isFinite(value) || value < 0) return '';
   if (unit === 'mcap') return formatUsd(value, 2);
   const abs = Math.abs(value);
   if (abs > 0 && abs < 1) return `$${formatSmall(value, 4)}`;
@@ -76,9 +77,10 @@ const SHORT = new Map(MARKER_CLASSES.map((c) => [c.key, c.short]));
 export const MAX_MARKER_TRADES = 300;
 
 /**
- * Aggregate tagged trades into one marker per candle and side: arrow below
- * the bar for buys, above for sells, labelled with the highest-priority
- * class ("KOL", "Dev ×3"); the viewer's own trades use the accent color.
+ * Aggregate tagged trades into one marker per candle and side: green arrow
+ * below the bar for buys, red arrow above for sells, labelled with the
+ * highest-priority class ("KOL", "Dev ×3"); the viewer's own trades use the
+ * accent color.
  */
 export function buildMarkers(opts: {
   trades: Trade[];
@@ -89,11 +91,15 @@ export function buildMarkers(opts: {
   range: { from: number; to: number } | null;
   migratedAt: number | null;
   colors: MarkerColors;
+  /** Current horizontal pixels per bar: labels that would collide with a neighbour are dropped. */
+  barPx?: number;
 }): SeriesMarker<UTCTimestamp>[] {
-  const { trades, enabled, viewerTags, resolution, range, migratedAt, colors } = opts;
+  const { trades, enabled, viewerTags, resolution, range, migratedAt, colors, barPx = 30 } = opts;
+  const res = RESOLUTION_SECONDS[resolution];
   if (!range) return [];
-  type Group = { time: UTCTimestamp; side: Trade['side']; cls: MarkerClass; count: number };
+  type Group = { time: UTCTimestamp; side: Trade['side']; cls: MarkerClass; count: number; total: number };
   const groups = new Map<string, Group>();
+  const perClass = new Map<string, number>();
   let used = 0;
   for (const t of trades) {
     if (used >= MAX_MARKER_TRADES) break;
@@ -103,29 +109,45 @@ export function buildMarkers(opts: {
     if (time < range.from || time > range.to) continue;
     used++;
     const key = `${time}|${t.side}`;
+    const top = classes[0];
+    const n = (perClass.get(`${key}|${top}`) ?? 0) + 1;
+    perClass.set(`${key}|${top}`, n);
     const g = groups.get(key);
-    if (!g) groups.set(key, { time, side: t.side, cls: classes[0], count: 1 });
+    if (!g) groups.set(key, { time, side: t.side, cls: top, count: 1, total: 1 });
     else {
-      g.count++;
-      if (markerPriority(classes[0]) < markerPriority(g.cls)) g.cls = classes[0];
+      g.total++;
+      if (markerPriority(top) < markerPriority(g.cls)) {
+        g.cls = top;
+        g.count = n;
+      } else if (top === g.cls) g.count = n;
     }
   }
   const markers: SeriesMarker<UTCTimestamp>[] = [];
-  for (const g of groups.values()) {
+  // Greedy label placement per side, oldest first: the viewer's and the dev's
+  // labels always show; others only when they don't overlap the previous label.
+  const lastLabel: Record<Trade['side'], number> = { buy: -Infinity, sell: -Infinity };
+  for (const g of [...groups.values()].sort((a, b) => a.time - b.time)) {
     const buy = g.side === 'buy';
+    const others = g.total - g.count;
+    // "KOL ×3" = three KOL trades; "+2" = other tagged trades in the same candle.
+    let text: string | undefined = `${SHORT.get(g.cls) ?? ''}${g.count > 1 ? ` ×${g.count}` : ''}${others > 0 ? ` +${others}` : ''}`;
+    const needBars = (text.length * 6.5 + 6) / Math.max(1, barPx);
+    const important = g.cls === 'mine' || g.cls === 'dev';
+    if (!important && (g.time - lastLabel[g.side]) / res < needBars) text = undefined;
+    else lastLabel[g.side] = g.time;
     markers.push({
       time: g.time,
       position: buy ? 'belowBar' : 'aboveBar',
       shape: buy ? 'arrowUp' : 'arrowDown',
       color: g.cls === 'mine' ? colors.mine : buy ? colors.up : colors.down,
-      text: `${SHORT.get(g.cls) ?? ''} ${buy ? 'B' : 'S'}${g.count > 1 ? `×${g.count}` : ''}`,
+      text,
       size: g.cls === 'mine' ? 1.4 : 1,
       id: `${g.time}-${g.side}`,
     });
   }
   if (migratedAt) {
     const time = bucketTime(migratedAt, resolution);
-    if (time >= range.from && time <= range.to) markers.push({ time, position: 'aboveBar', shape: 'square', color: colors.info, text: 'Migrated', id: 'migration' });
+    if (time >= range.from && time <= range.to) markers.push({ time, position: 'aboveBar', shape: 'square', color: colors.info, text: barPx < 40 ? 'M' : 'Migrated', id: 'migration' });
   }
   return markers.sort((a, b) => a.time - b.time);
 }

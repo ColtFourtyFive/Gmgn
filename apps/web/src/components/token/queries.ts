@@ -2,7 +2,7 @@
 // private trading data lives under ['token-position'], ['orders'] and
 // ['portfolio'] so fills and order events (user channel, useSwap) refresh it.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ChainId, CreateOrderRequest, Order, Resolution, TokenDetail, TokenPositionRow, Trade } from '@trenchscope/shared';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
@@ -142,4 +142,21 @@ export function useCreateOrder(): { create: (req: CreateOrderRequest, success: {
     [qc],
   );
   return { create, pending };
+}
+
+/** Run `fn` when the realtime connection comes back after a drop (to backfill what the stream missed). */
+export function useOnReconnect(fn: () => void): void {
+  const conn = useConnectionState();
+  const seenOpen = useRef(conn === 'open');
+  const wasDown = useRef(false);
+  const cb = useRef(fn);
+  cb.current = fn;
+  useEffect(() => {
+    if (conn === 'closed' && seenOpen.current) wasDown.current = true;
+    else if (conn === 'open') seenOpen.current = true;
+    if (conn === 'open' && wasDown.current) {
+      wasDown.current = false;
+      cb.current();
+    }
+  }, [conn]);
 }

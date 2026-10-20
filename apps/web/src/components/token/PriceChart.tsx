@@ -21,7 +21,8 @@ import { formatUsd, RESOLUTIONS, type Candle, type Order, type Position, type Re
 import { CandlestickChart, Eye, MoveHorizontal } from 'lucide-react';
 import clsx from 'clsx';
 import { withSubscript, WALLET_TAG_META } from '@/components/common';
-import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Skeleton } from '@/components/ui';
+import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Select, Skeleton } from '@/components/ui';
+import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { api } from '@/lib/api';
 import { useUi } from '@/store/ui';
@@ -29,7 +30,7 @@ import { useViewerTags } from '@/components/discovery';
 import { useTokenFeed } from './feed';
 import { buildMarkers, cssColor, formatAxis, minMoveFor, safeLocale, toBar, toChartTime, type Bar } from './chartUtils';
 import { DEFAULT_MARKER_CLASSES, MARKER_CLASSES, type MarkerClass } from './model';
-import { tokenKeys, useChartUnit } from './queries';
+import { tokenKeys, useChartUnit, useOnReconnect } from './queries';
 import type { ChartUnit } from './store';
 import { useMarkerTrades } from './useMarkerTrades';
 import { useSession } from '@/store/session';
@@ -89,6 +90,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   const [classList, setClassList] = useLocalStorage<MarkerClass[]>('ts.token.markers', DEFAULT_MARKER_CLASSES);
   const enabled = useMemo(() => new Set(classList), [classList]);
   const markerTrades = useMarkerTrades(chain, address, enabled);
+  const roomy = useBreakpoint('sm');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -109,6 +111,8 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   /** Bumped whenever bars are (re)written so markers and lines follow. */
   const [dataVersion, setDataVersion] = useState(0);
   const [legend, setLegend] = useState<Legend | null>(null);
+  /** Pixels per bar (rounded) — marker labels that would overlap are dropped. */
+  const [barPx, setBarPx] = useState(30);
   const [lastLegend, setLastLegend] = useState<Legend | null>(null);
 
   const candles = useQuery({
@@ -119,6 +123,9 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     refetchOnWindowFocus: false,
     retry: 1,
   });
+
+  // The stream only sends the latest candle: refetch history after a reconnect to fill the gap.
+  useOnReconnect(() => void candles.refetch());
 
   const colors = () => ({ up: cssColor('up'), down: cssColor('down'), upVol: cssColor('up', 0.35), downVol: cssColor('down', 0.35) });
 
@@ -137,6 +144,17 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     const last = raw[raw.length - 1];
     setLastLegend(last ? { bar: toBar(last, unitRef.current, supplyRef.current), volume: last.volume } : null);
     setDataVersion((v) => v + 1);
+  };
+
+  /** Default view: the latest ~width/10 bars (left-anchored while a young token has fewer). */
+  const fitBars = () => {
+    const ts = chartRef.current?.timeScale();
+    if (!ts) return;
+    const n = rawRef.current.length;
+    const target = Math.max(20, Math.round((containerRef.current?.clientWidth ?? 600) / 10));
+    if (n === 0) return;
+    if (n >= target) ts.setVisibleLogicalRange({ from: n - target, to: n + 2 });
+    else ts.setVisibleLogicalRange({ from: -3, to: target });
   };
 
   const applyLive = (c: Candle) => {
@@ -159,25 +177,31 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     const chart = createChart(el, {
       autoSize: true,
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.22 } },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7, minBarSpacing: 1.5 },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.2 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 7, minBarSpacing: 1.5 },
       localization: { locale: safeLocale() },
       handleScale: { axisPressedMouseMove: { time: true, price: true } },
     });
     const series = chart.addCandlestickSeries({ borderVisible: false, priceLineVisible: true, lastValueVisible: true });
     const vol = chart.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
     const onMove = (param: MouseEventParams<Time>) => {
       const bar = param.seriesData.get(series) as Bar | undefined;
       const v = param.seriesData.get(vol) as { value?: number } | undefined;
       setLegend(bar && 'open' in bar ? { bar, volume: v?.value ?? 0 } : null);
     };
     chart.subscribeCrosshairMove(onMove);
+    const onRange = (range: { from: number; to: number } | null) => {
+      const bars = range ? range.to - range.from : 0;
+      if (bars > 0) setBarPx(Math.max(1, Math.round(el.clientWidth / bars)));
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     chartRef.current = chart;
     candleRef.current = series;
     volumeRef.current = vol;
     return () => {
       chart.unsubscribeCrosshairMove(onMove);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.remove();
       chartRef.current = null;
       candleRef.current = null;
@@ -237,7 +261,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
     pendingRef.current = [];
     loadedRef.current = true;
     writeAll();
-    if (fresh) chartRef.current?.timeScale().fitContent();
+    if (fresh) fitBars();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles.data, resolution]);
 
@@ -268,9 +292,10 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
         range,
         migratedAt: token.migratedAt,
         colors: { up: cssColor('up'), down: cssColor('down'), mine: cssColor('accent'), info: cssColor('info') },
+        barPx,
       }),
     );
-  }, [markerTrades, enabled, viewerTags, resolution, token.migratedAt, dataVersion, theme]);
+  }, [markerTrades, enabled, viewerTags, resolution, token.migratedAt, dataVersion, theme, barPx]);
 
   // Price lines: average buy and open order triggers.
   const avgBuy = position && position.balance > 0 && position.avgBuyPriceUsd > 0 ? position.avgBuyPriceUsd : null;
@@ -310,7 +335,11 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   return (
     <section className={clsx('panel flex min-w-0 flex-col overflow-hidden', className)} aria-label={`${token.symbol} chart`}>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5">
-        <SegmentedControl size="sm" value={resolution} onChange={onResolutionChange} items={RES_ITEMS} aria-label="Candle resolution" />
+        {roomy ? (
+          <SegmentedControl size="sm" value={resolution} onChange={onResolutionChange} items={RES_ITEMS} aria-label="Candle resolution" />
+        ) : (
+          <Select size="sm" value={resolution} onChange={onResolutionChange} options={RES_ITEMS} className="w-[72px]" aria-label="Candle resolution" />
+        )}
         <SegmentedControl size="sm" value={unit} onChange={setUnit} items={UNIT_ITEMS} aria-label="Chart unit" />
         <span className="flex-1" />
         <Popover
@@ -320,7 +349,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
           trigger={
             <button type="button" className="btn-ghost btn-xs" aria-label="Trade markers">
               <Eye size={12} aria-hidden />
-              Markers
+              <span className="hidden sm:inline">Markers</span>
               <span className="num rounded bg-panel-3 px-1 text-2xs text-muted">{classList.length}</span>
             </button>
           }
@@ -350,12 +379,12 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
             })}
           </ul>
         </Popover>
-        <IconButton size="sm" label="Reset zoom" icon={<MoveHorizontal size={14} />} onClick={() => chartRef.current?.timeScale().fitContent()} />
+        {roomy && <IconButton size="sm" label="Reset zoom" icon={<MoveHorizontal size={14} />} onClick={fitBars} />}
       </div>
       <div className="relative min-w-0" style={{ height }}>
         <div ref={containerRef} className="absolute inset-0" />
         {shown && (
-          <div className="pointer-events-none absolute left-2 top-1.5 z-[2] flex flex-wrap items-center gap-x-2 text-2xs text-muted">
+          <div className="pointer-events-none absolute left-2 right-[84px] top-1.5 z-[2] flex flex-wrap items-center gap-x-2 text-2xs text-muted">
             <span>
               O <span className="num text-fg">{withSubscript(formatAxis(shown.bar.open, unit))}</span>
             </span>

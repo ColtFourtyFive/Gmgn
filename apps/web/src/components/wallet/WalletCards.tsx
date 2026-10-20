@@ -66,7 +66,7 @@ export const PnlCalendar = memo(function PnlCalendar({ days }: { days: WalletPer
           <span className="text-up">{green}</span> / <span className="text-down">{red}</span> / {days.length} days
         </span>
       </div>
-      <div className="grid w-full max-w-[260px] grid-cols-7 gap-[3px] self-center" role="grid" aria-label="Daily realized PnL calendar">
+      <div className="grid w-full max-w-[260px] grid-cols-7 gap-[3px] self-center" role="list" aria-label="Daily realized PnL calendar">
         {WEEKDAYS.map((d) => (
           <span key={d} className="text-center text-2xs text-faint" aria-hidden>
             {d}
@@ -83,6 +83,7 @@ export const PnlCalendar = memo(function PnlCalendar({ days }: { days: WalletPer
           return (
             <Tooltip
               key={d.day}
+              anchorClassName="w-full"
               content={
                 <span className="flex flex-col">
                   <span className="text-muted">{date.toLocaleDateString('en-US', DAY_FMT)}</span>
@@ -91,11 +92,11 @@ export const PnlCalendar = memo(function PnlCalendar({ days }: { days: WalletPer
               }
             >
               <span
-                role="gridcell"
+                role="listitem"
                 tabIndex={0}
                 aria-label={`${date.toLocaleDateString('en-US', DAY_FMT)}: ${formatUsd(d.pnlUsd)}`}
                 className={clsx(
-                  'num flex aspect-square items-center justify-center rounded-[4px] text-2xs',
+                  'num flex aspect-square w-full items-center justify-center rounded-[4px] text-2xs',
                   d.pnlUsd === 0 ? 'bg-panel-3 text-faint' : strength > 0.55 ? (tone === 'up' ? 'text-up-fg' : 'text-down-fg') : 'text-fg',
                   d.day === last && 'ring-1 ring-accent',
                 )}
@@ -238,8 +239,8 @@ export const DistributionCard = memo(function DistributionCard({ stats: s, perio
         {PNL_BUCKETS.map((b) => {
           const n = d[b.key];
           return (
-            <li key={b.key} className="grid grid-cols-[88px_1fr_64px] items-center gap-2 text-xs">
-              <span className={clsx('flex items-center gap-1.5', b.tone === 'up' ? 'text-up' : 'text-down')}>
+            <li key={b.key} className="grid grid-cols-[84px_1fr_64px] items-center gap-2 text-xs">
+              <span className={clsx('flex items-center gap-1.5 whitespace-nowrap', b.tone === 'up' ? 'text-up' : 'text-down')}>
                 <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: `rgb(var(--${b.tone}) / ${0.3 + 0.7 * b.strength})` }} aria-hidden />
                 <span className="num">{b.label}</span>
               </span>

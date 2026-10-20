@@ -1,11 +1,14 @@
 // Token page skeleton, not-found state and the phone buy/sell bar.
 
-import { Link } from 'react-router-dom';
-import type { ChainId, TokenDetail } from '@trenchscope/shared';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { CHAINS, type ChainId, type TokenDetail } from '@trenchscope/shared';
 import { Flame, Search, SearchX, TrendingUp } from 'lucide-react';
-import { FlashValue, Pct, Price, Usd } from '@/components/common';
+import { ChainIcon, FlashValue, Pct, Price, Usd } from '@/components/common';
 import { Button, Kbd, Skeleton } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
+import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { useUi } from '@/store/ui';
 import { useTokenUi } from './store';
@@ -52,8 +55,20 @@ export function TokenPageSkeleton({ wide }: { wide: boolean }) {
   );
 }
 
+/**
+ * 404 state. Probes search for the same address: a token on another chain
+ * gets a direct link, and a wallet address redirects to its wallet page.
+ */
 export function TokenNotFound({ chain, address }: { chain: ChainId; address: string }) {
   const desktopSearch = useBreakpoint('lg');
+  const navigate = useNavigate();
+  const probe = useQuery({ queryKey: ['search', 'token-404', address], queryFn: () => api.search(address), enabled: address.length >= 20, retry: false, staleTime: 60_000 });
+  const same = (a: string) => a.toLowerCase() === address.toLowerCase();
+  const elsewhere = probe.data?.tokens.find((t) => same(t.address));
+  const wallet = probe.data?.wallets.find((w) => same(w.address));
+  useEffect(() => {
+    if (wallet && !elsewhere) navigate(routes.wallet(wallet.chain, wallet.address), { replace: true });
+  }, [wallet, elsewhere, navigate]);
   const openSearch = () => {
     if (desktopSearch) {
       const input = document.querySelector<HTMLInputElement>('header input[type="search"], header input');
@@ -76,8 +91,16 @@ export function TokenNotFound({ chain, address }: { chain: ChainId; address: str
           link is out of date.
         </p>
       </div>
+      {elsewhere && (
+        <Link to={routes.token(elsewhere.chain, elsewhere.address)} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-sm hover:bg-accent/15">
+          <ChainIcon chain={elsewhere.chain} size={16} />
+          <span>
+            <span className="font-semibold">{elsewhere.symbol}</span> is on {CHAINS[elsewhere.chain].name} — open it
+          </span>
+        </Link>
+      )}
       <div className="flex flex-wrap justify-center gap-2">
-        <Button variant="primary" icon={<Search size={14} />} onClick={openSearch}>
+        <Button variant={elsewhere ? 'outline' : 'primary'} icon={<Search size={14} />} onClick={openSearch}>
           Search tokens <Kbd>/</Kbd>
         </Button>
         <Link to={routes.trenches(chain)} className="btn-outline">

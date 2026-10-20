@@ -36,9 +36,9 @@ export type BucketKey = keyof PnlDistribution;
 /** The five realized-ROI buckets, best first, with their display tone. */
 export const PNL_BUCKETS: { key: BucketKey; label: string; tone: string; strength: number }[] = [
   { key: 'gt500', label: '>500%', tone: 'up', strength: 1 },
-  { key: 'p200to500', label: '200% – 500%', tone: 'up', strength: 0.7 },
-  { key: 'p0to200', label: '0% – 200%', tone: 'up', strength: 0.4 },
-  { key: 'n0to50', label: '-50% – 0%', tone: 'down', strength: 0.5 },
+  { key: 'p200to500', label: '200–500%', tone: 'up', strength: 0.7 },
+  { key: 'p0to200', label: '0–200%', tone: 'up', strength: 0.4 },
+  { key: 'n0to50', label: '-50–0%', tone: 'down', strength: 0.5 },
   { key: 'lt50', label: '<-50%', tone: 'down', strength: 1 },
 ];
 
@@ -51,10 +51,11 @@ export function scoreTone(score: number): 'up' | 'warn' | 'down' {
   return score >= 70 ? 'up' : score >= 40 ? 'warn' : 'down';
 }
 
-/** "2.35x" style multiple (shared compact formatter, x suffix). */
+/** Text color of a market-cap multiple: green from 2x, red once it reads below 1x. */
 export function multipleTone(multiple: number | null | undefined): string {
   if (multiple === null || multiple === undefined || !Number.isFinite(multiple)) return 'text-faint';
   if (multiple >= 2) return 'text-up';
-  if (multiple >= 1) return 'text-fg';
+  // 0.995 still displays as "1x".
+  if (multiple >= 0.995) return 'text-fg';
   return 'text-down';
 }

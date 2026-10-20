@@ -157,7 +157,7 @@ export const WalletHeader = memo(function WalletHeader({ chain, profile: p, tags
         )}
         <Meta icon={<Users size={12} />} label="Tracked by" title="Trenchscope users following this wallet">
           <Compact value={p.followerCount} className="font-semibold" />
-          <span className="text-xs text-muted">users</span>
+          <span className="text-xs text-muted">{p.followerCount === 1 ? 'user' : 'users'}</span>
         </Meta>
       </div>
       {isOwn && (

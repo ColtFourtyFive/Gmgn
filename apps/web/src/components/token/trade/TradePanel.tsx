@@ -72,9 +72,11 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
       .catch((err) => toast.error('Couldn’t update preset', errorMessage(err)));
   };
 
-  // Mobile bar / hotkeys ask for focus.
+  // Hotkeys ask for focus (requests made before this panel mounted — e.g. the
+  // phone bar switching to the Trade tab — only select the side).
+  const mountTick = useRef(focusTick);
   useEffect(() => {
-    if (focusTick === 0) return;
+    if (focusTick === mountTick.current) return;
     panelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     const t = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
     return () => clearTimeout(t);
@@ -110,7 +112,18 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
 
   return (
     <section ref={panelRef} aria-label="Trade" className={clsx('panel flex min-w-0 flex-col', className)}>
-      <div role="radiogroup" aria-label="Side" className="grid grid-cols-2 gap-1 p-1.5 pb-0">
+      <div
+        role="radiogroup"
+        aria-label="Side"
+        className="grid grid-cols-2 gap-1 p-1.5 pb-0"
+        onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+          e.preventDefault();
+          const next = side === 'buy' ? 'sell' : 'buy';
+          setSide(next);
+          e.currentTarget.querySelector<HTMLButtonElement>(`[data-side="${next}"]`)?.focus();
+        }}
+      >
         {(['buy', 'sell'] as const).map((s) => {
           const active = side === s;
           return (
@@ -119,6 +132,8 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={active ? 0 : -1}
+              data-side={s}
               onClick={() => setSide(s)}
               className={clsx(
                 'h-8 rounded text-sm font-semibold transition-colors',

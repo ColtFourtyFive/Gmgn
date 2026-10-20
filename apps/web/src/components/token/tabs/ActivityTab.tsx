@@ -3,7 +3,7 @@
 // maker filter, Price/MC column, pause + auto-pause while scrolled, and a
 // flash on new rows.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type UIEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { shortAddress, type TokenDetail, type Trade } from '@trenchscope/shared';
 import { Filter, Pause, Play, X } from 'lucide-react';
@@ -11,12 +11,14 @@ import clsx from 'clsx';
 import { AddressLink, Age, Compact, Native, Price, Usd, WALLET_TAG_META } from '@/components/common';
 import { useViewerTags } from '@/components/discovery';
 import { CopyButton, DataTable, EmptyState, ErrorState, IconButton, SegmentedControl, Select, Tooltip, type Column } from '@/components/ui';
+import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
+import { useConnectionState } from '@/lib/ws';
 import { useSession } from '@/store/session';
 import { useLiveTrades, useTokenFeed } from '../feed';
 import { ACTIVITY_FILTERS, matchesActivityFilter, withViewerTags, type ActivityFilter } from '../model';
-import { tokenKeys, useChartUnit } from '../queries';
+import { tokenKeys, useChartUnit, useOnReconnect } from '../queries';
 import { useTokenUi, type ChartUnit } from '../store';
 
 const MIN_USD_OPTIONS = [
@@ -48,6 +50,7 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
   const { flashUpdates } = useDisplaySettings();
   const feed = useTokenFeed();
   const live = useLiveTrades();
+  const roomy = useBreakpoint('sm');
 
   const activeFilter: ActivityFilter = !signedIn && (filter === 'mine' || filter === 'following') ? 'all' : filter;
   const q = { filter: activeFilter === 'all' ? undefined : activeFilter, minUsd: minUsd || undefined, wallet: maker ?? undefined, limit: 100 };
@@ -61,32 +64,50 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
     retry: 1,
   });
 
+  useOnReconnect(() => void history.refetch());
+
+  // Row objects are cached by id so memoized table rows only re-render when their data changes.
+  const rowCache = useRef(new Map<string, { sig: string; row: Row }>());
   const rows = useMemo<Row[]>(() => {
+    const cache = rowCache.current;
+    const toRow = (t: Trade, tags: Row['tags']): Row => {
+      const sig = tags.join(',');
+      const hit = cache.get(t.id);
+      if (hit && hit.sig === sig) return hit.row;
+      const row = { ...t, tags };
+      cache.set(t.id, { sig, row });
+      return row;
+    };
     const byId = new Map<string, Row>();
     for (const t of live) {
       const tags = withViewerTags(t, viewerTags(t.wallet));
       if (maker && t.wallet !== maker) continue;
       if (minUsd && t.usdAmount < minUsd) continue;
       if (!matchesActivityFilter(t, tags, activeFilter)) continue;
-      byId.set(t.id, { ...t, tags });
+      byId.set(t.id, toRow(t, tags));
     }
     if (!history.isPlaceholderData) {
-      for (const t of history.data ?? []) if (!byId.has(t.id)) byId.set(t.id, { ...t, tags: withViewerTags(t, viewerTags(t.wallet)) });
+      for (const t of history.data ?? []) if (!byId.has(t.id)) byId.set(t.id, toRow(t, withViewerTags(t, viewerTags(t.wallet))));
     }
-    return [...byId.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, ROW_CAP);
+    const out = [...byId.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, ROW_CAP);
+    if (cache.size > 2000) {
+      const keep = new Set(out.map((r) => r.id));
+      for (const id of cache.keys()) if (!keep.has(id)) cache.delete(id);
+    }
+    return out;
   }, [live, history.data, history.isPlaceholderData, viewerTags, maker, minUsd, activeFilter]);
 
   // Pause: freeze the rows while paused (manually or because the list is scrolled).
+  // A filter change while paused re-freezes on the new result.
   const paused = manualPause || scrolled;
-  const frozen = useRef<Row[] | null>(null);
+  const freezeKey = `${activeFilter}|${minUsd}|${maker ?? ''}|${history.isPlaceholderData}`;
+  const frozen = useRef<{ key: string; rows: Row[] } | null>(null);
   if (!paused) frozen.current = null;
-  else if (!frozen.current) frozen.current = rows;
-  const shown = paused && frozen.current ? frozen.current : rows;
+  else if (!frozen.current || frozen.current.key !== freezeKey) frozen.current = { key: freezeKey, rows };
+  const shown = paused && frozen.current ? frozen.current.rows : rows;
   const newest = shown[0]?.timestamp ?? 0;
   const pendingCount = paused ? rows.filter((r) => r.timestamp > newest).length : 0;
-  useEffect(() => {
-    frozen.current = null;
-  }, [activeFilter, minUsd, maker]);
+  const conn = useConnectionState();
 
   const scrollerRef = useRef<HTMLElement | null>(null);
   const onScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
@@ -163,9 +184,9 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
             onClick={() => (paused ? resume() : setManualPause(true))}
           />
         </Tooltip>
-        <span className={clsx('inline-flex items-center gap-1 text-2xs', paused ? 'text-warn' : 'text-up')}>
-          <span className={clsx('h-1.5 w-1.5 rounded-full', paused ? 'bg-warn' : 'animate-pulse2 bg-up')} />
-          {paused ? 'Paused' : 'Live'}
+        <span className={clsx('inline-flex items-center gap-1 text-2xs', conn !== 'open' ? 'text-down' : paused ? 'text-warn' : 'text-up')}>
+          <span className={clsx('h-1.5 w-1.5 rounded-full', conn !== 'open' ? 'animate-pulse2 bg-down' : paused ? 'bg-warn' : 'animate-pulse2 bg-up')} />
+          {conn !== 'open' ? 'Reconnecting' : paused ? 'Paused' : 'Live'}
         </span>
       </div>
       {history.isError && rows.length === 0 ? (
@@ -178,10 +199,10 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
             rows={shown}
             rowKey={(r) => r.id}
             rowClassName={rowClassName}
-            loading={history.isPending}
+            loading={history.isPending || history.isPlaceholderData}
             compact
             maxHeight={maxHeight}
-            minWidth={760}
+            minWidth={roomy ? 760 : 460}
             onRowClick={(r) => setMaker(maker === r.wallet ? null : r.wallet)}
             empty={
               <EmptyState
@@ -217,6 +238,7 @@ function buildColumns(token: TokenDetail, unit: ChartUnit, setMaker: (m: string 
       key: 'amount',
       header: symbol.length > 8 ? 'Amount' : symbol,
       align: 'right',
+      hideBelow: 'sm',
       render: (r) => <Compact value={r.tokenAmount} className="text-fg" />,
     },
     {
@@ -238,13 +260,15 @@ function buildColumns(token: TokenDetail, unit: ChartUnit, setMaker: (m: string 
       render: (r) => (
         <span className="flex min-w-0 items-center gap-1">
           <AddressLink chain={chain} address={r.wallet} label={r.walletLabel} tags={r.tags} copy={false} avatar />
-          <IconButton
-            size="xs"
-            label="Filter by this maker"
-            icon={<Filter size={11} />}
-            className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+          <button
+            type="button"
+            aria-label="Filter by this maker"
+            title="Filter by this maker"
             onClick={() => setMaker(r.wallet)}
-          />
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-faint opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <Filter size={11} />
+          </button>
         </span>
       ),
     },

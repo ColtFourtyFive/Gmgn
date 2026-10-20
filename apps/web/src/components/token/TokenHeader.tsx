@@ -134,11 +134,9 @@ function Lifecycle({ t }: { t: TokenDetail }) {
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
       <Badge tone="up">Migrated</Badge>
-      <span>
-        Trading on <span className="font-medium text-fg">{t.pool?.dex ?? t.dex ?? 'AMM pool'}</span>
-      </span>
+      <span className="font-medium text-fg">{t.pool?.dex ?? t.dex ?? 'AMM pool'}</span>
       {t.migratedAt && (
         <span>
           · <Age ts={t.migratedAt} suffix=" ago" />
@@ -146,7 +144,7 @@ function Lifecycle({ t }: { t: TokenDetail }) {
       )}
       {t.pool && (
         <span>
-          · Liquidity <Usd value={t.pool.liquidityUsd} className="text-fg" />
+          · Pool liquidity <Usd value={t.pool.liquidityUsd} className="text-fg" />
         </span>
       )}
     </div>
@@ -194,7 +192,7 @@ export const TokenHeader = memo(function TokenHeader({ token: t, compact, classN
                 </span>
               </Tooltip>
             )}
-            {!compact && <HeaderFlags t={t} />}
+            <HeaderFlags t={t} />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -208,11 +206,6 @@ export const TokenHeader = memo(function TokenHeader({ token: t, compact, classN
           <IconButton label="Copy link" icon={<Link2 size={16} />} onClick={() => void share()} />
         </div>
       </div>
-      {compact && (
-        <div className="flex flex-wrap items-center gap-1 empty:hidden">
-          <HeaderFlags t={t} />
-        </div>
-      )}
       <Lifecycle t={t} />
     </header>
   );

@@ -75,13 +75,15 @@ const BADGE_META: Record<string, { icon: LucideIcon; warn?: boolean }> = {
 
 export interface StyleTitleProps {
   style: WalletStyle;
-  /** Title + subtitle only, on one line (tables, previews). */
+  /** Small pill; title and subtitle on one line (previews). */
   compact?: boolean;
+  /** With `compact`: subtitle under the pill (narrow table cells). */
+  stacked?: boolean;
   className?: string;
 }
 
 /** Style title pill ("🖨️ Money Printer") and speed subtitle; "No read" for thin samples. */
-export const StyleTitle = memo(function StyleTitle({ style, compact, className }: StyleTitleProps) {
+export const StyleTitle = memo(function StyleTitle({ style, compact, stacked, className }: StyleTitleProps) {
   const meta = STYLE_META[style.title];
   const pill = style.title ? (
     <span className={clsx('inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 font-semibold', compact ? 'h-5 text-xs' : 'h-7 text-sm', TIER_CLASS[meta?.tier ?? 'flat'])}>
@@ -96,7 +98,7 @@ export const StyleTitle = memo(function StyleTitle({ style, compact, className }
     </Tooltip>
   );
   return (
-    <span className={clsx('flex min-w-0', compact ? 'items-center gap-1.5' : 'flex-col items-start gap-1', className)}>
+    <span className={clsx('flex min-w-0', compact && !stacked ? 'items-center gap-1.5' : 'flex-col items-start', compact ? 'gap-0.5' : 'gap-1', className)}>
       {pill}
       {style.subtitle && <span className={clsx('truncate text-muted', compact ? 'text-2xs' : 'text-xs')}>{style.subtitle}</span>}
     </span>

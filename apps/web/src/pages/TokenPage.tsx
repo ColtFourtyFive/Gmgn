@@ -142,8 +142,8 @@ export default function TokenPage() {
         </div>
         {mobileTab === 'chart' && (
           <>
-            {stats}
             {chart}
+            {stats}
           </>
         )}
         {mobileTab === 'trade' && trade}
@@ -201,7 +201,10 @@ export default function TokenPage() {
 
   return (
     <TokenFeedContext.Provider value={feed}>
-      <Page className={clsx('max-w-[1920px]', mobile && 'pb-0')}>{body}</Page>
+      {/* Keyed by token: forms, chart buffers and paused feeds never carry over to another token. */}
+      <Page key={`${chain}:${t.address}`} className={clsx('max-w-[1920px]', mobile && 'pb-0')}>
+        {body}
+      </Page>
     </TokenFeedContext.Provider>
   );
 }
