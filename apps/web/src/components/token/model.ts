@@ -1,7 +1,7 @@
 // Pure helpers of the token page: wallet classes for chart markers and
 // activity filters, trade-risk reasons, swap error hints and unit math.
 
-import { formatPercent, type TokenDetail, type Trade, type WalletTag } from '@trenchscope/shared';
+import { formatPercent, formatPrice, type Quote, type TokenDetail, type Trade, type WalletTag } from '@trenchscope/shared';
 import type { ChartUnit } from './store';
 
 // ---------------------------------------------------------------------------
@@ -125,6 +125,33 @@ export function riskReasons(t: TokenDetail): string[] {
   if (s.riskLevel === 'high') reasons.push(`High risk level — rug ratio ${formatPercent(s.rugRatio, { sign: false, digits: 0 })}.`);
   for (const c of s.checks) if (c.level === 'bad' && c.key !== 'rug') reasons.push(`${c.label}: ${c.value}${c.hint ? ` — ${c.hint}` : ''}`);
   if (Math.max(s.buyTax, s.sellTax) > 0.1) reasons.push(`Taxes: buy ${formatPercent(s.buyTax, { sign: false, digits: 0 })} / sell ${formatPercent(s.sellTax, { sign: false, digits: 0 })}.`);
+  return reasons;
+}
+
+/** Soft-gate thresholds (PRD TE-82): above these a trade warns and needs an extra click. */
+export const SOFT_GATE = { priceImpact: 0.03, drop5m: -0.1, fees: 0.03 } as const;
+
+/**
+ * Reasons a trade deserves an extra click (soft gates, PRD TE-82): price
+ * impact above 3%, buying into a 5m drop of 10% or more (a limit at
+ * price × (1 − |drop|) is suggested), and network fee plus token tax above 3%
+ * of the trade. Impact and fees need the trade's quote; without one only the
+ * 5m drop is checked.
+ */
+export function softGateReasons(t: Pick<TokenDetail, 'priceUsd' | 'stats' | 'security'>, side: 'buy' | 'sell', quote: Pick<Quote, 'priceImpact' | 'amountIn' | 'expectedOut' | 'networkFeeNative'> | null | undefined): string[] {
+  const reasons: string[] = [];
+  const pct = (v: number) => formatPercent(v, { sign: false, digits: 1 });
+  if (quote && quote.priceImpact > SOFT_GATE.priceImpact) reasons.push(`Price impact ${pct(quote.priceImpact)} — this size moves the price against you. Consider a smaller amount.`);
+  const drop = t.stats['5m']?.priceChange ?? 0;
+  if (side === 'buy' && drop <= SOFT_GATE.drop5m)
+    reasons.push(`Falling knife: down ${pct(-drop)} in 5m. A limit buy near ${formatPrice(t.priceUsd * (1 + drop))} waits for the dip instead.`);
+  if (quote) {
+    // Native size of the trade: what is spent on a buy, what comes back on a sell.
+    const size = side === 'buy' ? quote.amountIn : quote.expectedOut;
+    const tax = side === 'buy' ? t.security.buyTax : t.security.sellTax;
+    const fees = size > 0 ? quote.networkFeeNative / size + tax : 0;
+    if (fees > SOFT_GATE.fees) reasons.push(`Fees: network fee${tax > 0 ? ' and token tax' : ''} take about ${pct(fees)} of this trade.`);
+  }
   return reasons;
 }
 

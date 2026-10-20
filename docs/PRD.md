@@ -1813,7 +1813,7 @@ All formatting lives in `packages/shared/src/format.ts` and is covered by unit t
 ### 11.8 Security, privacy and abuse [P0]
 - **Auth.** Bearer session tokens (httpOnly cookie optional, P1). Passwords hashed with argon2id or scrypt. Rate limits:
   - guest and register: `ACCOUNT_CREATIONS_PER_IP` per 10 min
-  - login: 10 attempts per account per 10 min
+  - login: 10 attempts per username per client IP per 10 min (unknown usernames count too), and `LOGIN_ATTEMPTS_PER_IP` per 10 min
   - trading: 10 swaps/s per account
   - order create: 5/s
   - REST reads: 50/s per account and 100/s per IP
@@ -2263,7 +2263,7 @@ Status of the §13.1 P0 scope in the current build. ✅ shipped · ◐ partial (
 | 13 | Portfolio, Watchlist | ✅ | Positions (incl. launch bundle wallets), orders, history, activity, equity curve, faucet; watchlist with groups and notes. ◐ portfolio daily calendar (on wallet page). |
 | 14 | Alerts & notifications | ✅ | Price/MC/change/wallet/new-token/smart-buy rules, inbox, toasts with levels. ⏳ holding alerts, signal subscriptions, digests. |
 | 15 | Analytics | ✅ | Holder universe, tri-state security, token labels and chips, creator rug history, global tags, wallet metrics, safety score + rug ratio, window stats + makers, heat score, signal engine, PnL engine; classifier quality measured in tests. |
-| 16 | Settings | ✅ | Account, trading presets, quick amounts, display, risk thresholds, hotkeys, blacklist. ⏳ notification matrix, automation consent records, languages beyond English. |
+| 16 | Settings | ✅ | Account, trading presets, quick amounts, display (theme, USD/native for the token page's chart and stats, flashes, compact rows, trade confirmation, a sound on fills and alerts), risk thresholds, hotkeys, blacklist. ⏳ notification matrix, automation consent records, per-category sounds, languages beyond English. |
 | 17 | Non-functional | ✅ | Realtime WS with resubscribe, subscript-zero formatting, theme tokens, responsive layouts, accessibility checks (axe) in E2E, auth + rate limits + CSP + input sanitisation, determinism and persistence tests, Playwright E2E suite. |
 
 Beyond P0, v1 also ships these P1/P2 items: token launch with bundle wallets, PnL share cards, command palette, narratives, rewards & referrals, wallet copy scores and style titles, follow import/export, call-outs.

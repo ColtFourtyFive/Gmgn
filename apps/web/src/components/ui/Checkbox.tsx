@@ -38,7 +38,8 @@ export function Checkbox({ checked, onChange, label, indeterminate = false, disa
         aria-hidden
         className={clsx(
           'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent',
-          on ? 'border-accent bg-accent text-accent-fg' : 'border-line-strong bg-panel-2',
+          // Unchecked, the border is the only boundary: muted keeps it >= 3:1 against the panels.
+          on ? 'border-accent bg-accent text-accent-fg' : 'border-muted bg-panel-2',
         )}
       >
         {indeterminate ? <Minus size={10} strokeWidth={3} /> : checked ? <Check size={10} strokeWidth={3} /> : null}

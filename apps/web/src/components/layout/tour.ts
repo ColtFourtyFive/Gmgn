@@ -38,7 +38,8 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'chain',
     title: 'Pick a chain',
     body: 'Solana, BNB Chain, Base or Ethereum: every page follows this switch, and your paper wallet has funds on each.',
-    target: ['header button[aria-label="Switch chain"]'],
+    // A data hook, not the accessible name: Select names its trigger with aria-labelledby.
+    target: ['[data-tour="chain"]'],
     placement: 'bottom-end',
   },
   {
@@ -54,7 +55,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'quick-buy',
     title: 'Quick buy',
-    body: 'The ⚡ button buys instantly with your active preset. Set the amount at the top of the page; with hotkeys on, B buys the selected card.',
+    body: 'The ⚡ button buys instantly with your active preset. Set the amount at the top of the page; with trading hotkeys on, B buys the selected card.',
     phoneBody: 'The ⚡ button buys instantly with your active preset. Set the amount at the top of the page.',
     target: ['main [data-quick-buy]'],
     page: 'trenches',

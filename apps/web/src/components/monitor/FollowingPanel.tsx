@@ -7,7 +7,7 @@ import { CHAINS, shortAddress, type ChainId, type FollowedWallet } from '@trench
 import { ArrowDownToLine, Bell, BellOff, FileDown, FileUp, LogIn, MoreHorizontal, Pencil, Plus, Star, X } from 'lucide-react';
 import clsx from 'clsx';
 import { WalletAvatar, WalletTags } from '@/components/common';
-import { Button, EmptyState, ErrorState, IconButton, Input, Menu, Panel, Popover, Skeleton } from '@/components/ui';
+import { Button, EmptyState, ErrorState, IconButton, Input, Menu, Panel, Popover, Skeleton, useRovingKeys } from '@/components/ui';
 import { DEFAULT_GROUP, FollowEditor, isWalletAddress, sameWallet, useChainFollows, useFollowActions } from '@/components/wallet';
 import { serverNow } from '@/hooks';
 import { routes } from '@/lib/chain';
@@ -16,20 +16,29 @@ import { downloadFollows, FollowsImportDialog } from './FollowsImport';
 
 export const ALL_GROUPS = '__all__';
 
-/** Group chips: All + every group of the chain's follows. */
+/** Group chips: All + every group of the chain's follows. A radio group: one Tab stop, arrow keys pick. */
 export function GroupChips({ groups, value, onChange, counts }: { groups: string[]; value: string; onChange: (g: string) => void; counts?: Map<string, number> }) {
-  if (groups.length <= 1) return null;
   const items = [ALL_GROUPS, ...groups];
+  const { refs, onKeyDown, tabStop } = useRovingKeys(
+    items.map((g) => ({ value: g })),
+    value,
+    onChange,
+  );
+  if (groups.length <= 1) return null;
   return (
-    <div className="no-scrollbar flex items-center gap-1 overflow-x-auto" role="radiogroup" aria-label="Wallet group">
-      {items.map((g) => {
+    <div className="no-scrollbar flex items-center gap-1 overflow-x-auto" role="radiogroup" aria-label="Wallet group" onKeyDown={onKeyDown}>
+      {items.map((g, i) => {
         const active = g === value;
         return (
           <button
             key={g}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={active}
+            tabIndex={i === tabStop ? 0 : -1}
             onClick={() => onChange(g)}
             className={clsx(
               'chip shrink-0 border transition-colors',
@@ -124,9 +133,9 @@ const FollowRow = memo(function FollowRow({ chain, follow }: { chain: ChainId; f
         onClick={() => void update(chain, follow.address, { notify: !follow.notify })}
       />
       <Popover placement="bottom-end" aria-label="Edit followed wallet" trigger={<IconButton size="xs" label={`Edit ${name}`} icon={<Pencil size={12} />} />}>
-        {(close) => <FollowEditor chain={chain} follow={follow} onDone={close} />}
+        {(close) => <FollowEditor chain={chain} follow={follow} name={name} onDone={close} />}
       </Popover>
-      <IconButton size="xs" label={`Unfollow ${name}`} icon={<X size={13} />} disabled={busy} onClick={() => void unfollow(chain, follow.address)} />
+      <IconButton size="xs" label={`Unfollow ${name}`} icon={<X size={13} />} disabled={busy} onClick={() => void unfollow(chain, follow.address, { name })} />
     </li>
   );
 });
@@ -213,7 +222,7 @@ export const FollowingPanel = memo(function FollowingPanel({ chain, group, onGro
                 follows.list.length === 0 ? (
                   <>
                     Paste an address above, or find traders on the{' '}
-                    <Link to={routes.leaderboard(chain)} className="text-accent hover:underline">
+                    <Link to={routes.leaderboard(chain)} className="text-accent underline">
                       leaderboard
                     </Link>
                     .

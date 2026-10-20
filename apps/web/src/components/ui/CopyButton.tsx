@@ -30,7 +30,7 @@ export function CopyButton({ text, label = 'Copy', showLabel, size = 12, classNa
       }}
       className={clsx(
         'inline-flex shrink-0 items-center gap-1 rounded text-faint transition-colors hover:text-fg',
-        showLabel ? 'h-6 px-1.5 text-xs hover:bg-panel-3' : 'p-0.5',
+        showLabel ? 'h-6 px-1.5 text-xs hover:bg-panel-3' : 'touch-target p-0.5',
         copied && '!text-up',
         className,
       )}

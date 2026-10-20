@@ -34,9 +34,13 @@ function applyToken(token: string | null): void {
   realtime.setToken(token);
 }
 
+/** Ends pending waitForRetry() waits early (the user pressed Retry). */
+const retryNow = new Set<() => void>();
+
 /**
  * Resolve after `ms`, or as soon as the API looks reachable again (the
- * realtime socket reconnects or the browser comes back online).
+ * realtime socket reconnects or the browser comes back online), or the user
+ * asks to retry now.
  */
 function waitForRetry(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -44,11 +48,13 @@ function waitForRetry(ms: number): Promise<void> {
       clearTimeout(timer);
       offState();
       window.removeEventListener('online', done);
+      retryNow.delete(done);
       resolve();
     };
     const timer = setTimeout(done, ms);
     const offState = realtime.onState((s) => s === 'open' && done());
     window.addEventListener('online', done);
+    retryNow.add(done);
   });
 }
 
@@ -76,15 +82,25 @@ interface SessionState {
    * and retried; only a 401 signs out).
    */
   ready: boolean;
+  /** Why the last attempt to restore a stored session failed (null: none failed, or it is restored). */
+  restoreError: unknown;
+  /** An attempt to restore the stored session is in flight. */
+  restoring: boolean;
   /** Set when an action needs sign-in; the AuthModal watches it. */
   authPrompt: boolean;
   /** Tab the AuthModal opens on (null: its default for the viewer). */
   authTab: AuthTab | null;
+  /** A guest asked to sign out: the SignOutDialog asks for confirmation (see requestSignOut). */
+  signOutPrompt: boolean;
   init(): Promise<void>;
+  /** Retry restoring the stored session now instead of after the backoff. */
+  retryRestore(): void;
   applyAuth(res: AuthResponse): Promise<void>;
   /** New guest account; its theme is seeded from the one this browser shows. */
   guest(referralCode?: string): Promise<void>;
+  /** Signs into an existing account and adopts its saved theme. */
   login(username: string, password: string): Promise<void>;
+  /** New (or upgraded guest) account; its theme is seeded from the one this browser shows. */
   register(username: string, password: string, referralCode?: string): Promise<void>;
   logout(): Promise<void>;
   refreshAccount(): Promise<void>;
@@ -92,31 +108,35 @@ interface SessionState {
   setAccountBalance(chain: ChainId, nativeBalance: number, nativeBalanceUsd: number): void;
   /** Open (optionally on a given tab) or close the sign-in dialog. */
   promptAuth(open: boolean, tab?: AuthTab): void;
+  promptSignOut(open: boolean): void;
 }
 
 export const useSession = create<SessionState>((set, get) => {
   const signOutLocally = () => {
     applyToken(null);
-    set({ token: null, account: null, settings: null, ready: true });
+    set({ token: null, account: null, settings: null, ready: true, restoreError: null, restoring: false, signOutPrompt: false });
   };
 
   const startSession = async (res: AuthResponse, seedTheme?: Theme) => {
     applyToken(res.token);
     const settings = await loadSettings(seedTheme);
-    set({ token: res.token, account: res.account, settings, ready: true, authPrompt: false, authTab: null });
+    set({ token: res.token, account: res.account, settings, ready: true, restoreError: null, restoring: false, authPrompt: false, authTab: null });
   };
 
   /** Load the account behind a stored token, retrying with backoff until the API answers. */
   const restore = async (token: string, attempt: number): Promise<void> => {
+    set({ restoring: true });
     try {
       const [account, settings] = await Promise.all([api.me(), api.settings()]);
-      if (get().token === token) set({ account, settings, ready: true });
+      if (get().token === token) set({ account, settings, ready: true, restoreError: null, restoring: false });
     } catch (err) {
       if (get().token !== token) return; // signed out or into another account meanwhile
       if (err instanceof ApiError && err.status === 401) {
         signOutLocally();
         return;
       }
+      // Pages show this (with Retry) instead of an endless skeleton; the backoff continues.
+      set({ restoreError: err, restoring: false });
       void waitForRetry(Math.min(RESTORE_RETRY_MS.max, RESTORE_RETRY_MS.first * 2 ** attempt)).then(() => {
         if (get().token === token && !get().account) void restore(token, attempt + 1);
       });
@@ -128,8 +148,15 @@ export const useSession = create<SessionState>((set, get) => {
     account: null,
     settings: null,
     ready: false,
+    restoreError: null,
+    restoring: false,
     authPrompt: false,
     authTab: null,
+    signOutPrompt: false,
+
+    retryRestore() {
+      for (const wake of [...retryNow]) wake();
+    },
 
     async init() {
       setUnauthorizedHandler(() => {
@@ -158,7 +185,8 @@ export const useSession = create<SessionState>((set, get) => {
     },
 
     async register(username, password, referralCode) {
-      await startSession(await api.register(username, password, referralCode));
+      // Like guest(): a new account starts with the theme on screen (an upgraded guest already has it).
+      await startSession(await api.register(username, password, referralCode), useUi.getState().theme);
     },
 
     async logout() {
@@ -194,6 +222,10 @@ export const useSession = create<SessionState>((set, get) => {
 
     promptAuth(open, tab) {
       set({ authPrompt: open, authTab: open ? (tab ?? null) : null });
+    },
+
+    promptSignOut(open) {
+      set({ signOutPrompt: open });
     },
   };
 });

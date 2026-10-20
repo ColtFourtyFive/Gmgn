@@ -1,16 +1,31 @@
 import { Link } from 'react-router-dom';
 import { Keyboard } from 'lucide-react';
 import clsx from 'clsx';
-import { IconButton, Kbd, Popover } from '@/components/ui';
+import { IconButton, Kbd, Popover, Toggle } from '@/components/ui';
 import { routes } from '@/lib/chain';
 
 export interface HotkeyRow {
   keys: string[];
   label: string;
+  /** Places a trade: only works with trading hotkeys on. */
+  trading?: boolean;
 }
 
-/** Keyboard icon (accent while hotkeys are on) opening a cheat sheet of the page's shortcuts. */
-export function HotkeysHint({ rows, enabled, className }: { rows: HotkeyRow[]; enabled: boolean; className?: string }) {
+export interface HotkeysHintProps {
+  rows: HotkeyRow[];
+  /** settings.display.hotkeys (every single-key shortcut). */
+  enabled: boolean;
+  /** The trading-hotkeys opt-in, for pages with a key that trades. */
+  trading?: { enabled: boolean; onChange: (on: boolean) => void };
+  className?: string;
+}
+
+/**
+ * Keyboard icon (accent while hotkeys are on) opening a cheat sheet of the
+ * page's shortcuts. Keys that trade are opt-in (off by default): the sheet
+ * carries the switch, next to the keys it arms.
+ */
+export function HotkeysHint({ rows, enabled, trading, className }: HotkeysHintProps) {
   return (
     <Popover
       placement="bottom-end"
@@ -32,20 +47,37 @@ export function HotkeysHint({ rows, enabled, className }: { rows: HotkeyRow[]; e
           <span className={clsx('chip', enabled ? 'bg-up/15 text-up' : 'bg-panel-3 text-muted')}>{enabled ? 'On' : 'Off'}</span>
         </p>
         <ul className="flex flex-col gap-1.5">
-          {rows.map((r) => (
-            <li key={r.label} className="flex items-center justify-between gap-3">
-              <span className="text-muted">{r.label}</span>
-              <span className="flex shrink-0 items-center gap-0.5">
-                {r.keys.map((k) => (
-                  <Kbd key={k}>{k}</Kbd>
-                ))}
-              </span>
-            </li>
-          ))}
+          {rows.map((r) => {
+            const off = r.trading && trading && !trading.enabled;
+            return (
+              <li key={r.label} className="flex items-center justify-between gap-3">
+                <span className="text-muted">
+                  {r.label}
+                  {off && <span className="text-faint"> (off)</span>}
+                </span>
+                <span className="flex shrink-0 items-center gap-0.5">
+                  {r.keys.map((k) => (
+                    <Kbd key={k}>{k}</Kbd>
+                  ))}
+                </span>
+              </li>
+            );
+          })}
         </ul>
+        {trading && (
+          <div className="border-t border-line pt-2">
+            <Toggle
+              size="sm"
+              checked={trading.enabled}
+              onChange={trading.onChange}
+              label="Trading hotkeys"
+              description="Let B buy the selected token. Off by default; saved on this device."
+            />
+          </div>
+        )}
         <p className="border-t border-line pt-2 text-xs text-faint">
           {enabled ? 'Hovering or selecting in a column pauses its feed. ' : 'Hotkeys are turned off. '}
-          <Link to={routes.settings()} className="text-accent hover:underline">
+          <Link to={routes.settings('display')} className="text-accent hover:underline">
             Settings
           </Link>
         </p>

@@ -33,7 +33,7 @@ export function mergeTags(base: readonly WalletTag[], viewer: readonly WalletTag
 
 export type BucketKey = keyof PnlDistribution;
 
-/** The five realized-ROI buckets, best first, with their display tone. */
+/** The five return buckets (realized + unrealized on cost), best first, with their display tone. */
 export const PNL_BUCKETS: { key: BucketKey; label: string; tone: string; strength: number }[] = [
   { key: 'gt500', label: '>500%', tone: 'up', strength: 1 },
   { key: 'p200to500', label: '200–500%', tone: 'up', strength: 0.7 },

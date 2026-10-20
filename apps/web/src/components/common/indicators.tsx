@@ -26,7 +26,8 @@ export const RiskChip = memo(function RiskChip({ label, value, threshold, invert
   const bad = known && (invert ? value < threshold : value > threshold);
   const chip = (
     <span
-      className={clsx('chip num', !known ? 'bg-panel-3 text-faint' : bad ? 'bg-down/15 text-down' : 'bg-up/10 text-up', className)}
+      className={clsx('chip num', !known ? 'bg-panel-3 text-muted' : bad ? 'bg-down/15 text-down' : 'bg-up/10 text-up', className)}
+      role="img"
       aria-label={`${label} ${known ? formatPercent(value, { sign: false, digits: 1 }) : 'unknown'}${bad ? ' (risky)' : ''}`}
     >
       {icon}

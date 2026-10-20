@@ -8,6 +8,7 @@ import { BlacklistSection } from '@/components/account/settings/BlacklistSection
 import { DisplaySettingsForm } from '@/components/account/settings/DisplaySettingsForm';
 import { dirtyChains, sameSettings, savable, validateSettings } from '@/components/account/settings/model';
 import { TradingSettings } from '@/components/account/settings/TradingSettings';
+import { UnsavedChangesGuard } from '@/components/account/settings/UnsavedChangesGuard';
 import { Page, PageHeader } from '@/components/layout';
 import { Button, ErrorState, Kbd, Panel, Tabs } from '@/components/ui';
 import { useActiveChain, useHotkeys } from '@/hooks';
@@ -91,11 +92,13 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
       { replace: true },
     );
 
-  const save = useCallback(async () => {
-    if (!dirty || pending) return;
+  /** Saves the draft; true once nothing is left unsaved. */
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!dirty) return true;
+    if (pending) return false;
     if (errorCount > 0) {
       toast.error('Fix the highlighted fields', Object.values(errors)[0]);
-      return;
+      return false;
     }
     setPending(true);
     try {
@@ -107,8 +110,10 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
         setDraft(structuredClone(next));
         toast.success('Settings saved', adjusted ? 'Some values were outside the allowed range and were adjusted.' : 'Your presets and preferences are updated.');
       }
+      return true;
     } catch (err) {
       toast.error('Could not save settings', errorMessage(err));
+      return false;
     } finally {
       setPending(false);
     }
@@ -118,7 +123,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
 
   useHotkeys({ 'mod+s': () => void save() }, { allowInInputs: true });
 
-  // Warn before closing the tab with unsaved edits.
+  // Warn before closing the tab with unsaved edits (in-app navigation: UnsavedChangesGuard).
   useEffect(() => {
     if (!dirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -133,6 +138,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
 
   return (
     <>
+      <UnsavedChangesGuard dirty={dirty} onSave={save} canSave={errorCount === 0} />
       <Header
         actions={
           <Button variant="primary" size="sm" icon={<Save size={14} />} disabled={!dirty} loading={pending} onClick={() => void save()} title="Save (Ctrl/⌘ + S)">
@@ -169,7 +175,7 @@ function SettingsEditor({ saved }: { saved: UserSettings }) {
       </div>
 
       {dirty && (
-        <div className="sticky bottom-0 z-sticky -mx-3 mt-3 border-t border-line bg-panel/95 px-3 py-2.5 backdrop-blur md:-mx-4 md:px-4" role="region" aria-label="Unsaved changes">
+        <div data-sticky-bottom className="sticky bottom-0 z-sticky -mx-3 mt-3 border-t border-line bg-panel/95 px-3 py-2.5 backdrop-blur md:-mx-4 md:px-4" role="region" aria-label="Unsaved changes">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-fg">Unsaved changes</span>
             {errorCount > 0 ? (

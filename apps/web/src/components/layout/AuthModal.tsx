@@ -5,6 +5,7 @@ import { Rocket } from 'lucide-react';
 import { ChainIcon, SimBanner } from '@/components/common';
 import { Button, Input, Field, Modal, Tabs } from '@/components/ui';
 import { errorMessage } from '@/lib/format';
+import { clearReferral, pendingReferral } from '@/lib/referral';
 import { useSession, type AuthTab } from '@/store/session';
 import { toast } from '@/store/toasts';
 
@@ -30,6 +31,7 @@ function useAuthAction() {
     setError(null);
     try {
       await fn();
+      clearReferral();
       welcome();
     } catch (err) {
       setError(errorMessage(err, 'Sign-in failed'));
@@ -139,6 +141,12 @@ function AuthTabs({ guest, referral, initialTab }: { guest: boolean; referral: s
   return (
     <>
       <Tabs value={tab} onChange={setTab} items={guest ? GUEST_TABS : TABS} aria-label="Sign-in method" className="mb-3" />
+      {guest && tab === 'login' && (
+        <p className="mb-3 rounded border border-warn/30 bg-warn/10 px-2.5 py-1.5 text-sm text-fg">
+          Logging into another account leaves this guest account behind: it has no password, so it cannot be recovered afterwards. Register it first to keep its
+          wallets, positions and settings.
+        </p>
+      )}
       {tab === 'quick' ? <QuickStart referral={referral} /> : <CredentialsForm key={tab} mode={tab} referral={referral} />}
     </>
   );
@@ -147,14 +155,16 @@ function AuthTabs({ guest, referral, initialTab }: { guest: boolean; referral: s
 /**
  * Sign-in dialog. Opens when `session.authPrompt` is set (Sign in button,
  * requireAuth(), "Register account" for guests) on `session.authTab` when
- * given, and closes itself on success. Reads ?ref= for referrals.
+ * given, and closes itself on success. Pre-fills the referral code from ?ref=
+ * or the code this tab landed with.
  */
 export function AuthModal() {
   const open = useSession((s) => s.authPrompt);
   const initialTab = useSession((s) => s.authTab);
   const guest = useSession((s) => !!s.account?.isGuest);
   const [params] = useSearchParams();
-  const referral = params.get('ref') ?? '';
+  // The landing URL's code survives redirects and browsing (see lib/referral).
+  const referral = params.get('ref') ?? pendingReferral();
 
   return (
     <Modal
@@ -163,7 +173,7 @@ export function AuthModal() {
       title={guest ? 'Keep your paper account' : 'Start trading on Trenchscope'}
       description={
         guest
-          ? 'Pick a username and password: your wallets, positions and settings carry over, and you can sign in from anywhere.'
+          ? 'Register a username and password: your wallets, positions and settings carry over, and you can sign in from anywhere.'
           : 'Paper-trade the trenches with real-time simulated markets.'
       }
       size="sm"

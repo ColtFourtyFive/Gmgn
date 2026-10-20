@@ -10,19 +10,30 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     /* fall through to the legacy path */
   }
+  // Legacy path (plain-HTTP LAN access is not a secure context): selecting a
+  // hidden textarea moves focus to it, so give focus back to whatever had it
+  // (the copy button) once it is removed, or keyboard users land on <body>.
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   try {
     const el = document.createElement('textarea');
     el.value = text;
     el.setAttribute('readonly', '');
+    el.setAttribute('aria-hidden', 'true');
+    el.tabIndex = -1;
     el.style.position = 'fixed';
+    el.style.top = '0';
+    el.style.left = '-9999px';
     el.style.opacity = '0';
     document.body.appendChild(el);
+    el.focus({ preventScroll: true });
     el.select();
     const ok = document.execCommand('copy');
     el.remove();
     return ok;
   } catch {
     return false;
+  } finally {
+    if (previous && previous !== document.activeElement && previous.isConnected) previous.focus({ preventScroll: true });
   }
 }
 

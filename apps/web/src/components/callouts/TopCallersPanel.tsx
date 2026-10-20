@@ -4,7 +4,7 @@ import { formatInt, shortAddress, type ChainId } from '@trenchscope/shared';
 import { Trophy } from 'lucide-react';
 import clsx from 'clsx';
 import { WalletAvatar, WalletTags } from '@/components/common';
-import { EmptyState, Panel, Skeleton } from '@/components/ui';
+import { EmptyState, ErrorState, Panel, Skeleton } from '@/components/ui';
 import { HitRate, Multiple } from '@/components/wallet';
 import { routes } from '@/lib/chain';
 import type { CallerStats } from './callerStats';
@@ -17,16 +17,22 @@ export interface TopCallersPanelProps {
   callers: CallerStats[];
   directory: CallerDirectory;
   loading: boolean;
+  /** The calls failed to load (the ranking would be empty or partial). */
+  error?: unknown;
+  onRetry?: () => void;
+  retrying?: boolean;
   /** Rows shown. */
   limit?: number;
   className?: string;
 }
 
 /** Callers ranked by hit rate over the chain's latest calls (2+ calls each; see useCallerRanking). */
-export const TopCallersPanel = memo(function TopCallersPanel({ chain, callers, directory, loading, limit = 12, className }: TopCallersPanelProps) {
+export const TopCallersPanel = memo(function TopCallersPanel({ chain, callers, directory, loading, error, onRetry, retrying, limit = 12, className }: TopCallersPanelProps) {
   return (
     <Panel title="Top callers" subtitle="Hit rate over the latest calls (2+ calls)" icon={<Trophy size={14} />} padded={false} className={className} bodyClassName="min-h-0 overflow-y-auto">
-      {loading ? (
+      {error ? (
+        <ErrorState compact title="Couldn’t rank callers" error={error} onRetry={onRetry} retrying={retrying} />
+      ) : loading ? (
         <ul className="flex flex-col gap-3 p-3" aria-busy>
           {Array.from({ length: 6 }, (_, i) => (
             <li key={i} className="flex items-center gap-2">

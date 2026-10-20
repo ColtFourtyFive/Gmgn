@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ChainId, Signal } from '@trenchscope/shared';
 import { api } from '@/lib/api';
+import { useStickyError } from '@/hooks/useStickyError';
+import { retainKeys } from '@/lib/retain';
 import { realtime, useChannel, useConnectionState } from '@/lib/ws';
 
 export const SIGNALS_CAP = 300;
@@ -64,14 +66,18 @@ export function useSignals(chain: ChainId): LiveSignals {
     ingest(data as Signal[], 'ws');
   });
 
+  // Only ids still listed (capped at SIGNALS_CAP) can need the slide-in.
+  useEffect(() => retainKeys(freshIds.current, new Set(signals.map((s) => s.id))), [signals]);
+
   const conn = useConnectionState();
+  const failed = useStickyError(q); // not reset to "loading" by each 15s retry
   const hasData = signals.length > 0 || q.data !== undefined || wsSeen;
   return useMemo(
     () => ({
       signals,
       freshIds: freshIds.current,
-      loading: !hasData && !q.isError,
-      error: q.isError && signals.length === 0 ? q.error : null,
+      loading: !hasData && failed === null,
+      error: failed !== null && signals.length === 0 ? failed : null,
       live: wsSeen && conn === 'open',
       retry: () => {
         realtime.connect();
@@ -80,6 +86,6 @@ export function useSignals(chain: ChainId): LiveSignals {
       retrying: q.isFetching,
     }),
     // q.refetch is stable; the q flags used are listed explicitly.
-    [signals, hasData, q.isError, q.error, q.isFetching, wsSeen, conn],
+    [signals, hasData, failed, q.isFetching, wsSeen, conn],
   );
 }

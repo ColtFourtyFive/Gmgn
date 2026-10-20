@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { isChainId } from '@trenchscope/shared';
 import AppShell from '@/components/layout/AppShell';
 import { lastChain, rememberChain } from '@/lib/chain';
@@ -37,6 +37,12 @@ function ChainGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** `/` opens the last used chain's trenches, keeping the query string (referral links are `/?ref=CODE`). */
+export function RootRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: `/${lastChain()}/trenches`, search, hash }} replace />;
+}
+
 function PageFallback() {
   return <div className="flex h-full min-h-[40vh] items-center justify-center text-sm text-muted">Loading…</div>;
 }
@@ -53,7 +59,7 @@ export default function App() {
     <AppShell>
       <Suspense fallback={<PageFallback />}>
         <Routes>
-          <Route path="/" element={<Navigate to={`/${lastChain()}/trenches`} replace />} />
+          <Route path="/" element={<RootRedirect />} />
           {chainRoute('trenches', <TrenchesPage />)}
           {chainRoute('trending', <TrendingPage />)}
           {chainRoute('new-pairs', <NewPairsPage />)}

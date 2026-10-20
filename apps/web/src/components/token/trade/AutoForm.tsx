@@ -10,7 +10,7 @@ import { Code, Rocket, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native } from '@/components/common';
 import { DEFAULT_STRATEGY, describeStrategy, EMPTY_STRATEGY, isStrategyEmpty, StrategyEditor, strategyOrderCount } from '@/components/trade/StrategyEditor';
-import { Button, SegmentedControl, Select } from '@/components/ui';
+import { Button, Heading, SegmentedControl, Select } from '@/components/ui';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
 import { api } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
@@ -27,10 +27,10 @@ function Section({ icon, title, hint, children, className }: { icon: ReactNode; 
   return (
     <section className={clsx('flex flex-col gap-2 rounded border border-line p-2.5', className)}>
       <header>
-        <h4 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+        <Heading className="flex items-center gap-1.5 text-sm font-semibold text-fg">
           <span className="text-accent">{icon}</span>
           {title}
-        </h4>
+        </Heading>
         {hint && <p className="mt-0.5 text-2xs text-muted">{hint}</p>}
       </header>
       {children}
@@ -202,7 +202,7 @@ function AutoSell({ token, presetId, position, signedIn }: TradeFormProps) {
       <Section icon={<Code size={13} />} title="Sell on dev sell" hint="Exit when the creator dumps a large part of their holdings in one trade.">
         <div className="flex flex-wrap items-center gap-1.5">
           <SegmentedControl size="sm" value={devPct} onChange={setDevPct} items={PERCENT_ITEMS} aria-label="Percent to sell on dev sell" />
-          <Select size="sm" value={devThreshold} onChange={setDevThreshold} options={DEV_THRESHOLDS} className="min-w-0 flex-1" />
+          <Select size="sm" value={devThreshold} onChange={setDevThreshold} options={DEV_THRESHOLDS} aria-label="Dev sell size that triggers the exit" className="min-w-0 flex-1" />
         </div>
         <Button variant="outline" block loading={pending} disabled={noPosition} onClick={devSell}>
           Sell {devPct}% on dev sell

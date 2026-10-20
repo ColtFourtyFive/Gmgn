@@ -119,7 +119,7 @@ export function TokenNotFound({ chain, address }: { chain: ChainId; address: str
 export function MobileTradeBar({ token }: { token: TokenDetail }) {
   const openTrade = useTokenUi((s) => s.openTrade);
   return (
-    <div className="sticky bottom-0 z-sticky -mx-3 mt-2 flex items-center gap-2 border-t border-line bg-panel/95 px-3 py-2 backdrop-blur">
+    <div data-sticky-bottom className="sticky bottom-0 z-sticky -mx-3 mt-2 flex items-center gap-2 border-t border-line bg-panel/95 px-3 py-2 backdrop-blur">
       <div className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="num truncate text-sm font-semibold text-fg">
           <FlashValue value={token.priceUsd}>

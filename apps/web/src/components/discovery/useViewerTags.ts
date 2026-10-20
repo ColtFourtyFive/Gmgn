@@ -7,6 +7,16 @@ import { useSession } from '@/store/session';
 /** Query key of the viewer's followed wallets (all chains). */
 export const FOLLOWS_QUERY_KEY = ['follows', 'all'] as const;
 
+function useFollowsList(enabled: boolean) {
+  return useQuery({
+    queryKey: FOLLOWS_QUERY_KEY,
+    queryFn: () => api.follows(),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 /**
  * Viewer-relative wallet tags for broadcast data, which never carries them:
  * the viewer's own paper wallet is 'you', followed wallets are 'following'.
@@ -15,13 +25,7 @@ export const FOLLOWS_QUERY_KEY = ['follows', 'all'] as const;
 export function useViewerTags(chain: ChainId): (address: string) => WalletTag[] {
   const token = useSession((s) => s.token);
   const own = useSession((s) => s.account?.wallets[chain]?.address ?? null);
-  const follows = useQuery({
-    queryKey: FOLLOWS_QUERY_KEY,
-    queryFn: () => api.follows(),
-    enabled: !!token,
-    staleTime: 60_000,
-    retry: false,
-  });
+  const follows = useFollowsList(!!token);
   const followed = useMemo(() => {
     const set = new Set<string>();
     if (token) for (const f of follows.data ?? []) if (f.chain === chain) set.add(f.address);
@@ -37,4 +41,21 @@ export function useViewerTags(chain: ChainId): (address: string) => WalletTag[] 
     },
     [own, followed],
   );
+}
+
+/**
+ * The viewer's remark for a wallet (null when none), for broadcast data,
+ * which carries the public label: REST rows already show the remark, so live
+ * rows must apply it too or one wallet shows under two names. Signed out,
+ * there are none.
+ */
+export function useViewerRemarks(chain: ChainId): (address: string) => string | null {
+  const token = useSession((s) => s.token);
+  const follows = useFollowsList(!!token);
+  const remarks = useMemo(() => {
+    const map = new Map<string, string>();
+    if (token) for (const f of follows.data ?? []) if (f.chain === chain && f.remark) map.set(f.address, f.remark);
+    return map;
+  }, [follows.data, chain, token]);
+  return useCallback((address: string) => remarks.get(address) ?? null, [remarks]);
 }

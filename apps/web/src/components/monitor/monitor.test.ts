@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedItem, TokenRef, WalletTag } from '@trenchscope/shared';
 import { mergeTags, multipleTone } from '@/components/wallet/utils';
-import { aggregateHot, HOT_WINDOW_MS } from './HotBySmartMoney';
+import { aggregateHot, HOT_WINDOW_MS, hotWindowLabel, hotWindowMs } from './HotBySmartMoney';
 import { tokenRisk } from './risk';
 
 const NOW = 10_000_000;
@@ -65,6 +65,20 @@ describe('aggregateHot', () => {
   it('ranks by wallet count, then buy volume', () => {
     const items = [item('x', 'a'), item('x', 'b'), item('y', 'a', { usd: 1000 }), item('y', 'b'), item('z', 'a'), item('z', 'b'), item('z', 'c')];
     expect(aggregateHot(items, new Map(), NOW).map((h) => h.token.address)).toEqual(['z', 'y', 'x']);
+  });
+
+  it('names the window the feed really covers: a full 200-trade snapshot of a busy chain spans minutes, not 30m', () => {
+    // 200 smart trades over the last 275s (newest first), as GET /feed?kind=smart&limit=200 returns on a busy chain.
+    const busy = Array.from({ length: 200 }, (_, i) => item('t', `w${i}`, { ago: Math.round((i * 275_000) / 199) }));
+    const span = hotWindowMs(busy, 200, NOW);
+    expect(span).toBe(275_000);
+    expect(hotWindowLabel(span)).toEqual({ short: 'last 4m', long: 'the last 4 minutes' });
+    // A snapshot smaller than the request holds every smart trade the server has: the whole window.
+    expect(hotWindowMs(busy.slice(0, 120), 200, NOW)).toBe(HOT_WINDOW_MS);
+    expect(hotWindowLabel(HOT_WINDOW_MS).short).toBe('30m');
+    // Live pushes extend the list back in time; the label never claims more than 30m.
+    const long = [...busy, item('t', 'old', { ago: 45 * 60_000 })];
+    expect(hotWindowMs(long, 200, NOW)).toBe(HOT_WINDOW_MS);
   });
 });
 

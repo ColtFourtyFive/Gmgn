@@ -6,6 +6,7 @@ import { formatPercent, type ChainId, type LaunchpadCurve } from '@trenchscope/s
 import { Check } from 'lucide-react';
 import clsx from 'clsx';
 import { Native, tint, Usd } from '@/components/common';
+import { useRovingKeys } from '@/components/ui';
 
 export interface LaunchpadCardsProps {
   chain: ChainId;
@@ -15,18 +16,27 @@ export interface LaunchpadCardsProps {
   invalid?: boolean;
 }
 
-/** One card per launchpad of the chain: where a fresh curve starts and where it graduates. */
+/** One card per launchpad of the chain: where a fresh curve starts and where it graduates. A radio group: one Tab stop, arrow keys pick. */
 export function LaunchpadCards({ chain, pads, value, onChange, invalid }: LaunchpadCardsProps) {
+  const { refs, onKeyDown, tabStop } = useRovingKeys(
+    pads.map((lp) => ({ value: lp.id })),
+    value,
+    onChange,
+  );
   return (
-    <div role="radiogroup" aria-label="Launchpad" aria-invalid={invalid || undefined} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-      {pads.map((lp) => {
+    <div role="radiogroup" aria-label="Launchpad" aria-invalid={invalid || undefined} onKeyDown={onKeyDown} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {pads.map((lp, i) => {
         const on = lp.id === value;
         return (
           <button
             key={lp.id}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={i === tabStop ? 0 : -1}
             onClick={() => onChange(lp.id)}
             className={clsx(
               'flex min-w-0 flex-col gap-1.5 rounded border p-2.5 text-left transition-colors sm:gap-2',
@@ -44,24 +54,25 @@ export function LaunchpadCards({ chain, pads, value, onChange, invalid }: Launch
               <Usd value={lp.launchMarketCapUsd} /> → <Usd value={lp.graduationMarketCapUsd} className="font-medium text-fg" /> ·{' '}
               <Native value={lp.graduationNative} chain={chain} digits={1} /> · {formatPercent(lp.feeRate, { sign: false })} fee
             </span>
-            <dl className="hidden grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid">
-              <dt className="text-muted">Starts at</dt>
-              <dd className="text-right">
+            {/* Phrasing content only inside a button (no <dl>); a radio's content is presentational anyway. */}
+            <span className="hidden grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid">
+              <span className="text-muted">Starts at</span>
+              <span className="text-right">
                 <Usd value={lp.launchMarketCapUsd} className="text-fg" />
-              </dd>
-              <dt className="text-muted">Graduates at</dt>
-              <dd className="text-right">
+              </span>
+              <span className="text-muted">Graduates at</span>
+              <span className="text-right">
                 <Usd value={lp.graduationMarketCapUsd} className="font-medium text-fg" />
-              </dd>
-              <dt className="text-muted" title="Native the curve holds when it completes">
+              </span>
+              <span className="text-muted" title="Native the curve holds when it completes">
                 Curve fills at
-              </dt>
-              <dd className="text-right">
+              </span>
+              <span className="text-right">
                 <Native value={lp.graduationNative} chain={chain} digits={1} className="text-fg" />
-              </dd>
-              <dt className="text-muted">Curve fee</dt>
-              <dd className="num text-right text-fg">{formatPercent(lp.feeRate, { sign: false })}</dd>
-            </dl>
+              </span>
+              <span className="text-muted">Curve fee</span>
+              <span className="num text-right text-fg">{formatPercent(lp.feeRate, { sign: false })}</span>
+            </span>
           </button>
         );
       })}

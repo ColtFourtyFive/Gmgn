@@ -25,15 +25,15 @@ import {
   type TrenchSortKey,
 } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
+import { useQuickTrade } from '@/components/trade/useQuickTrade';
 import { Tabs } from '@/components/ui';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
-import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
-import { useSwap } from '@/hooks/useSwap';
+import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
-import { requireAuth } from '@/store/session';
+import { useUi } from '@/store/ui';
 
 const COLUMNS: Column[] = ['new', 'almost', 'migrated'];
 const LIMIT = 50;
@@ -44,7 +44,7 @@ const HOTKEYS: HotkeyRow[] = [
   { keys: ['J', 'K'], label: 'Next / previous token' },
   { keys: ['H', 'L'], label: 'Previous / next column' },
   { keys: ['Enter'], label: 'Open token' },
-  { keys: ['B'], label: 'Quick buy selected' },
+  { keys: ['B'], label: 'Quick buy selected', trading: true },
   { keys: ['Esc'], label: 'Clear selection' },
 ];
 
@@ -63,8 +63,9 @@ export default function TrenchesPage() {
 function TrenchesBoard({ chain }: { chain: ChainId }) {
   const navigate = useNavigate();
   const display = useDisplaySettings();
-  const trade = useTradeSettings(chain);
-  const { swap } = useSwap();
+  // B places a trade: opt-in (off by default), unlike the navigation keys.
+  const tradingHotkeys = useUi((s) => s.tradingHotkeys);
+  const setTradingHotkeys = useUi((s) => s.setTradingHotkeys);
   const devTags = useViewerTags(chain);
   const wide = useBreakpoint('lg');
   const xl = useBreakpoint('xl');
@@ -140,6 +141,8 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
     focusColumn(COLUMNS[(COLUMNS.indexOf(from) + delta + COLUMNS.length) % COLUMNS.length], Math.max(0, i));
   };
   const selectedToken = sel?.address ? lists.current[sel.col].find((t) => t.address === sel.address) : undefined;
+  // B buys like the ⚡ buttons: active buy preset, the same safety gates, and "Confirm trades" asks first.
+  const quick = useQuickTrade(chain, selectedToken?.address ?? '', selectedToken?.symbol);
 
   useHotkeys(
     {
@@ -150,19 +153,9 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
       k: () => move(-1),
       h: () => moveColumn(-1),
       l: () => moveColumn(1),
-      // Only claim Enter / B / Escape while something is selected.
-      ...(selectedToken
-        ? {
-            enter: () => navigate(routes.token(chain, selectedToken.address)),
-            b: () =>
-              requireAuth(() => {
-                void swap(
-                  { chain, token: selectedToken.address, side: 'buy', amount: buyAmount, amountKind: 'native', presetId: trade.activeBuyPreset },
-                  { symbol: selectedToken.symbol },
-                );
-              }),
-          }
-        : {}),
+      // Only claim Enter / B / Escape while something is selected; B only with trading hotkeys on.
+      ...(selectedToken ? { enter: () => navigate(routes.token(chain, selectedToken.address)) } : {}),
+      ...(selectedToken && tradingHotkeys ? { b: () => quick.submit({ side: 'buy', amount: buyAmount }) } : {}),
       ...(sel ? { escape: () => setSel(null) } : {}),
     },
     { enabled: display.hotkeys },
@@ -205,7 +198,12 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
           <>
             <LiveStatus live={snap.live} error={!!snap.error} stale={snap.stale} />
             <QuickBuyAmount chain={chain} value={buyAmount} onChange={setBuyAmount} />
-            <HotkeysHint rows={HOTKEYS} enabled={display.hotkeys} className="hidden md:inline-flex" />
+            <HotkeysHint
+              rows={HOTKEYS}
+              enabled={display.hotkeys}
+              trading={{ enabled: tradingHotkeys, onChange: setTradingHotkeys }}
+              className="hidden md:inline-flex"
+            />
           </>
         }
       />
@@ -225,6 +223,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
           {renderColumn(tab, { hideTitle: true, className: 'flex-1' })}
         </div>
       )}
+      {quick.dialog}
     </Page>
   );
 }

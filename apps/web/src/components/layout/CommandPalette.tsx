@@ -15,13 +15,13 @@ import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { requireAuth, useSession } from '@/store/session';
 import { useDock } from '@/store/dock';
-import { toast } from '@/store/toasts';
 import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 import { useDeposit } from './AccountControls';
 import { useSwitchChain } from './ChainSwitcher';
 import { ACCOUNT_ITEMS, NAV_ITEMS } from './nav';
-import { isFullAddress, resolveAddress } from './Omnibox';
+import { isFullAddress, resolveAddress, sameAddress } from './Omnibox';
+import { requestSignOut } from './SignOutDialog';
 import {
   addRecent,
   rankCommands,
@@ -62,8 +62,6 @@ type Entry =
 interface Section {
   title: string;
   entries: Entry[];
-  /** Header action (e.g. clear recents). */
-  action?: ReactNode;
 }
 
 const icon = (Icon: LucideIcon) => <Icon size={15} aria-hidden />;
@@ -146,7 +144,7 @@ function useCommands(): { commands: PaletteCommand[]; icons: Map<string, ReactNo
           group: 'Actions',
           title: 'Sign out',
           keywords: ['log out', 'logout'],
-          run: () => void useSession.getState().logout().then(() => toast.info('Signed out')),
+          run: requestSignOut,
         },
         icon(LogOut),
       );
@@ -291,6 +289,7 @@ function PaletteContent({ close }: { close: () => void }) {
   const [stored, setRecent] = useLocalStorage<unknown>(RECENT_KEY, []);
   const recent = useMemo(() => validRecents(stored), [stored]);
   const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(0);
   const query = text.trim();
   const q = useDebounce(query, 200);
@@ -317,15 +316,7 @@ function PaletteContent({ close }: { close: () => void }) {
       const shown = new Set(recentEntries.map((e) => e.key));
       const group = (g: PaletteCommand['group']) => commands.filter((c) => c.group === g && !c.otherChain && !shown.has(c.id)).map((c) => commandEntry(c));
       return [
-        {
-          title: 'Recent',
-          entries: recentEntries,
-          action: (
-            <button type="button" onClick={() => setRecent([])} className="normal-case tracking-normal text-faint hover:text-fg">
-              Clear
-            </button>
-          ),
-        },
+        { title: 'Recent', entries: recentEntries },
         { title: 'Pages', entries: group('Pages') },
         { title: 'Actions', entries: group('Actions') },
         { title: 'Chains', entries: group('Chains') },
@@ -333,14 +324,14 @@ function PaletteContent({ close }: { close: () => void }) {
     }
     const found = search.data;
     // A pasted address the search does not know yet still opens directly.
-    const known = found?.tokens.some((t) => t.address === query) || found?.wallets.some((w) => w.address === query);
+    const known = found?.tokens.some((t) => sameAddress(t.address, query)) || found?.wallets.some((w) => sameAddress(w.address, query));
     return [
       { title: 'Go to', entries: isFullAddress(query) && !known ? [{ type: 'address', key: `address:${query}`, address: query }] : [] },
       { title: 'Commands', entries: rankCommands(query, commands).slice(0, 6).map((r) => commandEntry(r.item, r.indices)) },
       { title: 'Tokens', entries: (found?.tokens ?? []).slice(0, 8).map((t): Entry => ({ type: 'token', key: `token:${t.chain}:${t.address}`, token: t })) },
       { title: 'Wallets', entries: (found?.wallets ?? []).slice(0, 5).map((w): Entry => ({ type: 'wallet', key: `wallet:${w.chain}:${w.address}`, wallet: w })) },
     ];
-  }, [commands, icons, recent, setRecent, query, search.data]);
+  }, [commands, icons, recent, query, search.data]);
 
   const visible = sections.filter((s) => s.entries.length > 0);
   const flat = visible.flatMap((s) => s.entries);
@@ -413,6 +404,7 @@ function PaletteContent({ close }: { close: () => void }) {
       <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
         <Search size={16} className="shrink-0 text-faint" aria-hidden />
         <input
+          ref={inputRef}
           type="text"
           role="combobox"
           aria-label="Search pages, actions, tokens and wallets"
@@ -429,50 +421,58 @@ function PaletteContent({ close }: { close: () => void }) {
           onKeyDown={onKeyDown}
           className="input-bare text-md"
         />
+        {/* Outside the listbox: a listbox may only contain options (and groups of them). */}
+        {!query && recent.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setRecent([]);
+              // The button leaves with the list: keep focus (and typing) in the dialog.
+              inputRef.current?.focus();
+            }}
+            className="shrink-0 rounded px-1 text-xs text-muted hover:text-fg"
+          >
+            Clear recent
+          </button>
+        )}
         <Kbd className="hidden sm:inline-flex">Esc</Kbd>
         <IconButton label="Close" size="sm" icon={<X size={16} />} onClick={close} className="-mr-1.5 sm:hidden" />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
-        <ul id={listId} role="listbox" aria-label="Results">
-          {visible.map((section) => (
-            <li key={section.title} role="group" aria-label={section.title} className="mb-1 last:mb-0">
-              <div role="presentation" className="table-head flex items-center justify-between px-2 pb-1 pt-2">
-                <span aria-hidden className="flex items-center gap-1.5">
-                  {section.title === 'Recent' && <History size={11} aria-hidden />}
-                  {section.title}
-                </span>
-                {section.action}
-              </div>
-              <ul role="presentation">
-                {section.entries.map((entry) => {
-                  const i = index++;
-                  const on = i === activeIdx;
-                  return (
-                    <li
-                      key={entry.key}
-                      id={`${listId}-${i}`}
-                      role="option"
-                      aria-selected={on}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onMouseMove={() => !on && setActive(i)}
-                      onClick={() => runEntry(entry)}
-                      className={clsx('flex cursor-pointer items-center gap-2.5 rounded px-2 text-sm', entry.type === 'token' ? 'h-11' : 'h-10', on && 'bg-panel-3')}
-                    >
-                      <EntryRow entry={entry} active={on} />
-                      {on && <CornerDownLeft size={13} className="hidden shrink-0 text-faint sm:block" aria-hidden />}
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
-        </ul>
-        {status && (
-          <p role="status" className="flex items-center gap-2 px-2 py-3 text-sm text-muted">
-            {status}
-          </p>
-        )}
+      {/* The listbox is the scroll container: as the combobox's popup, arrow keys scroll it (active option scrolled into view). */}
+      <div id={listId} role="listbox" aria-label="Results" className={clsx('min-h-0 overflow-y-auto overscroll-contain', flat.length > 0 && 'p-1.5')}>
+        {visible.map((section) => (
+          <div key={section.title} role="group" aria-label={section.title} className="mb-1 last:mb-0">
+            <div role="presentation" aria-hidden className="table-head flex items-center gap-1.5 px-2 pb-1 pt-2">
+              {section.title === 'Recent' && <History size={11} aria-hidden />}
+              {section.title}
+            </div>
+            {section.entries.map((entry) => {
+              const i = index++;
+              const on = i === activeIdx;
+              return (
+                <div
+                  key={entry.key}
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={on}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseMove={() => !on && setActive(i)}
+                  onClick={() => runEntry(entry)}
+                  className={clsx('flex cursor-pointer items-center gap-2.5 rounded px-2 text-sm', entry.type === 'token' ? 'h-11' : 'h-10', on && 'option-active')}
+                >
+                  <EntryRow entry={entry} active={on} />
+                  {on && <CornerDownLeft size={13} className="hidden shrink-0 text-faint sm:block" aria-hidden />}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
+      {status && (
+        <p role="status" className="flex shrink-0 items-center gap-2 px-3.5 py-3 text-sm text-muted">
+          {status}
+        </p>
+      )}
       <div className="hidden shrink-0 items-center gap-3 border-t border-line px-3.5 py-1.5 text-2xs text-faint sm:flex">
         <span className="flex items-center gap-1">
           <Kbd>↑</Kbd>

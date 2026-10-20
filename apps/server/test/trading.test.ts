@@ -255,6 +255,28 @@ describe('swaps', () => {
     expect(await swap(user, token, { amount: 1 })).toMatchObject({ ok: false, error: expect.stringMatching(/migrating/) });
   });
 
+  it('quotes, checks and charges a curve-completing buy only for what the curve absorbs', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const wh = whale();
+    const room = () => world().quote(token, 'buy', 1e9)!.amountIn; // native the curve can still take
+    while (room() > 30) expect(world().executeSwap(wh, token, 'buy', 5).ok).toBe(true);
+    const cap = room();
+    const before = user.wallet().native;
+    expect(before).toBeLessThan(60);
+
+    const q = (await call<Quote>('POST', '/api/trade/quote', { auth: user.auth, body: { chain: 'sol', token: token.address, side: 'buy', amount: 60, amountKind: 'native' } })).body;
+    expect(q.amountIn).toBeCloseTo(cap, 9);
+    expect(q.platformFeeNative).toBeCloseTo(q.amountIn * PLATFORM_FEE_RATE, 12);
+
+    // more than the balance requested, but the capped fill fits it
+    const receipt = await swap(user, token, { amount: 60 });
+    expect(receipt.ok, receipt.error).toBe(true);
+    expect(receipt.nativeAmount).toBeCloseTo(cap, 9);
+    expect(before - user.wallet().native).toBeCloseTo(cap * (1 + PLATFORM_FEE_RATE) + receipt.networkFeeNative, 9);
+    expect(token.status).toBe('migrating');
+  });
+
   it('lets a honeypot be bought but blocks the sell', async () => {
     const user = await signIn();
     const { token } = launch({ devBuy: 1 });
@@ -316,9 +338,17 @@ describe('swaps', () => {
     expect(user.wallet().positions.get(token.address)!.buys).toBe(1);
 
     for (let i = 1; i < 10; i++) expect((await swap(user, token, { amount: 0.01 })).ok).toBe(true);
-    const limited = await call('POST', '/api/trade/swap', { auth: user.auth, body: { chain: 'sol', token: token.address, side: 'buy', amount: 0.01, amountKind: 'native' } });
-    expect(limited.status).toBe(429);
-    world().now += 1000;
+    world().now += 400; // the oldest swap in the window ages out 600ms from now
+    const limited = await built.app.inject({
+      method: 'POST',
+      url: '/api/trade/swap',
+      headers: { authorization: `Bearer ${user.auth}` },
+      payload: { chain: 'sol', token: token.address, side: 'buy', amount: 0.01, amountKind: 'native' },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ code: 'rate_limited' });
+    expect(limited.headers['retry-after']).toBe('1');
+    world().now += 600;
     expect((await swap(user, token, { amount: 0.01 })).ok).toBe(true);
   });
 });
@@ -380,22 +410,32 @@ describe('orders', () => {
     expect(buy.ok).toBe(true);
     const [tp, sl] = buy.orders;
     expect(buy.orders).toHaveLength(2);
-    expect(tp).toMatchObject({ kind: 'take_profit', triggerValue: 50, amount: 50, amountKind: 'percent', source: 'strategy', refPriceUsd: buy.priceUsd });
+    expect(tp).toMatchObject({ kind: 'take_profit', triggerValue: 50, amount: 50, amountKind: 'percent', source: 'strategy' });
     expect(sl).toMatchObject({ kind: 'stop_loss', triggerValue: 30, amount: 100, groupId: tp.groupId });
     expect(tp.groupId).not.toBeNull();
+    // TE-52: the take-profit measures from the fee-inclusive cost (never below the post-fill spot),
+    // the stop-loss from the fee-exclusive average fill (never above it).
+    const cost = ((buy.nativeAmount + buy.platformFeeNative + buy.networkFeeNative) * world().nativeUsd('sol')) / buy.tokenAmount;
+    expect(tp.refPriceUsd).toBeCloseTo(Math.max(cost, price(token)), 15);
+    expect(tp.refPriceUsd!).toBeGreaterThan(buy.priceUsd);
+    expect(sl.refPriceUsd!).toBeLessThan(buy.priceUsd);
+    expect(sl.refPriceUsd!).toBeLessThanOrEqual(price(token));
     const bought = balance(user.wallet(), token);
 
     const pump = whale();
-    pumpTo(token, pump, buy.priceUsd * 1.4);
+    pumpTo(token, pump, tp.refPriceUsd! * 1.4);
     await evaluateOrders();
     expect((await orderById(user, tp.id)).status).toBe('open');
-    pumpTo(token, pump, buy.priceUsd * 1.55);
+    pumpTo(token, pump, tp.refPriceUsd! * 1.55);
     await evaluateOrders();
     expect((await orderById(user, tp.id)).status).toBe('filled');
     expect(balance(user.wallet(), token) / bought).toBeCloseTo(0.5, 9);
     expect((await orderById(user, sl.id)).status).toBe('open');
 
-    dumpTo(token, [pump, bag], buy.priceUsd * 0.69);
+    dumpTo(token, [pump, bag], sl.refPriceUsd! * 0.72);
+    await evaluateOrders();
+    expect((await orderById(user, sl.id)).status).toBe('open');
+    dumpTo(token, [pump, bag], sl.refPriceUsd! * 0.69);
     await evaluateOrders();
     expect((await orderById(user, sl.id)).status).toBe('filled');
     expect(balance(user.wallet(), token)).toBe(0);
@@ -410,17 +450,19 @@ describe('orders', () => {
     });
     const trail = buy.orders[0];
     expect(trail).toMatchObject({ kind: 'trailing_stop', triggerValue: 20, activateAtChangePct: 50, armed: false, peakPriceUsd: null });
+    const entry = trail.refPriceUsd!;
+    expect(entry).toBeGreaterThanOrEqual(price(token)); // activation measures from the take-profit reference
 
     const pump = whale();
-    pumpTo(token, pump, buy.priceUsd * 1.3);
+    pumpTo(token, pump, entry * 1.3);
     await evaluateOrders();
     expect((await orderById(user, trail.id)).armed).toBe(false);
 
-    pumpTo(token, pump, buy.priceUsd * 1.6);
+    pumpTo(token, pump, entry * 1.6);
     await evaluateOrders();
     expect(await orderById(user, trail.id)).toMatchObject({ armed: true, status: 'open' });
 
-    pumpTo(token, pump, buy.priceUsd * 2);
+    pumpTo(token, pump, entry * 2);
     await evaluateOrders();
     const peak = (await orderById(user, trail.id)).peakPriceUsd!;
     expect(peak).toBeCloseTo(price(token), 12);
@@ -625,6 +667,128 @@ describe('latency races', () => {
   });
 });
 
+describe('exit legs', () => {
+  const noExits = { takeProfits: [], stopLosses: [], trailing: null, devSellPercent: 0, migrationSellPercent: 0 };
+
+  it("never fires a take-profit on the buyer's own price impact", async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const buy = await swap(user, token, {
+      amount: 5,
+      strategy: { ...noExits, takeProfits: [{ changePct: 10, sellPercent: 100 }], stopLosses: [{ lossPct: 40, sellPercent: 100 }], trailing: { drawdownPct: 10, sellPercent: 100, activateAtChangePct: 0 } },
+    });
+    expect(buy.ok).toBe(true);
+    // A 5 SOL buy into a fresh curve lifts the spot more than 10% over its own average fill.
+    expect(price(token) / buy.priceUsd).toBeGreaterThan(1.1);
+    const [tp, sl, trail] = buy.orders;
+    expect(tp.refPriceUsd).toBeCloseTo(price(token), 15);
+    expect(sl.refPriceUsd!).toBeLessThan(buy.priceUsd);
+    expect(trail).toMatchObject({ armed: true, peakPriceUsd: price(token) });
+    await evaluateOrders();
+    expect((await orders(user, '?status=open')).map((o) => o.id).sort()).toEqual([tp.id, sl.id, trail.id].sort());
+    expect(balance(user.wallet(), token)).toBe(buy.tokenAmount);
+
+    // A real 10% move above the post-fill price does take profit.
+    pumpTo(token, whale(), tp.refPriceUsd! * 1.11);
+    await evaluateOrders();
+    expect((await orderById(user, tp.id)).status).toBe('filled');
+  });
+
+  it('never fires a stop-loss on the buy tax of a taxed token', async () => {
+    const user = await signIn();
+    const dev = world().createWallet('bsc', 'dev', { native: 1000 });
+    const token = world().createToken({
+      chain: 'bsc',
+      launchpad: 'fourpad',
+      creator: dev,
+      symbol: 'TAXD',
+      name: 'Taxed',
+      description: '',
+      logoSeed: 'TAXD',
+      logoGlyph: '🐸',
+      narrative: 'Frogs',
+      socials: {},
+      xFollowers: null,
+      fate: 'runner',
+      hype: 1,
+      security: { buyTax: 0.05, sellTax: 0.05 },
+    });
+    expect(world().executeSwap(dev, token, 'buy', 1).ok).toBe(true);
+    const buy = await swap(user, token, { amount: 0.05, strategy: { ...noExits, stopLosses: [{ lossPct: 5, sellPercent: 100 }] } });
+    expect(buy.ok).toBe(true);
+    // Measured from the tax-inclusive average fill the spot already sits more than 5% lower.
+    expect(price(token) / buy.priceUsd).toBeLessThan(0.95);
+    const [sl] = buy.orders;
+    expect(sl.refPriceUsd!).toBeLessThanOrEqual(price(token));
+    await evaluateOrders();
+    expect((await orderById(user, sl.id)).status).toBe('open');
+    expect(balance(user.wallet('bsc'), token)).toBe(buy.tokenAmount);
+  });
+
+  it('sizes legs that trigger together from what earlier ones leave (no 2 x 50% = 100%)', async () => {
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const strategy = { ...noExits, takeProfits: [{ changePct: 50, sellPercent: 50 }] };
+    const first = await swap(user, token, { amount: 0.2, strategy });
+    const second = await swap(user, token, { amount: 0.2, strategy });
+    expect(first.orders[0].groupId).not.toBe(second.orders[0].groupId);
+    const held = balance(user.wallet(), token);
+
+    pumpTo(token, whale(), Math.max(first.orders[0].refPriceUsd!, second.orders[0].refPriceUsd!) * 1.8);
+    await evaluateOrders(); // both take-profits trigger in the same pass
+    expect((await orderById(user, first.orders[0].id)).status).toBe('filled');
+    expect((await orderById(user, second.orders[0].id)).status).toBe('filled');
+    // sequential "50% of the holding at trigger time": half, then half of the rest
+    expect(balance(user.wallet(), token) / held).toBeCloseTo(0.25, 9);
+  });
+
+  it('still lets a later leg size from the whole bag when in-flight sells already cover it', async () => {
+    await withLatency(50);
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    await swap(user, token, { amount: 0.5 });
+    const sell = (amount: number) => trading().executor.swap(user.id, { chain: 'sol', token: token.address, side: 'sell', amount, amountKind: 'percent' });
+    const held = balance(user.wallet(), token);
+    const half = sell(50);
+    const rest = sell(50); // half of what the first one leaves
+    const [a, b] = await Promise.all([half, rest]);
+    expect(a.tokenAmount / held).toBeCloseTo(0.5, 9);
+    expect(b.tokenAmount / held).toBeCloseTo(0.25, 9);
+    const all = sell(100);
+    const again = sell(100); // nothing free: sized from the whole bag, the ledger decides
+    expect((await all).ok).toBe(true);
+    expect((await again).ok).toBe(false);
+    expect(balance(user.wallet(), token)).toBe(0);
+  });
+
+  it('sells what is left when a smaller sell of the bag lands first, still failing on a real price move', async () => {
+    await withLatency(50);
+    const user = await signIn();
+    const { token } = launch({ devBuy: 1 });
+    const wh = whale();
+    expect(world().executeSwap(wh, token, 'buy', 5).ok).toBe(true);
+    const sellAll = () => trading().executor.swap(user.id, { chain: 'sol', token: token.address, side: 'sell', amount: 100, amountKind: 'percent', slippage: 0.05 });
+
+    await swap(user, token, { amount: 1 });
+    let held = balance(user.wallet(), token);
+    let exit = sellAll(); // quoted and min-out priced for the whole bag
+    // another sell of the same bag (a trailing leg, a manual "sell 25%") lands first
+    expect(world().executeSwap(user.wallet(), token, 'sell', held / 4).ok).toBe(true);
+    const rest = await exit;
+    expect(rest.ok, rest.error).toBe(true);
+    expect(rest.tokenAmount / held).toBeCloseTo(0.75, 9);
+    expect(balance(user.wallet(), token)).toBe(0);
+
+    await swap(user, token, { amount: 1 });
+    held = balance(user.wallet(), token);
+    exit = sellAll();
+    expect(world().executeSwap(user.wallet(), token, 'sell', held / 4).ok).toBe(true);
+    dumpTo(token, [wh], price(token) * 0.8); // the market really moves meanwhile
+    expect(await exit).toMatchObject({ ok: false, error: 'slippage exceeded' });
+    expect(balance(user.wallet(), token) / held).toBeCloseTo(0.75, 9);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Automation
 // ---------------------------------------------------------------------------
@@ -709,6 +873,115 @@ describe('copy trade', () => {
 
     const resumed = await call<CopyTradeTask>('PATCH', `/api/copytrade/${task.id}`, { auth: user.auth, body: { enabled: true } });
     expect(resumed.body).toMatchObject({ enabled: true, consecutiveFailures: 0 });
+  });
+
+  it('filters (without counting a failure) mirror sells too small to cover the fees, and keeps that share for the exit', async () => {
+    const user = await signIn();
+    const target = world().createWallet('sol', 'smart', { native: 500, label: 'Scaler' });
+    await call('POST', '/api/copytrade', { auth: user.auth, body: { chain: 'sol', target: target.address, buyMode: 'ratio', buyRatio: 0.01, maxPerToken: 10 } });
+    const { token } = launch({ devBuy: 1 });
+    world().executeSwap(target, token, 'buy', 2);
+    await trading().idle();
+    const copied = balance(user.wallet(), token);
+    expect(copied).toBeGreaterThan(0);
+
+    // 5% of a 0.02 SOL bag is worth far less than the ~0.0028 SOL network fee.
+    for (let i = 0; i < 3; i++) {
+      world().executeSwap(target, token, 'sell', balance(target, token) * 0.05);
+      await trading().idle();
+    }
+    const copyNotices = () => notifications(user).filter((n) => n.kind === 'copytrade');
+    expect(copyNotices().filter((n) => n.level === 'error')).toHaveLength(0);
+    let task = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    expect(task).toMatchObject({ enabled: true, consecutiveFailures: 0, stats: { buys: 1, sells: 0 } });
+    expect(balance(user.wallet(), token)).toBe(copied);
+
+    // The target's exit takes the whole copied bag, dust included, and buys keep being copied.
+    world().executeSwap(target, token, 'sell', balance(target, token));
+    await trading().idle();
+    expect(balance(user.wallet(), token)).toBe(0);
+    const { token: next } = launch({ devBuy: 1 });
+    world().executeSwap(target, next, 'buy', 2);
+    await trading().idle();
+    expect(balance(user.wallet(), next)).toBeGreaterThan(0);
+    task = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    expect(task).toMatchObject({ enabled: true, consecutiveFailures: 0, stats: { buys: 2, sells: 1 } });
+  });
+
+  it('mirrors a target exit that lands while the copy buy is still confirming', async () => {
+    await withLatency(50);
+    const user = await signIn();
+    const target = world().createWallet('sol', 'smart', { native: 500, label: 'Flipper' });
+    await call('POST', '/api/copytrade', { auth: user.auth, body: { chain: 'sol', target: target.address, buyMode: 'fixed', buyAmount: 1, maxPerToken: 10 } });
+    const { token } = launch({ devBuy: 1 });
+
+    world().executeSwap(target, token, 'buy', 2);
+    world().executeSwap(target, token, 'sell', balance(target, token)); // out before the copy lands
+    await trading().idle();
+    expect(balance(target, token)).toBe(0);
+    expect(balance(user.wallet(), token)).toBe(0);
+    const task = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    expect(task.stats).toMatchObject({ buys: 1, sells: 1 });
+
+    // A partial exit while in flight sells the same share of the copy once it lands.
+    const pos = user.wallet().positions.get(token.address)!;
+    const [bought0, sold0] = [pos.boughtTokens, pos.soldTokens];
+    world().executeSwap(target, token, 'buy', 2);
+    world().executeSwap(target, token, 'sell', balance(target, token) / 4);
+    await trading().idle();
+    const copied = pos.boughtTokens - bought0;
+    expect(copied).toBeGreaterThan(0);
+    expect((pos.soldTokens - sold0) / copied).toBeCloseTo(0.25, 9);
+    expect(balance(user.wallet(), token) / copied).toBeCloseTo(0.75, 9);
+  });
+
+  it('never mirrors a target sell onto tokens the user bought by hand', async () => {
+    const user = await signIn();
+    const target = world().createWallet('sol', 'smart', { native: 500, label: 'Alpha' });
+    await call('POST', '/api/copytrade', { auth: user.auth, body: { chain: 'sol', target: target.address, buyMode: 'fixed', buyAmount: 1, maxPerToken: 10 } });
+    const { token } = launch({ devBuy: 1 });
+    world().executeSwap(target, token, 'buy', 3);
+    await trading().idle();
+    expect(balance(user.wallet(), token)).toBeGreaterThan(0);
+
+    // The user closes the copied bag by hand, then buys a fresh bag of their own.
+    expect((await swap(user, token, { side: 'sell', amount: 100, amountKind: 'percent' })).ok).toBe(true);
+    const own = await swap(user, token, { amount: 2 });
+    expect(own.ok).toBe(true);
+    world().executeSwap(target, token, 'sell', balance(target, token));
+    await trading().idle();
+    expect(balance(user.wallet(), token)).toBe(own.tokenAmount);
+    const task = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    expect(task.stats.sells).toBe(0);
+
+    // A partial manual sell caps what the task can still sell at what is left of its bag.
+    world().executeSwap(target, token, 'buy', 3);
+    await trading().idle();
+    const withCopy = balance(user.wallet(), token);
+    const copiedBag = withCopy - own.tokenAmount;
+    expect((await swap(user, token, { side: 'sell', amount: withCopy - copiedBag / 2, amountKind: 'tokens' })).ok).toBe(true);
+    world().executeSwap(target, token, 'sell', balance(target, token));
+    await trading().idle();
+    expect(balance(user.wallet(), token)).toBe(0);
+  });
+
+  it('skips (without counting a failure) a buy that completed the curve', async () => {
+    const user = await signIn();
+    const target = world().createWallet('sol', 'whale', { native: 5_000, label: 'Whale' });
+    await call('POST', '/api/copytrade', { auth: user.auth, body: { chain: 'sol', target: target.address, buyMode: 'fixed', buyAmount: 0.1, maxPerToken: 10 } });
+    const seen: string[] = [];
+    world().on('trade', (_trade, t) => seen.push(t.status));
+    for (let i = 0; i < 3; i++) {
+      const { token } = launch({ devBuy: 1 });
+      expect(world().executeSwap(target, token, 'buy', 200).ok).toBe(true);
+      expect(token.status).toBe('migrating');
+      await trading().idle();
+    }
+    // trade listeners already see the curve closed
+    expect(seen.slice(-1)).toEqual(['migrating']);
+    const task = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    expect(task).toMatchObject({ enabled: true, consecutiveFailures: 0, stats: { buys: 0 } });
+    expect(notifications(user).filter((n) => n.kind === 'copytrade')).toHaveLength(0);
   });
 
   it('honours the blacklist and edits, and refuses own or unknown targets', async () => {

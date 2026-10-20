@@ -17,13 +17,14 @@
   --line-strong: 48 55 68;
   --fg: 230 233 240;
   --muted: 140 148 163;
-  --faint: 92 99 114;
+  /* Faintest text tone: still >= 4.5:1 (WCAG AA) on bg / panel / panel-2. */
+  --faint: 128 136 151;
   --accent: 255 181 71; /* brand: flare amber */
   --accent-fg: 20 14 2;
   --up: 34 214 135;
   --up-fg: 3 22 13;
   --down: 255 84 104;
-  --down-fg: 255 255 255;
+  --down-fg: 30 4 8; /* dark on the light coral: 6.2:1 (white is only 3.1:1) */
   --warn: 255 193 7;
   --info: 92 164 255;
   --smart: 74 222 128;
@@ -35,6 +36,8 @@
   --whale: 56 189 248;
   --fresh: 45 212 191;
   --bot: 148 163 184;
+  /* Share of a brand color in tinted chip text (the rest is --fg), see tint() in components/common/color.ts. */
+  --tint-text: 72%;
   --shadow-float: 0 14px 36px -12px rgb(0 0 0 / 0.7), 0 2px 6px -2px rgb(0 0 0 / 0.4);
   color-scheme: dark;
 }
@@ -48,24 +51,30 @@
   --line-strong: 205 210 220;
   --fg: 20 23 31;
   --muted: 96 104 120;
-  --faint: 140 147 161;
-  --accent: 217 125 0;
-  --accent-fg: 20 14 2;
-  --up: 0 148 88;
+  --faint: 104 111 126;
+  /*
+   * Colored text tokens reach >= 4.5:1 (WCAG AA) on bg / panel / panel-2 /
+   * panel-3 and on their own 10-15% tints (bg-up/10 chips, bg-accent/15
+   * active states); white button text on accent / up / down is >= 6:1.
+   */
+  --accent: 144 83 0;
+  --accent-fg: 255 255 255;
+  --up: 0 112 67;
   --up-fg: 255 255 255;
-  --down: 222 44 70;
+  --down: 185 29 52;
   --down-fg: 255 255 255;
-  --warn: 180 125 0;
-  --info: 30 110 230;
-  --smart: 22 163 74;
-  --kol: 147 51 234;
-  --dev: 234 88 12;
-  --sniper: 220 38 38;
-  --insider: 219 39 119;
-  --bundler: 202 138 4;
-  --whale: 2 132 199;
-  --fresh: 13 148 136;
-  --bot: 100 116 139;
+  --warn: 130 90 0;
+  --info: 22 92 197;
+  --smart: 15 112 51;
+  --kol: 133 24 231;
+  --dev: 167 63 9;
+  --sniper: 186 30 30;
+  --insider: 181 30 97;
+  --bundler: 131 89 3;
+  --whale: 2 102 154;
+  --fresh: 10 109 100;
+  --bot: 86 99 119;
+  --tint-text: 40%;
   --shadow-float: 0 14px 36px -14px rgb(16 24 40 / 0.22), 0 2px 6px -2px rgb(16 24 40 / 0.08);
   color-scheme: light;
 }
@@ -90,6 +99,13 @@
   :focus-visible {
     outline: 2px solid rgb(var(--accent));
     outline-offset: 1px;
+  }
+
+  /* A sticky bar at the bottom of the scrolling <main> (unsaved settings, the
+     phone token trade bar and launch bar) covers its bottom edge: keep what
+     focus (or any scroll-into-view) brings into view clear of it. */
+  main:has([data-sticky-bottom]) {
+    scroll-padding-bottom: 5rem;
   }
 
   * {
@@ -151,7 +167,7 @@
   }
 
   .btn {
-    @apply inline-flex h-8 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-8 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-busy:cursor-progress;
   }
   .btn-xs {
     @apply h-6 gap-1 px-2 text-xs;
@@ -181,6 +197,28 @@
     @apply btn border border-down/40 text-down hover:bg-down/10;
   }
 
+  /* Touch screens: small icon buttons and links get a hit area of at least 24x24px (WCAG 2.5.8) without moving anything. */
+  @media (pointer: coarse) {
+    .touch-target {
+      position: relative;
+    }
+    .touch-target::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 24px);
+      height: max(100%, 24px);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  /* Active option of a listbox (aria-activedescendant): tint plus an accent bar (>= 3:1), as the tint alone is ~1.2:1. */
+  .option-active {
+    @apply bg-panel-3;
+    box-shadow: inset 2px 0 0 rgb(var(--accent));
+  }
+
   .table-head {
     @apply text-2xs uppercase tracking-wide text-faint font-medium;
   }
@@ -203,6 +241,38 @@
     @apply animate-shimmer rounded bg-panel-3;
     background-image: linear-gradient(90deg, transparent 0%, rgb(var(--line-strong) / 0.45) 50%, transparent 100%);
     background-size: 200% 100%;
+  }
+
+  /* New-row flash on live tables (a DataTable rowClassName). The tint sits on
+     each cell's ::before and only its opacity animates, so the flash runs on
+     the compositor: animating background-color restyled and repainted the
+     whole table every frame while any row was flashing (FlashValue does the
+     same for numbers). :where() keeps sticky cells sticky (also a containing block). */
+  :where(.row-flash-up, .row-flash-down) > td {
+    position: relative;
+  }
+  :where(.row-flash-up, .row-flash-down) > td::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    animation: row-flash 900ms ease-out;
+  }
+  .row-flash-up > td::before {
+    background-color: rgb(var(--up) / 0.28);
+  }
+  .row-flash-down > td::before {
+    background-color: rgb(var(--down) / 0.28);
+  }
+}
+
+@keyframes row-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -230,5 +300,41 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Forced colors (Windows High Contrast) replace backgrounds and drop box
+   shadows, and those are all that mark the selected segment, chip, side,
+   tab, listbox option or Trenches card here: outline them instead (inside
+   the box; a focus ring, drawn outside, takes over while focused), and give
+   the switch thumb and checked track real system colors. */
+@media (forced-colors: active) {
+  :is([role='radio'][aria-checked='true'], [role='tab'][aria-selected='true'], [aria-pressed='true'], [aria-current]:not([aria-current='false']), .option-active):not(:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  [role='switch'],
+  [role='switch'] > span {
+    forced-color-adjust: none;
+  }
+  [role='switch'] {
+    background-color: Canvas;
+    border-color: CanvasText;
+  }
+  [role='switch'] > span {
+    background-color: CanvasText;
+  }
+  [role='switch'][aria-checked='true'] {
+    background-color: Highlight;
+    border-color: Highlight;
+  }
+  [role='switch'][aria-checked='true'] > span {
+    background-color: HighlightText;
+  }
+  [role='switch']:disabled {
+    border-color: GrayText;
+  }
+  [role='switch']:disabled > span {
+    background-color: GrayText;
   }
 }

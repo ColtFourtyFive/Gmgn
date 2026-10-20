@@ -30,6 +30,7 @@ export const TagCount = memo(function TagCount({ tag, count, hideZero = true, cl
       <span
         className={clsx('chip num !px-1', !count && 'opacity-50', className)}
         style={{ color: `rgb(var(--${meta.token}))`, backgroundColor: `rgb(var(--${meta.token}) / 0.12)` }}
+        role="img"
         aria-label={`${count} ${meta.label}`}
       >
         <Icon size={11} strokeWidth={2.25} aria-hidden />
@@ -55,7 +56,7 @@ export const DevChip = memo(function DevChip({ status, holdRate, threshold, clas
   if (status === 'sold_all') {
     return (
       <Tooltip content={DEV_STATUS.sold_all.hint}>
-        <span className="chip bg-info/15 text-info" aria-label="Dev sold all">
+        <span className="chip bg-info/15 text-info" role="img" aria-label="Dev sold all">
           <Code size={10} aria-hidden />
           DS
         </span>
@@ -115,7 +116,7 @@ export const RiskChips = memo(function RiskChips({
 function Flag({ tone, icon, children, hint }: { tone: string; icon?: ReactNode; children?: ReactNode; hint: string }) {
   return (
     <Tooltip content={hint}>
-      <span className={clsx('chip !px-1', tone)} aria-label={hint}>
+      <span className={clsx('chip !px-1', tone)} role="img" aria-label={hint}>
         {icon}
         {children}
       </span>

@@ -25,7 +25,7 @@ import {
   type LeaderboardSort,
   type LeaderboardTag,
 } from '@/components/wallet';
-import { useDebounce, useIsMobile, useLocalStorage } from '@/hooks';
+import { useDebounce, useIsMobile, useLocalStorage, useOpenLink } from '@/hooks';
 import { routes, useChain } from '@/lib/chain';
 
 const TAG_TABS: { value: LeaderboardTag; label: string; icon: ReactNode; hint: string }[] = [
@@ -53,8 +53,8 @@ function validSort(s: unknown): SortState {
 
 const MEDAL = ['text-accent', 'text-muted', 'text-dev'];
 
-/** Tiny stacked bar of the five PnL buckets. */
-function DistBar({ row }: { row: LeaderboardRow }) {
+/** Tiny stacked bar of the five PnL buckets (an image whose name carries the counts). */
+export function DistBar({ row }: { row: LeaderboardRow }) {
   const d = row.stats.distribution;
   const total = distributionTotal(d);
   return (
@@ -70,7 +70,12 @@ function DistBar({ row }: { row: LeaderboardRow }) {
         </span>
       }
     >
-      <span className="flex h-2 w-[88px] overflow-hidden rounded-full bg-panel-3" tabIndex={0} aria-label="PnL distribution">
+      <span
+        className="flex h-2 w-[88px] overflow-hidden rounded-full bg-panel-3"
+        tabIndex={0}
+        role="img"
+        aria-label={`PnL distribution: ${PNL_BUCKETS.map((b) => `${b.label} ${d[b.key]}`).join(', ')}`}
+      >
         {total > 0 &&
           PNL_BUCKETS.map((b) =>
             d[b.key] > 0 ? <span key={b.key} style={{ width: `${(d[b.key] / total) * 100}%`, backgroundColor: `rgb(var(--${b.tone}) / ${0.3 + 0.7 * b.strength})` }} /> : null,
@@ -84,23 +89,39 @@ interface ColumnDeps {
   chain: ChainId;
   viewerTags: (address: string) => WalletTag[];
   onCopy: (address: string) => void;
+  /** Position in the default ranking (realized PnL, best first); null under any other sort. */
+  rankOf: (address: string) => number | null;
 }
 
-function leaderboardColumns({ chain, viewerTags, onCopy }: ColumnDeps): Column<LeaderboardRow>[] {
+/** 1-based ranks of the rows in the default ranking (the server's PnL order, before local filters), or null under any other sort. */
+export function rankMap(rows: LeaderboardRow[] | undefined, sort: SortState): Map<string, number> | null {
+  if (sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir) return null;
+  return new Map((rows ?? []).map((r, i) => [r.address, i + 1]));
+}
+
+function leaderboardColumns({ chain, viewerTags, onCopy, rankOf }: ColumnDeps): Column<LeaderboardRow>[] {
   return [
     {
       key: 'wallet',
       header: 'Wallet',
       sticky: true,
       width: 220,
-      render: (r, i) => (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="flex w-5 shrink-0 justify-center">
-            {i < 3 ? <Trophy size={14} className={MEDAL[i]} aria-label={`Rank ${i + 1}`} /> : <span className="num text-xs text-faint">{i + 1}</span>}
+      // Medals and rank numbers belong to the PnL ranking only: an ascending or other sort must not crown its first row.
+      render: (r) => {
+        const rank = rankOf(r.address);
+        return (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="flex w-5 shrink-0 justify-center">
+              {rank === null ? null : rank <= 3 ? (
+                <Trophy size={14} className={MEDAL[rank - 1]} aria-label={`Rank ${rank}`} />
+              ) : (
+                <span className="num text-xs text-faint">{rank}</span>
+              )}
+            </span>
+            <WalletCell chain={chain} address={r.address} label={r.label} tags={mergeTags(r.tags, viewerTags(r.address))} />
           </span>
-          <WalletCell chain={chain} address={r.address} label={r.label} tags={mergeTags(r.tags, viewerTags(r.address))} />
-        </span>
-      ),
+        );
+      },
     },
     {
       key: 'pnl',
@@ -224,6 +245,7 @@ export default function LeaderboardPage() {
 
 function Leaderboard({ chain }: { chain: ChainId }) {
   const navigate = useNavigate();
+  const openLink = useOpenLink();
   const mobile = useIsMobile();
   const [tag, setTag] = useLocalStorage<LeaderboardTag>('ts.leaderboard.tag', 'smart');
   const [period, setPeriod] = useLocalStorage<LeaderboardPeriod>('ts.leaderboard.period', '7d');
@@ -238,9 +260,17 @@ function Leaderboard({ chain }: { chain: ChainId }) {
   const serverSort = SERVER_SORT[sort.key];
   const q = useLeaderboard(chain, validTag, validPeriod, serverSort ?? 'pnl', serverSort ? sort.dir : 'desc');
   const viewerTags = useViewerTags(chain);
+  // No ranks on the previous sort's rows while the default ranking loads.
+  const ranks = useMemo(() => (q.isPlaceholderData ? null : rankMap(q.data, sort)), [q.data, q.isPlaceholderData, sort.key, sort.dir]); // eslint-disable-line react-hooks/exhaustive-deps
   const columns = useMemo(
-    () => leaderboardColumns({ chain, viewerTags, onCopy: (address) => navigate(`${routes.copytrade(chain)}?target=${encodeURIComponent(address)}`) }),
-    [chain, viewerTags, navigate],
+    () =>
+      leaderboardColumns({
+        chain,
+        viewerTags,
+        onCopy: (address) => navigate(`${routes.copytrade(chain)}?target=${encodeURIComponent(address)}`),
+        rankOf: (address) => ranks?.get(address) ?? null,
+      }),
+    [chain, viewerTags, navigate, ranks],
   );
 
   const rows = useMemo(() => {
@@ -306,7 +336,7 @@ function Leaderboard({ chain }: { chain: ChainId }) {
             minWidth={1120}
             maxHeight={mobile ? undefined : 'calc(100dvh - 200px)'}
             className={clsx('transition-opacity', q.isPlaceholderData && 'opacity-60')}
-            onRowClick={(r) => navigate(routes.wallet(chain, r.address))}
+            onRowClick={(r, e) => openLink(routes.wallet(chain, r.address), e)}
             empty={
               <EmptyState
                 compact

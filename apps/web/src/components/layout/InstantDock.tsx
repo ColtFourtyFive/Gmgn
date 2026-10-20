@@ -8,7 +8,7 @@
 // palette and the phone menu (useDock().toggle), or on a tab from the status
 // bar (toggleDockTab).
 
-import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { memo, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronUp, GripVertical, MoveDiagonal, Wallet, X, Zap } from 'lucide-react';
 import clsx from 'clsx';
@@ -23,7 +23,9 @@ import { useDock, type DockTab } from '@/store/dock';
 import {
   arrowDelta,
   clampDockRect,
+  clearanceScroll,
   collapsedTop,
+  coveredShare,
   defaultDockRect,
   DOCK_HEADER,
   foldsDown,
@@ -72,6 +74,64 @@ const DockBody = memo(function DockBody({ tab }: { tab: DockTab }) {
   const chain = useActiveChain();
   return tab === 'trade' ? <InstantTradeTab target={route ?? lastToken} onPage={!!route} /> : <DockPositions chain={chain} />;
 });
+
+/** Scroll `el`'s scrollable ancestors by `dy` (as far as they go). */
+function scrollAncestors(el: HTMLElement, dy: number): void {
+  for (let p = el.parentElement; p && Math.abs(dy) >= 1; p = p.parentElement) {
+    if (!/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY) || p.scrollHeight <= p.clientHeight) continue;
+    const before = p.scrollTop;
+    p.scrollTop = before + dy;
+    dy -= p.scrollTop - before;
+  }
+}
+
+/**
+ * Keyboard support of the floating panel, which sits last in the DOM (after
+ * hundreds of page controls) and floats over the page:
+ * - opened by the user (button, "i", palette, footer), it takes focus;
+ * - closed while focus is inside, focus returns to the opener (else the
+ *   top-bar toggle) instead of falling to <body>;
+ * - a page control focused underneath it is scrolled clear of it, or the
+ *   panel folds to its header (WCAG 2.4.11 Focus Not Obscured).
+ */
+function useDockFocus(ref: RefObject<HTMLElement>, fold: () => void): void {
+  const opener = useRef<HTMLElement | null>(null);
+  const inside = useRef(false);
+  const foldRef = useRef(fold);
+  foldRef.current = fold;
+
+  const focusRequested = useDock((s) => s.focusRequested);
+  useEffect(() => {
+    if (!useDock.getState().consumeFocusRequest()) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && !ref.current?.contains(active)) opener.current = active;
+    ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+    inside.current = !!ref.current?.contains(document.activeElement);
+  }, [focusRequested, ref]);
+
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const panel = ref.current;
+      const el = e.target;
+      if (!panel || !(el instanceof HTMLElement)) return;
+      inside.current = panel.contains(el);
+      if (inside.current) return;
+      // After the browser's own scroll-into-view.
+      requestAnimationFrame(() => {
+        if (!panel.isConnected || coveredShare(panel.getBoundingClientRect(), el.getBoundingClientRect()) < 0.5) return;
+        scrollAncestors(el, clearanceScroll(panel.getBoundingClientRect(), el.getBoundingClientRect()));
+        if (coveredShare(panel.getBoundingClientRect(), el.getBoundingClientRect()) >= 0.5) foldRef.current();
+      });
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      if (!inside.current) return;
+      const back = opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('[data-dock-toggle]');
+      back?.focus();
+    };
+  }, [ref]);
+}
 
 interface Gesture {
   mode: 'move' | 'resize';
@@ -136,6 +196,8 @@ function FloatingDock() {
     setLive(null);
   };
   const gestureHandlers = (mode: Gesture['mode']) => ({ onPointerDown: begin(mode), onPointerMove, onPointerUp: end, onPointerCancel: end });
+  const sectionRef = useRef<HTMLElement>(null);
+  useDockFocus(sectionRef, () => !useDock.getState().collapsed && setCollapsed(true));
 
   const onKey = (mode: Gesture['mode']) => (e: KeyboardEvent) => {
     const d = arrowDelta(e.key, e.shiftKey);
@@ -146,6 +208,7 @@ function FloatingDock() {
 
   return (
     <section
+      ref={sectionRef}
       aria-label="Instant trade dock"
       className={clsx('fixed z-[40] flex flex-col overflow-hidden rounded border border-line-strong bg-panel shadow-float animate-pop-in', live && 'select-none')}
       style={{ left: base.x, top: collapsed ? collapsedTop(folded, foldDown) : rect.y, width: rect.width, height: collapsed ? DOCK_HEADER : rect.height }}

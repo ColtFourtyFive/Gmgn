@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { launchpadsFor, type ChainId, type Range, type TokenFilters } from '@trenchscope/shared';
 import { Brain, Filter, RotateCcw, Shield, ShieldCheck } from 'lucide-react';
 import clsx from 'clsx';
-import { Button, Checkbox, Drawer, IconButton, Input, RangeInput, SegmentedControl, Tooltip } from '@/components/ui';
+import { Button, Checkbox, Drawer, Heading, IconButton, Input, RangeInput, SegmentedControl, Tooltip } from '@/components/ui';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useMeta } from '@/hooks/useMeta';
 import {
@@ -43,7 +43,7 @@ function Section({ title, count, action, children }: { title: string; count?: nu
   return (
     <section className="flex flex-col gap-2 border-b border-line px-3 py-3 last:border-b-0">
       <header className="flex items-center gap-2">
-        <h3 className="table-head">{title}</h3>
+        <Heading className="table-head">{title}</Heading>
         {!!count && <span className="num rounded bg-accent/15 px-1 text-2xs font-semibold leading-4 text-accent">{count}</span>}
         {action && <span className="ml-auto">{action}</span>}
       </header>

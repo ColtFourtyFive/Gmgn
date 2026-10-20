@@ -1,10 +1,10 @@
 // Live previews under address fields: confirm the typed address resolves to
 // the wallet / token the user means before saving a task or alert.
 
-import { CHAINS, type ChainId } from '@trenchscope/shared';
+import { CHAINS, shortAddress, type ChainId } from '@trenchscope/shared';
 import { CircleAlert } from 'lucide-react';
 import { Pct, Price, TokenAvatar, Usd, WalletAvatar, WalletTags } from '@/components/common';
-import { Skeleton } from '@/components/ui';
+import { Badge, Skeleton } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
 import { isAddressFor } from './address';
@@ -44,7 +44,12 @@ export function WalletPreview({ chain, address }: { chain: ChainId; address: str
       <WalletAvatar seed={w.avatarSeed} size={28} />
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-fg">{w.label ?? w.remark ?? w.style.title}</span>
+          <span className="truncate text-sm font-medium text-fg">{w.label || w.remark || shortAddress(w.address)}</span>
+          {w.style.title && (
+            <Badge title="Trading style" className="shrink-0">
+              {w.style.title}
+            </Badge>
+          )}
           <WalletTags tags={w.tags} max={3} />
         </p>
         <p className="truncate text-xs text-muted">

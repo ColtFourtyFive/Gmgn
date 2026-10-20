@@ -4,7 +4,7 @@
 
 import { useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import type { TokenSummary, WatchlistResponse } from '@trenchscope/shared';
+import { CHAINS, type TokenSummary, type WatchlistResponse } from '@trenchscope/shared';
 import { FolderOpen, Star, TrendingUp } from 'lucide-react';
 import { AccountGate, ChainFilter, GroupDot, NoteField, WatchStar, parseScope, useSignedIn, useWatchlist, watchKey, type ChainScope } from '@/components/account';
 import { GroupBar } from '@/components/account/watchlist/GroupBar';
@@ -13,7 +13,7 @@ import { SafetyChip } from '@/components/discovery';
 import { Page, PageHeader } from '@/components/layout';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { DataTable, EmptyState, ErrorState, Panel, Popover, Skeleton, type Column } from '@/components/ui';
-import { useActiveChain, useIsMobile } from '@/hooks';
+import { useActiveChain, useIsMobile, useOpenLink } from '@/hooks';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { routes } from '@/lib/chain';
 
@@ -93,8 +93,10 @@ interface BodyProps {
   retrying: boolean;
 }
 
-function WatchlistBody({ scope, group, onGroup, data, loading, error, refetch, retrying }: BodyProps) {
+/** Exported for tests. */
+export function WatchlistBody({ scope, group, onGroup, data, loading, error, refetch, retrying }: BodyProps) {
   const navigate = useNavigate();
+  const openLink = useOpenLink();
   const chain = useActiveChain();
   const mobile = useIsMobile();
   const display = useDisplaySettings();
@@ -217,6 +219,8 @@ function WatchlistBody({ scope, group, onGroup, data, loading, error, refetch, r
   }
 
   const groupName = groupById.get(group)?.name;
+  // Group members the chain filter hides (the group itself is not empty).
+  const hiddenInGroup = groupName && scope !== 'all' ? all.filter((t) => t.groupIds.includes(group)).length : 0;
   const empty =
     all.length === 0 ? (
       <EmptyState
@@ -233,7 +237,14 @@ function WatchlistBody({ scope, group, onGroup, data, loading, error, refetch, r
           </Link>
         }
       />
-    ) : groupName && inScope.length > 0 ? (
+    ) : scope !== 'all' && hiddenInGroup > 0 ? (
+      <EmptyState
+        compact
+        icon={<FolderOpen size={16} />}
+        title={`Nothing in ${groupName} on ${CHAINS[scope].name}`}
+        description={`${groupName} has ${hiddenInGroup} token${hiddenInGroup === 1 ? '' : 's'} on other chains. Switch to All to see ${hiddenInGroup === 1 ? 'it' : 'them'}.`}
+      />
+    ) : groupName ? (
       <EmptyState
         compact
         icon={<FolderOpen size={16} />}
@@ -283,7 +294,7 @@ function WatchlistBody({ scope, group, onGroup, data, loading, error, refetch, r
         rows={rows}
         rowKey={watchKey}
         defaultSort={{ key: 'mcap', dir: 'desc' }}
-        onRowClick={(t) => navigate(routes.token(t.chain, t.address))}
+        onRowClick={(t, e) => openLink(routes.token(t.chain, t.address), e)}
         loading={loading}
         skeletonRows={6}
         compact={display.compactRows}

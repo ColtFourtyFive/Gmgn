@@ -5,7 +5,7 @@
 // windows, the recent-activity ring, and counters for sniper / sandwich /
 // average-buy classification. Period stats and the style read from here.
 
-import type { ChainId, PositionEvent, Trade, WalletPeriod, WalletPeriodStats, WalletStyle } from '@trenchscope/shared';
+import type { ChainId, PnlDistribution, PositionEvent, Trade, WalletPeriod, WalletPeriodStats, WalletStyle } from '@trenchscope/shared';
 import { DUST_RATE, type PositionState, type TokenState, type WalletState, type World } from '../../sim/world';
 import {
   DAY_MS,
@@ -40,8 +40,10 @@ export interface Bucket {
   /** Gross trade USD (Trade.usdAmount). */
   buyUsd: number;
   sellUsd: number;
-  /** USD spent buying incl. fees (position boughtUsd delta). */
+  /** USD spent buying incl. fees (position boughtUsd delta): the period's buy volume and cost. */
   cost: number;
+  /** USD received selling, net of fees (position soldUsd delta): the period's sell volume. */
+  proceeds: number;
   /** First buys (entries) made in this bucket, and how many of them later ran 2x. */
   entries: number;
   hits: number;
@@ -75,6 +77,8 @@ export interface TokRec {
   fs: number | null;
   /** Last seen position.boughtUsd (for exact fee-inclusive buy cost deltas). */
   bu: number;
+  /** Last seen position.soldUsd (for exact net sell proceeds deltas); absent in records saved before it existed. */
+  su?: number;
 }
 
 export interface CopyWindow {
@@ -89,7 +93,7 @@ const DAY_KEEP = 30;
 const CW_RING = 100;
 
 function newBucket(t: number): Bucket {
-  return { t, realized: 0, buys: 0, sells: 0, buyUsd: 0, sellUsd: 0, cost: 0, entries: 0, hits: 0, tokens: new Map() };
+  return { t, realized: 0, buys: 0, sells: 0, buyUsd: 0, sellUsd: 0, cost: 0, proceeds: 0, entries: 0, hits: 0, tokens: new Map() };
 }
 
 function bucketFor(list: Bucket[], start: number, keepFrom: number): Bucket {
@@ -192,11 +196,12 @@ export class WalletTrack {
     let rec = this.tokens.get(t.address);
     const isNewRec = !rec;
     if (!rec) {
-      rec = { fs: null, bu: 0 };
+      rec = { fs: null, bu: 0, su: trade.side === 'sell' ? 0 : pos.soldUsd };
       this.tokens.set(t.address, rec);
     }
 
     let cost = 0;
+    let proceeds = 0;
     let realized = 0;
     if (trade.side === 'buy') {
       // Exact fee-inclusive cost from the position delta; when the record is new
@@ -212,6 +217,9 @@ export class WalletTrack {
       }
     } else {
       realized = trade.realizedPnlUsd ?? 0;
+      // Exact net proceeds from the position delta (same fallback as buy costs).
+      proceeds = rec.su === undefined || (isNewRec && pos.sells > 1) ? trade.usdAmount : Math.max(0, pos.soldUsd - rec.su);
+      rec.su = pos.soldUsd;
       this.sellsAll++;
       if (rec.fs === null && pos.firstBuyAt !== null) {
         rec.fs = ts;
@@ -223,8 +231,8 @@ export class WalletTrack {
 
     const hb = bucketFor(this.hours, hourStart(ts), hourStart(ts) - HOUR_KEEP * HOUR_MS);
     const db = bucketFor(this.days, dayStart(ts), dayStart(ts) - DAY_KEEP * DAY_MS);
-    this.addToBucket(hb, trade, t.address, cost, realized);
-    this.addToBucket(db, trade, t.address, cost, realized);
+    this.addToBucket(hb, trade, t.address, cost, proceeds, realized);
+    this.addToBucket(db, trade, t.address, cost, proceeds, realized);
     if (trade.side === 'buy' && pos.buys === 1 && isSelectionEntry(t, w)) {
       hb.entries++;
       db.entries++;
@@ -240,7 +248,7 @@ export class WalletTrack {
     return entry;
   }
 
-  private addToBucket(b: Bucket, trade: Trade, token: string, cost: number, realized: number): void {
+  private addToBucket(b: Bucket, trade: Trade, token: string, cost: number, proceeds: number, realized: number): void {
     if (trade.side === 'buy') {
       b.buys++;
       b.buyUsd += trade.usdAmount;
@@ -248,6 +256,7 @@ export class WalletTrack {
     } else {
       b.sells++;
       b.sellUsd += trade.usdAmount;
+      b.proceeds += proceeds;
       b.realized += realized;
     }
     const a = b.tokens.get(token);
@@ -314,6 +323,14 @@ export class WalletTrack {
     return n;
   }
 
+  /** Tokens any hour or day bucket still counts. */
+  bucketTokens(): Set<string> {
+    const out = new Set<string>();
+    for (const b of this.hours) for (const tok of b.tokens.keys()) out.add(tok);
+    for (const b of this.days) for (const tok of b.tokens.keys()) out.add(tok);
+    return out;
+  }
+
   /** Copy windows (ms) whose first sell happened at/after `from`. */
   copyWindowsSince(from: number): number[] {
     const out: number[] = [];
@@ -374,6 +391,7 @@ export class WalletTrack {
     for (const b of tr.hours.concat(tr.days)) {
       b.entries ??= 0;
       b.hits ??= 0;
+      b.proceeds ??= b.sellUsd; // saved before net proceeds were kept: gross is the closest
     }
     tr.tokens = d.tokens instanceof Map ? d.tokens : new Map();
     tr.cw = Ring.from(d.cw ?? [], CW_RING);
@@ -405,6 +423,13 @@ export function unrealizedOf(world: World, pos: PositionState, t: TokenState | u
   return pos.balance * world.priceUsd(t) - pos.costBasisUsd;
 }
 
+/** `dist` (a fresh one when absent) with a position in a deleted token counted in: no unrealized PnL left. */
+export function addToDistribution(dist: PnlDistribution | undefined, pos: PositionState): PnlDistribution {
+  const out = dist ?? emptyDistribution();
+  out[pnlBucket(pos.boughtUsd > 0 ? pos.realizedPnlUsd / pos.boughtUsd : 0)]++;
+  return out;
+}
+
 /** Zero-filled daily realized PnL series from day buckets, oldest first. */
 export function dailySeries(days: readonly Bucket[], from: number, to: number): { day: number; pnlUsd: number }[] {
   const out: { day: number; pnlUsd: number }[] = [];
@@ -420,7 +445,9 @@ export function dailySeries(days: readonly Bucket[], from: number, to: number): 
  * Stats for one period.
  *  - 1d: hourly buckets (current hour + previous 23h, i.e. rolling 24h to the hour)
  *  - 7d / 30d: UTC day buckets (today + previous 6 / 29 days)
- *  - all: position totals (volumes = fee-inclusive cost / net proceeds)
+ *  - all: position totals, plus those folded into w.pruned when their token was deleted
+ * Every period measures volumes the same way: buy volume = fee-inclusive cost (so avgBuyUsd =
+ * cost / buys never exceeds it), sell volume = proceeds net of fees.
  * Per-token outcome = realized in period + current unrealized (if still held);
  * ratio = outcome / buy cost in period (or the position's lifetime cost when the
  * token was only sold in the period). Win = outcome > 0. Deleted tokens count
@@ -458,6 +485,19 @@ export function periodStats(world: World, w: WalletState, tr: WalletTrack | unde
       tokens++;
       if (pos.balance > 0 && pos.firstBuyAt !== null) openAges.push(now - pos.firstBuyAt);
     }
+    const p = w.pruned;
+    if (p) {
+      // positions dropped with their pruned tokens (World.dropPositions): realized only
+      realized += p.realizedPnlUsd;
+      buys += p.buys;
+      sells += p.sells;
+      buyUsd += p.boughtUsd;
+      sellUsd += p.soldUsd;
+      cost += p.boughtUsd;
+      wins += p.wins;
+      tokens += p.tokens;
+      if (p.distribution) for (const k of Object.keys(dist) as (keyof PnlDistribution)[]) dist[k] += p.distribution[k];
+    }
     cws = tr ? tr.copyWindowsSince(-Infinity) : [];
     daily = dailySeries(tr ? tr.days : [], dayStart(now) - 29 * DAY_MS, dayStart(now));
   } else {
@@ -469,8 +509,8 @@ export function periodStats(world: World, w: WalletState, tr: WalletTrack | unde
       realized += b.realized;
       buys += b.buys;
       sells += b.sells;
-      buyUsd += b.buyUsd;
-      sellUsd += b.sellUsd;
+      buyUsd += b.cost;
+      sellUsd += b.proceeds;
       cost += b.cost;
       for (const [tok, a] of b.tokens) {
         const m = merged.get(tok);
@@ -486,7 +526,7 @@ export function periodStats(world: World, w: WalletState, tr: WalletTrack | unde
       const u = pos ? unrealizedOf(world, pos, t) : 0;
       unrealized += u;
       const pnl = a.r + u;
-      const base = a.c > 0 ? a.c : (pos?.boughtUsd ?? 0);
+      const base = a.c > 0 ? a.c : (pos?.boughtUsd ?? tr?.tokens.get(tok)?.bu ?? 0);
       if (pnl > 0) wins++;
       dist[pnlBucket(base > 0 ? pnl / base : 0)]++;
       if (pos && pos.balance > 0 && pos.firstBuyAt !== null) openAges.push(now - pos.firstBuyAt);

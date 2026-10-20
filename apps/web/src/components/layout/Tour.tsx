@@ -102,6 +102,17 @@ function TourRun() {
     if (cardRef.current) setCardHeight(cardRef.current.offsetHeight);
   }, [step, mobile, arrived]);
 
+  // Back leaves on the first step: if it had focus, focus would fall to <body>
+  // and the ←/→ keys (handled inside the dialog) would stop working. (The
+  // first step's initial focus is useOverlay's, which also remembers the opener.)
+  const shownIndex = useRef(index);
+  useLayoutEffect(() => {
+    if (shownIndex.current === index) return;
+    shownIndex.current = index;
+    const root = rootRef.current;
+    if (root && !root.contains(document.activeElement)) root.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+  }, [index]);
+
   const last = index === steps.length - 1;
   const next = () => (last ? finish() : setIndex(index + 1));
   const back = () => index > 0 && setIndex(index - 1);

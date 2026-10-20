@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { CHAINS, type ChainId, type FeedItem, type WalletTag } from '@trenchscope/shared';
 import { Brain, Flame, Megaphone, Pause, Play, Radar, RotateCcw, Star, Users } from 'lucide-react';
 import clsx from 'clsx';
+import { PauseStatus } from '@/components/common';
 import { LiveStatus, QuickBuyAmount, useQuickBuyAmount } from '@/components/discovery';
 import { useViewerTags } from '@/components/discovery/useViewerTags';
 import { Page, PageHeader } from '@/components/layout';
@@ -177,8 +178,10 @@ function Monitor({ chain }: { chain: ChainId }) {
         {kind === 'follow' && <GroupChips groups={followGroups} value={group} onChange={setGroup} />}
         <span className="num ml-auto text-xs text-muted">{visible.length} trades</span>
       </div>
+      {/* Not a live region itself: the waiting count changes with every batch. */}
+      <PauseStatus paused={paused} what="Feed" />
       {paused && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-warn/30 bg-warn/10 px-3 py-1.5 text-sm" role="status">
+        <div className="flex shrink-0 items-center gap-2 border-b border-warn/30 bg-warn/10 px-3 py-1.5 text-sm">
           <Pause size={13} className="text-warn" />
           <span className="text-fg">Paused</span>
           <span className="text-muted">{feed.pending > 0 ? `${feed.pending} new trade${feed.pending === 1 ? '' : 's'} waiting` : 'New trades will wait here'}</span>

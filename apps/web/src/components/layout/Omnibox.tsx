@@ -22,6 +22,14 @@ export function isFullAddress(text: string): boolean {
   return BASE58_ADDRESS.test(text) || EVM_ADDRESS.test(text);
 }
 
+/**
+ * Same address as `typed`: EVM hex is case-insensitive (pasted addresses are
+ * usually checksummed, the server returns lower-case); Solana base58 is not.
+ */
+export function sameAddress(address: string, typed: string): boolean {
+  return EVM_ADDRESS.test(typed) ? address.toLowerCase() === typed.toLowerCase() : address === typed;
+}
+
 type Hit =
   | { kind: 'token'; key: string; href: string; token: SearchResult['tokens'][number] }
   | { kind: 'wallet'; key: string; href: string; wallet: SearchResult['wallets'][number] };
@@ -38,16 +46,16 @@ function toHits(data: SearchResult | undefined): Hit[] {
 export async function resolveAddress(address: string, chain: ChainId): Promise<string> {
   try {
     const res = await api.search(address);
-    const token = res.tokens.find((t) => t.address === address);
+    const token = res.tokens.find((t) => sameAddress(t.address, address));
     if (token) return routes.token(token.chain, token.address);
-    const wallet = res.wallets.find((w) => w.address === address);
+    const wallet = res.wallets.find((w) => sameAddress(w.address, address));
     if (wallet) return routes.wallet(wallet.chain, wallet.address);
   } catch {
     /* server unreachable: fall through to a best guess */
   }
   const evm = EVM_ADDRESS.test(address);
   const guess: ChainId = evm ? (CHAINS[chain].addressStyle === 'evm' ? chain : 'bsc') : 'sol';
-  return routes.wallet(guess, address);
+  return routes.wallet(guess, evm ? address.toLowerCase() : address);
 }
 
 function HitRow({ hit, id, active, onPick, onHover }: { hit: Hit; id: string; active: boolean; onPick: () => void; onHover: () => void }) {
@@ -94,7 +102,7 @@ function HitRow({ hit, id, active, onPick, onHover }: { hit: Hit; id: string; ac
       onMouseDown={(e) => e.preventDefault()}
       onMouseEnter={onHover}
       onClick={onPick}
-      className={clsx('flex h-11 cursor-pointer items-center gap-2.5 rounded px-2', active && 'bg-panel-3')}
+      className={clsx('flex h-11 cursor-pointer items-center gap-2.5 rounded px-2', active && 'option-active')}
     >
       {body}
     </li>
@@ -184,22 +192,26 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
   };
 
   const showResults = text.trim().length > 0;
+  // Expanded only while a listbox is shown (aria-controls points at it).
+  const expanded = hits.length > 0 && (variant === 'sheet' || focused);
   const loading = jumping || (search.isFetching && hits.length === 0);
   const tokenCount = hits.filter((h) => h.kind === 'token').length;
 
   const results = (
-    <div className="flex flex-col">
-      {loading && (
-        <p className="flex items-center gap-2 px-3 py-3 text-sm text-muted">
-          <Spinner size={13} label="" /> {jumping ? 'Opening address…' : 'Searching…'}
-        </p>
-      )}
-      {!loading && search.isError && <p className="px-3 py-3 text-sm text-muted">Search is unavailable right now.</p>}
-      {!loading && !search.isError && q && search.isSuccess && hits.length === 0 && (
-        <p className="px-3 py-3 text-sm text-muted">No tokens or wallets match “{q}”.</p>
-      )}
+    <div className="flex min-h-0 flex-col">
+      {/* Mounted with the dropdown / sheet so screen readers hear the search finish (as in the palette). */}
+      <div role="status" className="shrink-0">
+        {loading && (
+          <p className="flex items-center gap-2 px-3 py-3 text-sm text-muted">
+            <Spinner size={13} label="" /> {jumping ? 'Opening address…' : 'Searching…'}
+          </p>
+        )}
+        {!loading && search.isError && <p className="px-3 py-3 text-sm text-muted">Search is unavailable right now.</p>}
+        {!loading && !search.isError && q && search.isSuccess && hits.length === 0 && <p className="px-3 py-3 text-sm text-muted">No tokens or wallets match “{q}”.</p>}
+      </div>
       {hits.length > 0 && (
-        <ul id={listId} role="listbox" aria-label="Search results" className="p-1">
+        // The listbox is the scroll container: as the combobox's popup, arrow keys scroll it.
+        <ul id={listId} role="listbox" aria-label="Search results" className="min-h-0 overflow-y-auto overscroll-contain p-1">
           {hits.map((hit, i) => (
             <Fragment key={hit.key}>
               {i === 0 && tokenCount > 0 && (
@@ -217,7 +229,7 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
           ))}
         </ul>
       )}
-      <p className="hidden border-t border-line px-3 py-1.5 text-2xs text-faint sm:block">↑↓ to navigate · Enter to open · paste an address to jump</p>
+      <p className="hidden shrink-0 border-t border-line px-3 py-1.5 text-2xs text-faint sm:block">↑↓ to navigate · Enter to open · paste an address to jump</p>
     </div>
   );
 
@@ -234,7 +246,7 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
         type="search"
         role="combobox"
         aria-label="Search tokens and wallets"
-        aria-expanded={showResults}
+        aria-expanded={expanded}
         aria-controls={hits.length ? listId : undefined}
         aria-activedescendant={hits.length ? `${listId}-${active}` : undefined}
         aria-autocomplete="list"
@@ -293,7 +305,7 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
         offset={4}
         matchWidth
         onClose={() => inputRef.current?.blur()}
-        className="panel w-[420px] max-w-[calc(100vw-16px)] shadow-float animate-pop-in"
+        className="panel flex w-[420px] max-w-[calc(100vw-16px)] flex-col !overflow-hidden shadow-float animate-pop-in"
       >
         {results}
       </Floating>

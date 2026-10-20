@@ -25,6 +25,10 @@ const MIN = 60 * SEC;
 
 const MAX_TOKENS_PER_CHAIN = 2500;
 const DORMANT_AFTER_MS = 30 * MIN;
+/** A crew wallet that never traded is swept once unused this long (its launch buy comes within a minute). */
+const INERT_CREW_IDLE_MS = 60 * MIN;
+/** A fresh (newcomer) wallet holding nothing live is swept after a day without trading. */
+const INERT_FRESH_IDLE_MS = 24 * 60 * MIN;
 /** Tokens below this activity are stepped every COLD_STEP_MS instead of every tick. */
 const COLD_HYPE = 0.03;
 /** Below this activity (trades/s) nobody is watching any more: the token goes quiet. */
@@ -166,6 +170,8 @@ export class MarketSim {
       this.stats = snap.stats;
       for (const c of CHAIN_IDS) this.chains[c].congestion ??= newCongestionModel(this.stats[c].trades);
     }
+    // snapshots from before pruned tokens took their positions with them
+    this.world.dropOrphanPositions();
     this.roster.rebuild();
     // a world saved before the market simulator existed has no agents yet
     if (this.roster.list(CHAIN_IDS[0], 'funder').length === 0) this.seedPopulation();
@@ -753,8 +759,9 @@ export class MarketSim {
 
   /**
    * Keep at most maxTokensPerChain: drop the oldest dormant tokens no human ever
-   * touched and no module pins (open orders, alerts), then sweep the single-use
-   * dev-side wallets left with nothing but positions in deleted tokens.
+   * touched and no module pins (open orders, alerts) with the simulated wallets'
+   * positions in them (folded into all-time totals), then sweep the single-use
+   * wallets left with nothing in a live token.
    */
   private prune(chain: ChainId): void {
     const { world } = this;
@@ -762,12 +769,14 @@ export class MarketSim {
     if (addrs.length <= this.maxTokensPerChain) return;
     let excess = addrs.length - Math.floor(this.maxTokensPerChain * 0.96);
     const pinned = world.pinnedTokens();
+    const deleted: TokenState[] = [];
     let write = 0;
     for (const addr of addrs) {
       const t = world.tokens.get(addr);
       if (!t) continue;
       if (excess > 0 && t.dormant && !pinned.has(addr) && !this.touchedByUser(t)) {
         world.tokens.delete(addr);
+        deleted.push(t);
         excess--;
         this.stats[chain].pruned++;
         continue;
@@ -775,17 +784,33 @@ export class MarketSim {
       addrs[write++] = addr;
     }
     addrs.length = write;
+    world.dropPositions(deleted);
     this.sweepInertWallets(chain);
   }
 
-  /** Bundler/insider wallets are single-use: once all their tokens are gone they are dead weight. */
+  /**
+   * Wallets left with nothing in a live token are dead weight: crew (bundler /
+   * insider) wallets (that traded, or sat unused for INERT_CREW_IDLE_MS),
+   * single-use launcher (freshDev) wallets whose launches were all pruned, and
+   * newcomer (fresh) wallets idle for INERT_FRESH_IDLE_MS (the stream of new ones
+   * never stops). Wallets a user follows are kept.
+   */
   private sweepInertWallets(chain: ChainId): void {
     const { world } = this;
+    const now = world.now;
     const dead = new Set<string>();
-    for (const arch of ['bundler', 'insider'] as const) {
+    const idle = (w: WalletState, ms: number) => now - w.lastActiveAt >= ms;
+    for (const arch of ['bundler', 'insider', 'dev', 'fresh'] as const) {
       for (const addr of world.walletsOf(chain, arch)) {
         const w = world.wallets.get(addr);
-        if (!w || w.accountId || w.positions.size === 0) continue;
+        if (!w || w.accountId) continue;
+        const inert =
+          arch === 'dev'
+            ? memOf(w).role === 'freshDev' && !w.createdTokens.some((a) => world.tokens.has(a))
+            : arch === 'fresh'
+              ? memOf(w).role === 'fresh' && idle(w, INERT_FRESH_IDLE_MS)
+              : !!w.pruned || idle(w, INERT_CREW_IDLE_MS);
+        if (!inert) continue;
         let alive = false;
         for (const token of w.positions.keys()) {
           if (world.tokens.has(token)) {
@@ -793,10 +818,12 @@ export class MarketSim {
             break;
           }
         }
-        if (!alive) dead.add(addr);
+        // (no accounts service in sim-only contexts)
+        if (!alive && !this.ctx.accounts?.followersOf(chain, addr).length) dead.add(addr);
       }
     }
     world.removeWallets(dead);
+    this.roster.forget(dead);
   }
 
   private launchedByUser(t: TokenState): boolean {

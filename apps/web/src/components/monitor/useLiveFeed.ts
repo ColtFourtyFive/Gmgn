@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ChainId, FeedItem, TokenRef } from '@trenchscope/shared';
 import { api } from '@/lib/api';
+import { useStickyError } from '@/hooks/useStickyError';
+import { retainKeys } from '@/lib/retain';
 import { realtime, useChannel, useConnectionState } from '@/lib/ws';
 
 export type FeedKind = 'smart' | 'kol' | 'follow' | 'all';
@@ -19,6 +21,8 @@ export interface LiveFeedOptions {
   paused?: boolean;
   /** REST snapshot size (max 200). */
   limit?: number;
+  /** Most items kept (default FEED_CAP); live pushes extend the list back in time up to it. */
+  cap?: number;
   enabled?: boolean;
 }
 
@@ -43,18 +47,18 @@ export interface LiveFeed {
 
 const byNewest = (a: FeedItem, b: FeedItem) => b.trade.timestamp - a.trade.timestamp || (a.trade.id < b.trade.id ? 1 : -1);
 
-/** Merge incoming items (later arrival wins: fresher token refs) and keep the newest FEED_CAP. */
-function merge(list: FeedItem[], incoming: FeedItem[]): FeedItem[] {
+/** Merge incoming items (later arrival wins: fresher token refs) and keep the newest `cap`. */
+function merge(list: FeedItem[], incoming: FeedItem[], cap: number): FeedItem[] {
   if (incoming.length === 0) return list;
   const map = new Map<string, FeedItem>();
   for (const it of list) map.set(it.trade.id, it);
   for (const it of incoming) map.set(it.trade.id, it);
-  return [...map.values()].sort(byNewest).slice(0, FEED_CAP);
+  return [...map.values()].sort(byNewest).slice(0, cap);
 }
 
 const EMPTY: FeedItem[] = [];
 
-export function useLiveFeed({ chain, kind, paused = false, limit = 100, enabled = true }: LiveFeedOptions): LiveFeed {
+export function useLiveFeed({ chain, kind, paused = false, limit = 100, cap = FEED_CAP, enabled = true }: LiveFeedOptions): LiveFeed {
   // All list state belongs to one chain + kind; switching tabs starts a fresh list.
   const key = `${chain}:${kind}`;
   const keyRef = useRef(key);
@@ -91,18 +95,18 @@ export function useLiveFeed({ chain, kind, paused = false, limit = 100, enabled 
         // Refresh what is on screen; queue the rest.
         const update = incoming.filter((it) => known.has(it.trade.id));
         const queued = incoming.filter((it) => !known.has(it.trade.id));
-        if (update.length) setItems((prev) => merge(prev, update));
+        if (update.length) setItems((prev) => merge(prev, update, cap));
         if (queued.length) {
           const base = buffer.current.key === k ? buffer.current.items : [];
-          buffer.current = { key: k, items: merge(base, queued) };
+          buffer.current = { key: k, items: merge(base, queued, cap) };
           setPending({ key: k, n: buffer.current.items.length });
         }
         return;
       }
       if (seeded && source === 'ws') for (const it of incoming) if (!known.has(it.trade.id)) freshIds.current.add(it.trade.id);
-      setItems((prev) => merge(prev, incoming));
+      setItems((prev) => merge(prev, incoming, cap));
     },
-    [setItems],
+    [setItems, cap],
   );
 
   const q = useQuery({
@@ -131,15 +135,23 @@ export function useLiveFeed({ chain, kind, paused = false, limit = 100, enabled 
     setPending({ key: k, n: 0 });
     if (buf.length === 0) return;
     for (const it of buf) freshIds.current.add(it.trade.id);
-    setItems((prev) => merge(prev, buf));
-  }, [setItems]);
+    setItems((prev) => merge(prev, buf, cap));
+  }, [setItems, cap]);
 
   // Resuming shows everything that was buffered.
   useEffect(() => {
     if (!paused) flush();
   }, [paused, flush]);
 
+  // Bound the lookups by what can still be shown (the list is capped at `cap`).
+  useEffect(() => {
+    const buffered = buffer.current.key === keyRef.current ? buffer.current.items : [];
+    retainKeys(freshIds.current, new Set(items.map((it) => it.trade.id)));
+    retainKeys(tokens.current, new Set([...items, ...buffered].map((it) => it.token.address)));
+  }, [items]);
+
   const conn = useConnectionState();
+  const failed = useStickyError(q); // not reset to "loading" by each 15s retry
   const hasData = items.length > 0 || q.data !== undefined || wsSeen;
   return useMemo(
     () => ({
@@ -148,8 +160,8 @@ export function useLiveFeed({ chain, kind, paused = false, limit = 100, enabled 
       flush,
       tokens: tokens.current,
       freshIds: freshIds.current,
-      loading: enabled && !hasData && !q.isError,
-      error: q.isError && items.length === 0 ? q.error : null,
+      loading: enabled && !hasData && failed === null,
+      error: failed !== null && items.length === 0 ? failed : null,
       live: enabled && wsSeen && conn === 'open',
       retry: () => {
         realtime.connect();
@@ -158,6 +170,6 @@ export function useLiveFeed({ chain, kind, paused = false, limit = 100, enabled 
       retrying: q.isFetching,
     }),
     // q.refetch is stable; the q flags used are listed explicitly.
-    [items, pending, flush, enabled, hasData, q.isError, q.error, q.isFetching, wsSeen, conn],
+    [items, pending, flush, enabled, hasData, failed, q.isFetching, wsSeen, conn],
   );
 }

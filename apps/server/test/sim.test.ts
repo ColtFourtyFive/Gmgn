@@ -10,7 +10,7 @@ import { memOf } from '../src/sim/behaviors/roster';
 import { Engine } from '../src/sim/engine';
 import { MarketSim, type MarketOptions } from '../src/sim/market';
 import { NARRATIVES, RESERVED_TICKERS } from '../src/sim/names';
-import { DUST_RATE, World, type TokenState } from '../src/sim/world';
+import { DUST_RATE, World, type TokenState, type WalletState } from '../src/sim/world';
 
 const END_AT = Date.UTC(2026, 0, 1, 12);
 const WARMUP_MIN = 90;
@@ -302,8 +302,19 @@ describe('pruning', () => {
     });
     expect(sol.length <= cap || prunable.length <= cap * 0.04 + 10).toBe(true);
     expect(world.tokens.has(held!.address)).toBe(true);
-    // wallets keep their position records for deleted tokens
-    expect([...world.wallets.values()].some((w) => [...w.positions.keys()].some((a) => !world.tokens.has(a)))).toBe(true);
+    // simulated wallets drop their positions in deleted tokens (memory stays bounded), folding them into all-time totals
+    const wallets = [...world.wallets.values()];
+    expect(wallets.filter((w) => [...w.positions.keys()].some((a) => !world.tokens.has(a)))).toEqual([]);
+    const folded = wallets.filter((w) => w.pruned);
+    expect(folded.length).toBeGreaterThan(0);
+    for (const w of folded) {
+      const p = w.pruned!;
+      expect(p.tokens).toBeGreaterThan(0);
+      expect(p.wins).toBeLessThanOrEqual(p.tokens);
+      expect(p.buys).toBeGreaterThanOrEqual(p.tokens - p.sells);
+      expect(Number.isFinite(p.realizedPnlUsd) && p.boughtUsd >= 0 && p.soldUsd >= 0).toBe(true);
+    }
+    expect(user.pruned).toBeUndefined();
   }, 60_000);
 
   it('never prunes a token a user launched, even one they never bought', () => {
@@ -345,6 +356,9 @@ describe('pruning', () => {
     const { world, engine, market } = makeSim('prune-pin-test', { maxTokensPerChain: 150 });
     const removed = new Set<string>();
     world.on('walletsRemoved', (addrs) => addrs.forEach((a) => removed.add(a)));
+    // wallets created during the run, to read the role of swept ones (gone from the world by then)
+    const created = new Map<string, WalletState>();
+    world.on('walletCreated', (w) => created.set(w.address, w));
     let pinned: string | undefined;
     world.addPinSource(() => (pinned ? [pinned] : []));
     engine.addTicker('pin-first', () => (pinned ??= world.tokensByChain.sol[0]), { duringWarmup: true });
@@ -359,6 +373,18 @@ describe('pruning', () => {
     // archetype indexes stay consistent with the wallet map
     for (const byArch of Object.values(world.walletsByArchetype))
       for (const list of byArch.values()) for (const addr of list) expect(world.wallets.has(addr)).toBe(true);
+    // single-use launcher wallets go too, and the agent roster lets go of every swept wallet
+    expect(new Set([...removed].map((a) => memOf(created.get(a)!).role))).toEqual(new Set(['crew', 'freshDev']));
+    const internals = market as unknown as { roster: { list(c: string, r: string): WalletState[]; spawnFresh(c: string): WalletState }; sweepInertWallets(c: string): void };
+    for (const role of ['crew', 'freshDev']) for (const w of internals.roster.list('sol', role)) expect(world.wallets.has(w.address)).toBe(true);
+    // newcomer wallets go once idle for a day with nothing live (new ones keep arriving)
+    const [stale, recent] = [internals.roster.spawnFresh('sol'), internals.roster.spawnFresh('sol')];
+    stale.lastActiveAt = world.now - 25 * HOUR;
+    recent.lastActiveAt = world.now - HOUR;
+    internals.sweepInertWallets('sol');
+    expect(world.wallets.has(stale.address)).toBe(false);
+    expect(internals.roster.list('sol', 'fresh')).not.toContain(stale);
+    expect(world.wallets.has(recent.address)).toBe(true);
   }, 60_000);
 });
 

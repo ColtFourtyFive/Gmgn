@@ -19,6 +19,7 @@ import {
   type Candle,
   type ChainId,
   type CurveState,
+  type PnlDistribution,
   type PoolState,
   type Resolution,
   type Side,
@@ -84,8 +85,13 @@ export interface WalletState {
   createdAt: number;
   fundedBy: string | null;
   fundAmount: number | null;
-  /** Token address -> position (includes closed positions). */
+  /**
+   * Token address -> position (includes closed positions). A simulated wallet's positions in
+   * tokens the market pruned are dropped (World.dropPositions), their totals kept in `pruned`.
+   */
   positions: Map<string, PositionState>;
+  /** All-time totals of the positions dropped with pruned tokens (absent until one is). */
+  pruned?: PrunedPositions;
   /** Agent skill 0..1: entry timing / exit discipline. */
   skill: number;
   /** Agent risk appetite 0..1: position sizing. */
@@ -98,6 +104,21 @@ export interface WalletState {
   accountId: string | null;
   /** Arbitrary per-agent memory owned by the market behaviour module. */
   memory: Record<string, unknown>;
+}
+
+/** Folded lifetime totals of a wallet's positions in deleted tokens (all-time wallet stats keep counting them). */
+export interface PrunedPositions {
+  tokens: number;
+  /** Positions with a positive realized PnL (a deleted token has no unrealized PnL). */
+  wins: number;
+  buys: number;
+  sells: number;
+  /** Fee-inclusive buy cost / net sell proceeds (PositionState.boughtUsd / soldUsd). */
+  boughtUsd: number;
+  soldUsd: number;
+  realizedPnlUsd: number;
+  /** Realized PnL / cost buckets of those positions (kept by wallet analytics on 'positionPruned'). */
+  distribution?: PnlDistribution;
 }
 
 export interface CurveRuntime extends CurveState {
@@ -219,7 +240,7 @@ export interface SwapOptions {
   platformFeeRate?: number;
   /** Network/priority fee in native. */
   networkFee?: number;
-  /** Minimum acceptable output; fails if not met. */
+  /** Minimum acceptable output; fails if not met (scaled down for a sell clamped to a smaller balance). */
   minOut?: number;
   /** Extra adverse price movement applied (sandwich), ratio of output lost. */
   mevLossRate?: number;
@@ -252,6 +273,8 @@ export interface WorldEvents {
   tokenFlag: [token: TokenState, flag: 'cto' | 'boost' | 'socials'];
   /** Inert wallets dropped by housekeeping; listeners should free per-wallet state. */
   walletsRemoved: [addresses: Set<string>];
+  /** A position dropped with its pruned token (World.dropPositions), already summed into `wallet.pruned`. */
+  positionPruned: [wallet: WalletState, position: PositionState];
 }
 
 export interface WorldSnapshot {
@@ -492,6 +515,40 @@ export class World extends EventEmitter {
     this.emit('walletsRemoved', addresses);
   }
 
+  /**
+   * Drop simulated wallets' positions in tokens just deleted from the world, so per-wallet state
+   * stays bounded once the token cap is reached. Their totals are folded into `wallet.pruned`
+   * ('positionPruned' fires for each). Account wallets keep every position.
+   */
+  dropPositions(tokens: Iterable<TokenState>): void {
+    for (const t of tokens) {
+      for (const addr of t.traders) this.dropPosition(this.wallets.get(addr), t.address);
+    }
+  }
+
+  /** dropPositions for snapshots written before positions were dropped: every position whose token is gone. */
+  dropOrphanPositions(): void {
+    for (const w of this.wallets.values()) {
+      if (w.accountId) continue;
+      for (const token of w.positions.keys()) if (!this.tokens.has(token)) this.dropPosition(w, token);
+    }
+  }
+
+  private dropPosition(w: WalletState | undefined, token: string): void {
+    const pos = w?.positions.get(token);
+    if (!w || !pos || w.accountId) return;
+    const p = (w.pruned ??= { tokens: 0, wins: 0, buys: 0, sells: 0, boughtUsd: 0, soldUsd: 0, realizedPnlUsd: 0 });
+    p.tokens++;
+    if (pos.realizedPnlUsd > 0) p.wins++;
+    p.buys += pos.buys;
+    p.sells += pos.sells;
+    p.boughtUsd += pos.boughtUsd;
+    p.soldUsd += pos.soldUsd;
+    p.realizedPnlUsd += pos.realizedPnlUsd;
+    this.emit('positionPruned', w, pos);
+    w.positions.delete(token);
+  }
+
   /** Register a source of token addresses that must survive pruning. */
   addPinSource(source: () => Iterable<string>): void {
     this.pinSources.push(source);
@@ -680,12 +737,13 @@ export class World extends EventEmitter {
 
     if (side === 'buy') {
       // Buying a honeypot is allowed -- that is the trap; selling is what fails.
-      platformFee = amountIn * platformFeeRate;
-      const totalCost = amountIn + platformFee + networkFee;
-      if (wallet.native + 1e-12 < totalCost) return fail('insufficient native balance');
       const taxed = amountIn * (1 - t.buyTax);
       const q = this.quote(t, 'buy', taxed);
       if (!q || q.amountOut <= 0) return fail('no liquidity');
+      // When the curve caps the fill only the native actually used is charged (so only it must be held).
+      const used = q.amountIn / (1 - t.buyTax);
+      platformFee = used * platformFeeRate;
+      if (wallet.native + 1e-12 < used + platformFee + networkFee) return fail('insufficient native balance');
       result = q;
       let out = q.amountOut;
       if (mevLossRate > 0) {
@@ -693,9 +751,6 @@ export class World extends EventEmitter {
         out *= 1 - mevLossRate;
       }
       if (opts.minOut !== undefined && out < opts.minOut) return fail('slippage exceeded');
-      // When the curve caps the fill only the native actually used is charged.
-      const used = q.amountIn / (1 - t.buyTax);
-      platformFee = used * platformFeeRate;
       nativeDelta = -(used + platformFee + networkFee);
       tokenDelta = out;
       nativeForTrade = used;
@@ -715,7 +770,10 @@ export class World extends EventEmitter {
       }
       platformFee = out * platformFeeRate;
       const net = out - platformFee - networkFee;
-      if (opts.minOut !== undefined && net < opts.minOut) return fail('slippage exceeded');
+      // A sell of more than is left (another sell of the wallet landed first) sells the rest, held
+      // to the same minimum per token: the minimum before the network fee scales with the share sold.
+      const minOut = opts.minOut === undefined || sellAmount >= amountIn ? opts.minOut : ((opts.minOut + networkFee) * sellAmount) / amountIn - networkFee;
+      if (minOut !== undefined && net < minOut) return fail('slippage exceeded');
       if (net <= 0) return fail('proceeds do not cover fees');
       nativeDelta = net;
       tokenDelta = -sellAmount;
@@ -828,14 +886,16 @@ export class World extends EventEmitter {
     t.version++;
     this.tradeTotal++;
 
-    this.emit('trade', trade, t, wallet);
-
-    if (result.completesCurve && t.status === 'curve') {
+    // A buy that completes the curve stops trading before anyone hears of it, so
+    // listeners reacting to the trade (copy trades, orders) see the real state.
+    const completed = result.completesCurve && t.status === 'curve';
+    if (completed) {
       t.status = 'migrating';
       t.completedAt = at;
       t.version++;
-      this.emit('curveCompleted', t);
     }
+    this.emit('trade', trade, t, wallet);
+    if (completed) this.emit('curveCompleted', t);
 
     return {
       ok: true,

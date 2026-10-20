@@ -8,21 +8,37 @@ import { toneClass } from '@/lib/format';
 
 const SUBSCRIPT = '₀₁₂₃₄₅₆₇₈₉';
 
+const subscriptDigits = (run: string) => Array.from(run, (ch) => SUBSCRIPT.indexOf(ch)).join('');
+
+/** The plain decimal a subscript-zero string stands for: "0.0₅12" -> "0.0000012". */
+export function expandSubscript(text: string): string {
+  return text.replace(/0\.0([₀-₉]+)/g, (_, run: string) => `0.${'0'.repeat(Number(subscriptDigits(run)))}`);
+}
+
 /**
  * Render a formatted string, turning unicode subscript runs ("0.0₅12") into
- * real <sub> elements so the zero count stays legible at small sizes.
+ * real <sub> elements so the zero count stays legible at small sizes. The
+ * compressed form is hidden from assistive tech, which gets the plain decimal
+ * instead (read as-is, "$0.0" + "5" + "12" would be $0.0512).
  */
 export function withSubscript(text: string): ReactNode {
   const parts = text.split(/([₀-₉]+)/);
   if (parts.length === 1) return text;
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <sub key={i} className="subz">
-        {Array.from(part, (ch) => SUBSCRIPT.indexOf(ch)).join('')}
-      </sub>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
+  return (
+    <>
+      <span aria-hidden="true">
+        {parts.map((part, i) =>
+          i % 2 === 1 ? (
+            <sub key={i} className="subz">
+              {subscriptDigits(part)}
+            </sub>
+          ) : (
+            <Fragment key={i}>{part}</Fragment>
+          ),
+        )}
+      </span>
+      <span className="sr-only">{expandSubscript(text)}</span>
+    </>
   );
 }
 

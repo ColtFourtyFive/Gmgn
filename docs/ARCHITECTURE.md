@@ -51,15 +51,21 @@ with **paper trading**.
 - **Contract first.** `packages/shared/src/types.ts` + `docs/API.md` define every DTO, endpoint and
   channel. Server modules talk through the interfaces in `apps/server/src/context.ts`.
 - **Realtime by channel.** The hub groups subscriptions by `(channel, params)` so each distinct query
-  (e.g. a Trenches filter set) is computed once per cadence and fanned out; frames are compressed
+  (e.g. a Trenches filter set) is computed once per cadence and fanned out (queries that differ only in
+  viewers' blacklist exclusions share one computation and, when nothing shown is hidden, one payload);
+  each connection's messages are handled in order, subscriptions are capped per socket, sockets per IP,
+  and a heartbeat closes silent or stalled peers; frames are compressed
   with permessage-deflate. Private data flows only on the authenticated `user` channel, indexed by
   account and revoked on logout.
 - **Deterministic simulation.** All randomness flows through a seeded `Rng`; the sim clock
   (`world.now`) follows wall time live and fast-forwards during warmup so the market is populated on
   boot.
 - **Bounded memory.** Tokens are capped per chain (oldest dormant tokens nobody references are
-  pruned; open orders and alerts pin theirs), single-use crew wallets are swept with their tokens,
-  per-token and per-wallet histories are ring buffers.
+  pruned; open orders and alerts pin theirs). Simulated wallets' positions in a pruned token go with
+  it (folded into `WalletState.pruned`, so all-time wallet stats still count them; account wallets
+  keep theirs), and single-use crew and launcher wallets left with nothing live (newcomer wallets
+  after a day idle) are swept from the world and the agent roster. Per-token and per-wallet histories
+  are ring buffers.
 
 ## Market model
 
@@ -78,8 +84,14 @@ with **paper trading**.
 
 `persistence.ts` writes the world + every module's `serialize()` output with `node:v8` to
 `DATA_DIR/snapshot.bin` (atomic rename) every `SNAPSHOT_EVERY_MS` (15 minutes by default) and on
-shutdown. Snapshots are compact (recent trades and coarse candles only). Without a snapshot the
-server seeds a population and fast-forwards `WARMUP_MINUTES` of history.
+shutdown; `SNAPSHOT_EVERY_MS=0` turns persistence off (no snapshot is restored at boot or written, not
+even on shutdown). The file is a sequence of frames (root sections split per field, long arrays such as tokens,
+wallets and analytics tracks in chunks of 200), so the periodic save serializes and writes it a slice
+at a time with the sim held (`Engine.hold`) instead of blocking requests and sockets for seconds; the
+shutdown save writes the same format in one pass, and single-blob files from earlier versions still
+load. Snapshots keep only recent trades (100 per token) and no 1s candles, but still grow with the
+tokens and wallets tracked. Without a snapshot the server seeds a population and fast-forwards
+`WARMUP_MINUTES` of history.
 
 ## Testing
 

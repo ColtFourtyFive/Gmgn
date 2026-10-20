@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { formatPrice, RESOLUTIONS, type Resolution, type TokenDetail } from '@trenchscope/shared';
 import clsx from 'clsx';
-import { Page } from '@/components/layout';
+import { Page, usePageTitle } from '@/components/layout';
 import {
   BottomTabs,
   DevPanel,
@@ -39,8 +39,10 @@ import {
   type MobileTab,
 } from '@/components/token';
 import { ErrorState, Tabs } from '@/components/ui';
+import { normAddress } from '@/components/wallet/utils';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { useBreakpoint, useIsMobile } from '@/hooks/useMediaQuery';
+import { scrollBehavior, useBreakpoint, useIsMobile } from '@/hooks/useMediaQuery';
+import { useStickyError } from '@/hooks/useStickyError';
 import { useChain } from '@/lib/chain';
 
 const MOBILE_TABS: { value: MobileTab; label: string }[] = [
@@ -56,7 +58,8 @@ function useDocumentTitle(token: TokenDetail | undefined): void {
   useEffect(() => {
     const prev = original.current;
     return () => {
-      document.title = prev;
+      // Writing an unchanged title still mutates <title>, which the route announcer reads as a page change.
+      if (document.title !== prev) document.title = prev;
     };
   }, []);
   const symbol = token?.symbol;
@@ -68,7 +71,9 @@ function useDocumentTitle(token: TokenDetail | undefined): void {
 
 export default function TokenPage() {
   const chain = useChain();
-  const { address = '' } = useParams();
+  const { address: rawAddress = '' } = useParams();
+  // EVM addresses arrive in any case (checksummed links); the server's form is lower-case, and so are its channel names.
+  const address = normAddress(chain, rawAddress);
   const wide = useBreakpoint('xl');
   const mobile = useIsMobile();
   const [storedRes, setResolution] = useLocalStorage<Resolution>('ts.token.resolution', '1m');
@@ -76,7 +81,8 @@ export default function TokenPage() {
   const feed = useMemo(() => new TokenFeed(), [chain, address]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const detail = useTokenDetail(chain, address);
-  const notFound = isNotFound(detail.error);
+  const failed = useStickyError(detail);
+  const notFound = isNotFound(failed);
   useTokenStream(chain, address, resolution, feed, !!address && !notFound);
 
   useEffect(() => {
@@ -91,14 +97,16 @@ export default function TokenPage() {
   const setMobileTab = useTokenUi((s) => s.setMobileTab);
   const tabsRef = useRef<HTMLElement>(null);
   useDocumentTitle(t);
+  // The not-found and error states are titled too: otherwise the previous page's title stays and the route announcer reads it.
+  usePageTitle(t ? null : notFound ? 'Token not found' : failed !== null ? 'Couldn’t load token' : null);
 
   if (!t) {
     return (
       <Page>
         {notFound ? (
           <TokenNotFound chain={chain} address={address} />
-        ) : detail.isError ? (
-          <ErrorState title="Couldn’t load this token" error={detail.error} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
+        ) : failed !== null ? (
+          <ErrorState title="Couldn’t load this token" titleAs="h1" error={failed} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
         ) : (
           <TokenPageSkeleton wide={wide} />
         )}
@@ -110,7 +118,7 @@ export default function TokenPage() {
   const openTab = (tab: 'dev' | 'holders') => {
     useTokenUi.getState().setBottomTab(tab);
     if (mobile) setMobileTab('activity');
-    else requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    else requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' }));
   };
 
   const header = <TokenHeader token={t} compact={mobile} />;

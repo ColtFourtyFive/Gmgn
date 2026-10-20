@@ -15,8 +15,10 @@ export interface TooltipProps {
 }
 
 /**
- * Short hint on hover/focus. Passive: never traps focus or swallows Escape,
- * and hides on press so it never covers a click target.
+ * Short hint on hover/focus. Passive: never traps focus, and hides on press
+ * so it never covers a click target. While shown it claims Escape to hide
+ * itself and nothing else (WCAG 1.4.13): the dialog or drawer around it, and
+ * its unsaved draft, stay open until the next Escape.
  */
 export function Tooltip({ content, children, placement = 'top', delay = 300, className, anchorClassName, disabled }: TooltipProps) {
   const [open, setOpen] = useState(false);
@@ -36,9 +38,16 @@ export function Tooltip({ content, children, placement = 'top', delay = 300, cla
   useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // Capture phase on document: runs before the overlay stack's Escape handler (also on document) and global hotkeys.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      clearTimeout(timer.current);
+      setOpen(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, [open]);
 
   if (disabled || content === null || content === undefined || content === '') return <>{children}</>;

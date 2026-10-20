@@ -1,7 +1,7 @@
 // Bottom tab set under the chart (and the Activity tab on phones).
 
 import { forwardRef } from 'react';
-import type { TokenDetail, TokenPositionRow } from '@trenchscope/shared';
+import type { Position, TokenDetail } from '@trenchscope/shared';
 import { Tabs, type TabItem } from '@/components/ui';
 import { useSession } from '@/store/session';
 import { useTokenOrders } from '../queries';
@@ -24,7 +24,7 @@ const TAB_LABEL: Record<BottomTab, string> = {
 
 export interface BottomTabsProps {
   token: TokenDetail;
-  position: TokenPositionRow | null;
+  position: Position | null;
   positionLoading: boolean;
   positionError: unknown;
   onRetryPosition: () => void;

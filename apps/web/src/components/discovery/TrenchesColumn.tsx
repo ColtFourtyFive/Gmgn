@@ -1,7 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react';
 import type { ChainId, DisplaySettings, TokenFilters, TokenSummary, TrenchesColumn as Column, WalletTag } from '@trenchscope/shared';
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Pause, Rocket, Sparkles, Waypoints } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Pause, Play, Rocket, Sparkles, Waypoints } from 'lucide-react';
 import clsx from 'clsx';
+import { PauseStatus } from '@/components/common';
 import { Button, EmptyState, ErrorState, IconButton, Select, Skeleton } from '@/components/ui';
 import { countFilters } from './filters';
 import { FilterButton, FilterDrawer } from './FilterPanel';
@@ -9,6 +10,18 @@ import { TokenCard } from './TokenCard';
 import { useStableItems } from './useStableItems';
 
 const tokenKey = (t: TokenSummary) => t.address;
+
+/** A touch press keeps the column still this long after the finger lifts (the tap's click lands on what was under it). */
+export const TOUCH_HOLD_MS = 1500;
+
+/** Focus from the keyboard (a mouse click on ⚡ must not leave the column paused). */
+function keyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(':focus-visible');
+  } catch {
+    return true;
+  }
+}
 
 export type TrenchSortKey = 'age' | 'mcap' | 'volume' | 'holders' | 'progress';
 export interface TrenchSort {
@@ -78,10 +91,11 @@ export interface TrenchesColumnProps {
 }
 
 /**
- * One Trenches column: header (count, paused pill, sort, filters) and a live
- * card list. Hovering the column (or keyboard selection inside it) freezes
- * the rendered order; values keep updating in place and new arrivals are
- * counted until the column resumes.
+ * One Trenches column: header (count, paused pill, pause toggle, sort,
+ * filters) and a live card list. The rendered order freezes while the column
+ * is paused: by the toggle, mouse hover, keyboard focus or j/k selection in
+ * the list, or a touch press (and briefly after); values keep updating in
+ * place and new arrivals are counted until the column resumes.
  */
 export const TrenchesColumn = memo(function TrenchesColumn({
   chain,
@@ -107,8 +121,13 @@ export const TrenchesColumn = memo(function TrenchesColumn({
 }: TrenchesColumnProps) {
   const meta = COLUMN_META[column];
   const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [focusIn, setFocusIn] = useState(false);
+  const [held, setHeld] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(holdTimer.current), []);
   const [filterOpen, setFilterOpen] = useState(false);
-  const paused = hovered || selected !== null;
+  const paused = hovered || pinned || focusIn || held || selected !== null;
   const filterCount = countFilters(filters);
 
   const stable = useStableItems(tokens, tokenKey);
@@ -123,6 +142,37 @@ export const TrenchesColumn = memo(function TrenchesColumn({
   const hasData = tokens !== null;
 
   const freeze = () => setFrozen((f) => f ?? (hasData ? displayedRef.current.map((t) => t.address) : null));
+
+  // The list (not the header controls) pauses while it holds keyboard focus or a finger.
+  const onListFocus = (e: FocusEvent<HTMLElement>) => {
+    if (!keyboardFocus(e.target)) return;
+    freeze();
+    setFocusIn(true);
+  };
+  const onListBlur = (e: FocusEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusIn(false);
+  };
+  const onListPress = (e: PointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'mouse') return;
+    clearTimeout(holdTimer.current);
+    freeze();
+    setHeld(true);
+  };
+  const onListRelease = (e: PointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'mouse') return;
+    clearTimeout(holdTimer.current);
+    holdTimer.current = setTimeout(() => setHeld(false), TOUCH_HOLD_MS);
+  };
+  const togglePinned = () => {
+    if (pinned) {
+      setPinned(false);
+      // Resume now even with the pointer still over the column; re-entering pauses again.
+      setHovered(false);
+    } else {
+      freeze();
+      setPinned(true);
+    }
+  };
   useEffect(() => {
     if (!paused) setFrozen(null);
   }, [paused]);
@@ -250,13 +300,17 @@ export const TrenchesColumn = memo(function TrenchesColumn({
             )}
           </>
         )}
+        {/* The chip's count changes with every push: only the pause itself is announced. */}
         {paused && displayed.length > 0 && (
-          <span className="chip shrink-0 bg-warn/15 text-warn" role="status">
+          <span className="chip shrink-0 bg-warn/15 text-warn">
             <Pause size={10} className="fill-current" aria-hidden />
             Paused{buffered > 0 ? ` · ${buffered} new` : ''}
           </span>
         )}
+        <PauseStatus paused={paused && displayed.length > 0} what={`${meta.title} column`} />
         <span className="flex-1" />
+        {/* A toggle (aria-pressed) with a fixed name; the icon shows what a press does next. */}
+        <IconButton size="xs" label={`Pause ${meta.title}`} active={pinned} icon={pinned ? <Play size={13} /> : <Pause size={13} />} onClick={togglePinned} />
         <Select
           size="sm"
           variant="ghost"
@@ -275,7 +329,16 @@ export const TrenchesColumn = memo(function TrenchesColumn({
         />
         <FilterButton size="xs" count={filterCount} label={`${meta.title} filters`} onClick={() => setFilterOpen(true)} />
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{body}</div>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        onFocus={onListFocus}
+        onBlur={onListBlur}
+        onPointerDown={onListPress}
+        onPointerUp={onListRelease}
+        onPointerCancel={onListRelease}
+      >
+        {body}
+      </div>
       <FilterDrawer
         open={filterOpen}
         onClose={() => {

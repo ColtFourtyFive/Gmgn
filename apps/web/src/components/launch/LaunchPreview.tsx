@@ -6,7 +6,7 @@ import type { LaunchpadCurve, Socials } from '@trenchscope/shared';
 import { Check, Minus } from 'lucide-react';
 import clsx from 'clsx';
 import { CurveProgress, LaunchpadBadge, Pct, SocialLinks, TokenAvatar, Usd } from '@/components/common';
-import { Badge } from '@/components/ui';
+import { Badge, Heading } from '@/components/ui';
 import { launchSignals, SOCIAL_KEYS, socialError, type CreationBlock, type LaunchForm } from './model';
 
 export interface LaunchPreviewProps {
@@ -71,7 +71,7 @@ export const LaunchPreview = memo(function LaunchPreview({ form, pad, narrative,
         <CurveProgress progress={block.progress} size="md" />
       </div>
       <div className="border-t border-line px-3 py-2.5">
-        <h4 className="mb-1.5 text-xs font-medium text-muted">What buyers look for</h4>
+        <Heading className="mb-1.5 text-xs font-medium text-muted">What buyers look for</Heading>
         <ul className="flex flex-col gap-1">
           {launchSignals(form, block).map((s) => (
             <li key={s.key} className="flex items-start gap-1.5 text-xs" title={s.hint}>

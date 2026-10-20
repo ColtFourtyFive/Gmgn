@@ -175,7 +175,7 @@ function SniperBody({
           </div>
           <p className="mb-4 text-center text-xs text-muted">
             Want to see what launches look like first?{' '}
-            <Link to={routes.trenches(chain)} className="inline-flex items-center gap-1 text-accent hover:underline">
+            <Link to={routes.trenches(chain)} className="inline-flex items-center gap-1 text-accent underline">
               <Flame size={12} /> Open the Trenches
             </Link>
           </p>

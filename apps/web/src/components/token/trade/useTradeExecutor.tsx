@@ -1,17 +1,18 @@
-// Manual swap execution for the trade panel: risk gate (honeypot / high
-// risk), optional confirm-before-trade, execution through useSwap and the
-// last result shown inline (fill details or the error with a fix).
+// Manual swap execution for the trade panel: safety gates (hard: honeypot /
+// high risk; soft: price impact, falling knife, fees — components/trade/gates),
+// optional confirm-before-trade, execution through useSwap and the last
+// result shown inline (fill details or the error with a fix).
 
 import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatCompact, formatPrice, type SwapReceipt, type SwapRequest, type TokenDetail } from '@trenchscope/shared';
-import { ShieldAlert } from 'lucide-react';
+import { checkTradeGates, GateReasons } from '@/components/trade/gates';
 import { Button, Checkbox, Modal } from '@/components/ui';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { formatNativeFor } from '@/lib/format';
 import { requireAuth } from '@/store/session';
 import { toast } from '@/store/toasts';
-import { riskReasons } from '../model';
 
 export type TradeResult = { ok: true; receipt: SwapReceipt; at: number } | { ok: false; error: string; at: number };
 
@@ -19,12 +20,17 @@ interface Pending {
   req: SwapRequest;
   /** Order summary rows rendered in the dialog. */
   summary: ReactNode;
+  /** Hard gates: need "I understand the risks". */
   risk: string[];
+  /** Soft gates: need the extra click. */
+  soft: string[];
 }
 
 export function useTradeExecutor(token: TokenDetail) {
   const { swap, pending, error } = useSwap();
   const { confirmTrades } = useDisplaySettings();
+  const qc = useQueryClient();
+  const [checking, setChecking] = useState(false);
   const [confirm, setConfirm] = useState<Pending | null>(null);
   const [ack, setAck] = useState(false);
   const [result, setResult] = useState<TradeResult | null>(null);
@@ -50,26 +56,31 @@ export function useTradeExecutor(token: TokenDetail) {
     return receipt;
   };
 
-  /** Validate auth, then gate on risk / confirm setting, then execute. */
+  /** Validate auth, then gate on risk / soft gates (quote of this exact order) / confirm setting, then execute. */
   const submit = (req: SwapRequest, summary: ReactNode) =>
     requireAuth(() => {
-      const risk = req.side === 'buy' ? riskReasons(token) : [];
-      if (risk.length > 0 || confirmTrades) {
-        setAck(false);
-        setConfirm({ req, summary, risk });
-      } else void run(req);
+      if (checking) return;
+      setChecking(true);
+      void checkTradeGates(qc, req, token).then(({ risk, soft }) => {
+        setChecking(false);
+        if (risk.length > 0 || soft.length > 0 || confirmTrades) {
+          setAck(false);
+          setConfirm({ req, summary, risk, soft });
+        } else void run(req);
+      });
     });
 
   const close = () => setConfirm(null);
   const isBuy = confirm?.req.side === 'buy';
   const risky = (confirm?.risk.length ?? 0) > 0;
+  const soft = (confirm?.soft.length ?? 0) > 0;
 
   const dialog = (
     <Modal
       open={!!confirm}
       onClose={close}
       size="sm"
-      title={risky ? `High-risk token: ${token.symbol}` : `Confirm ${isBuy ? 'buy' : 'sell'}`}
+      title={risky ? `High-risk token: ${token.symbol}` : soft ? `Check this ${isBuy ? 'buy' : 'sell'}` : `Confirm ${isBuy ? 'buy' : 'sell'}`}
       description={risky ? 'Our simulated audit flagged this token. Paper trades only — but trade it like it’s real.' : `Paper trade on ${CHAINS[token.chain].name}.`}
       footer={
         <>
@@ -87,25 +98,13 @@ export function useTradeExecutor(token: TokenDetail) {
               if (req) void run(req);
             }}
           >
-            {risky ? 'Buy anyway' : isBuy ? 'Confirm buy' : 'Confirm sell'}
+            {risky || soft ? `${isBuy ? 'Buy' : 'Sell'} anyway` : isBuy ? 'Confirm buy' : 'Confirm sell'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-3">
-        {risky && (
-          <div className="rounded border border-down/40 bg-down/10 p-2.5">
-            <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-down">
-              <ShieldAlert size={14} aria-hidden />
-              Why this is risky
-            </p>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-fg">
-              {confirm?.risk.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {confirm && <GateReasons risk={confirm.risk} soft={confirm.soft} />}
         <div className="rounded border border-line bg-panel-2 p-2.5 text-sm">{confirm?.summary}</div>
         {risky && <Checkbox checked={ack} onChange={setAck} label="I understand the risks and want to buy" />}
       </div>
@@ -113,5 +112,5 @@ export function useTradeExecutor(token: TokenDetail) {
   );
 
   const shown: TradeResult | null = result && !result.ok && !result.error ? { ...result, error: error ?? 'The trade request failed' } : result;
-  return { submit, pending, dialog, result: shown, clearResult: () => setResult(null) };
+  return { submit, pending: pending || checking, dialog, result: shown, clearResult: () => setResult(null) };
 }

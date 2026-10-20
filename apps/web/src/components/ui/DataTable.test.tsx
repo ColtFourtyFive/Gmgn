@@ -84,3 +84,40 @@ describe('DataTable', () => {
     expect(screen.getByText('Nothing here')).toBeTruthy();
   });
 });
+
+describe('DataTable empty state', () => {
+  it('sits in the visible part of a horizontally scrolling table (phones), not centred across its min-width', () => {
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 364 });
+    try {
+      const { container } = render(<DataTable columns={COLUMNS} rows={[]} rowKey={(r) => r.id} minWidth={820} empty={<p>No trades yet</p>} />);
+      const box = container.querySelector<HTMLElement>('[data-table-empty]')!;
+      expect(box.textContent).toBe('No trades yet');
+      expect(box.className).toContain('sticky');
+      expect(box.className).toContain('left-0');
+      expect(box.style.width).toBe('364px');
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, 'clientWidth', desc);
+    }
+  });
+});
+
+describe('DataTable row memoization', () => {
+  const many: Row[] = Array.from({ length: 50 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}`, value: i }));
+
+  it('re-renders only the new row when one is prepended (live feeds)', () => {
+    const render1 = vi.fn((r: Row) => r.name);
+    const cols: Column<Row>[] = [{ key: 'name', header: 'Name', render: render1 }];
+    const { rerender } = render(<DataTable columns={cols} rows={many} rowKey={(r) => r.id} />);
+    render1.mockClear();
+    rerender(<DataTable columns={cols} rows={[{ id: 'new', name: 'New', value: 0 }, ...many]} rowKey={(r) => r.id} />);
+    expect(render1).toHaveBeenCalledTimes(1);
+  });
+
+  it('still re-renders shifted rows when a column shows the index (rank)', () => {
+    const cols: Column<Row>[] = [{ key: 'rank', header: '#', render: (_r, i) => String(i + 1) }];
+    const { rerender, container } = render(<DataTable columns={cols} rows={many.slice(0, 3)} rowKey={(r) => r.id} />);
+    rerender(<DataTable columns={cols} rows={[{ id: 'new', name: 'New', value: 0 }, ...many.slice(0, 3)]} rowKey={(r) => r.id} />);
+    expect([...container.querySelectorAll('tbody td')].map((td) => td.textContent)).toEqual(['1', '2', '3', '4']);
+  });
+});

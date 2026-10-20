@@ -15,6 +15,8 @@ import { InstantDock } from './InstantDock';
 import { MobileNavDrawer, MobileTabBar, SearchSheet } from './MobileNav';
 import { tokenRoute } from './nav';
 import { PageErrorBoundary } from './PageErrorBoundary';
+import { RouteAnnouncer } from './RouteAnnouncer';
+import { SignOutDialog } from './SignOutDialog';
 import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
 import { Tour } from './Tour';
@@ -89,10 +91,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <MobileNavDrawer />
       <SearchSheet />
       <AuthModal />
+      <SignOutDialog />
       <CommandPalette />
       <InstantDock />
       <Tour />
       <Toaster />
+      <RouteAnnouncer pathname={pathname} />
     </div>
   );
 }

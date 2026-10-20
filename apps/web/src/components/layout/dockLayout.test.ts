@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   arrowDelta,
   clampDockRect,
+  clearanceScroll,
+  coveredShare,
   collapsedTop,
   defaultDockRect,
   DOCK_DEFAULT,
@@ -105,5 +107,18 @@ describe('dock geometry', () => {
   it('drops malformed saved rects', () => {
     expect(parseDockRects({ xl: { x: 1, y: 2, width: 300, height: 300 }, lg: { x: 'a' }, md: null })).toEqual({ xl: { x: 1, y: 2, width: 300, height: 300 } });
     expect(parseDockRects('nope')).toEqual({});
+  });
+
+  it('measures how much of a focused control the dock hides, and the scroll that clears it', () => {
+    const dock = { left: 8, top: 404, right: 348, bottom: 864 };
+    expect(coveredShare(dock, { left: 20, top: 500, right: 120, bottom: 520 })).toBe(1);
+    expect(coveredShare(dock, { left: 300, top: 500, right: 400, bottom: 520 })).toBeCloseTo(0.48);
+    expect(coveredShare(dock, { left: 400, top: 500, right: 500, bottom: 520 })).toBe(0);
+    // Below the dock's middle: scroll content up until it sits above the dock.
+    const low = { left: 20, top: 700, right: 120, bottom: 720 };
+    expect(low.bottom - clearanceScroll(dock, low)).toBe(dock.top - DOCK_GAP);
+    // Above the middle: scroll down until it sits below the dock.
+    const high = { left: 20, top: 420, right: 120, bottom: 440 };
+    expect(high.top - clearanceScroll(dock, high)).toBe(dock.bottom + DOCK_GAP);
   });
 });

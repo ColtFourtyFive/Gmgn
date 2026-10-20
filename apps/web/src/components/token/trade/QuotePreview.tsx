@@ -1,16 +1,16 @@
 // Debounced live quote under the amount fields: expected and minimum
 // output, price impact (warn > 3%, danger > 10%), fees and route.
 
-import type { ReactNode } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { AmountKind, ChainId, PresetId, Quote, Side } from '@trenchscope/shared';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { formatCompact, formatPercent, type AmountKind, type ChainId, type PresetId, type Quote, type Side } from '@trenchscope/shared';
 import { Route, TriangleAlert } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native, Pct, Price, Usd } from '@/components/common';
 import { Skeleton, Spinner } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
 import { api } from '@/lib/api';
-import { errorMessage } from '@/lib/format';
+import { errorMessage, formatNativeFor } from '@/lib/format';
 import { useSession } from '@/store/session';
 import { tokenKeys } from '../queries';
 
@@ -23,16 +23,40 @@ export interface QuoteParams {
   presetId: PresetId;
 }
 
-/** Live quote for the current form values (debounced 300ms, refreshed every 4s). */
+/**
+ * `amount` debounced while it is being edited, but applied at once when the
+ * side or amount unit switches: the other side's (or unit's) amount must
+ * never be quoted with the new side (0.5 SOL read as 0.5%, 25% as 25 SOL).
+ */
+function useDebouncedAmount(amount: number | null, context: string, delayMs: number): number | null {
+  const [state, setState] = useState({ context, amount });
+  const switched = state.context !== context;
+  // Adjust while rendering, so no render ever pairs the new context with the old amount.
+  if (switched) setState({ context, amount });
+  const debounced = useDebounce(amount, delayMs);
+  useEffect(() => {
+    if (!switched) setState((s) => (s.amount === debounced ? s : { context, amount: debounced }));
+  }, [debounced]); // eslint-disable-line react-hooks/exhaustive-deps
+  return switched ? amount : state.amount;
+}
+
+type QuoteKey = { chain: ChainId; token: string; side: Side; amount: number | null; amountKind: AmountKind; presetId: PresetId };
+
+/** Live quote for the current form values (amount debounced 300ms, refreshed every 4s). */
 export function useLiveQuote(p: QuoteParams, enabled: boolean) {
   const signedIn = useSession((s) => !!s.token);
-  const amount = useDebounce(p.amount, 300);
-  const key = { chain: p.chain, token: p.token, side: p.side, amount, amountKind: p.amountKind, presetId: p.presetId };
+  const amount = useDebouncedAmount(p.amount, `${p.chain}:${p.token}:${p.side}:${p.amountKind}`, 300);
+  const key: QuoteKey = { chain: p.chain, token: p.token, side: p.side, amount, amountKind: p.amountKind, presetId: p.presetId };
   return useQuery<Quote>({
     queryKey: tokenKeys.quote(key),
     queryFn: () => api.quote({ chain: p.chain, token: p.token, side: p.side, amount: amount as number, amountKind: p.amountKind, presetId: p.presetId }),
     enabled: enabled && signedIn && amount !== null && amount > 0,
-    placeholderData: keepPreviousData,
+    // Keep the previous quote while a new amount loads, but never across a
+    // side/unit switch (it would show the other side's output in this side's units).
+    placeholderData: (prev, prevQuery) => {
+      const k = prevQuery?.queryKey[1] as QuoteKey | undefined;
+      return k && k.chain === p.chain && k.token === p.token && k.side === p.side && k.amountKind === p.amountKind ? prev : undefined;
+    },
     staleTime: 2_000,
     refetchInterval: 4_000,
     retry: false,
@@ -63,7 +87,49 @@ export interface QuotePreviewProps {
   hasAmount: boolean;
 }
 
-export function QuotePreview({ query, chain, symbol, side, nativeUsd, signedIn, hasAmount }: QuotePreviewProps) {
+/**
+ * What a screen reader hears: the quote once it settles after the user
+ * changed the amount, side or preset, not every 4s refresh (the visible
+ * block is not a live region, so active tokens do not chatter).
+ */
+function useQuoteAnnouncement(query: ReturnType<typeof useLiveQuote>, describe: (q: Quote) => string): string {
+  const [text, setText] = useState('');
+  const q = query.data;
+  const settled = !!q && !query.isPlaceholderData;
+  const shown = useRef(false);
+  const awaiting = useRef(false);
+  useEffect(() => {
+    if (!settled) {
+      // A new request after a quote was shown: announce its result.
+      awaiting.current = shown.current;
+      return;
+    }
+    shown.current = true;
+    if (!awaiting.current || !q) return;
+    awaiting.current = false;
+    setText(describe(q));
+  }, [settled, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  return text;
+}
+
+export function QuotePreview(props: QuotePreviewProps) {
+  const { query, chain, symbol, side } = props;
+  const announcement = useQuoteAnnouncement(query, (q) => {
+    const out = side === 'buy' ? `${formatCompact(q.expectedOut)} ${symbol}` : formatNativeFor(chain, q.expectedOut);
+    const danger = impactTone(q.priceImpact) === 'danger' ? ' Very high impact.' : '';
+    return `Quote: you receive about ${out}, price impact ${formatPercent(q.priceImpact, { sign: false })}.${danger}`;
+  });
+  return (
+    <>
+      <QuoteBody {...props} />
+      <span role="status" className="sr-only">
+        {props.signedIn && props.hasAmount ? announcement : ''}
+      </span>
+    </>
+  );
+}
+
+function QuoteBody({ query, chain, symbol, side, nativeUsd, signedIn, hasAmount }: QuotePreviewProps) {
   if (!signedIn) return <p className="rounded border border-dashed border-line px-2 py-1.5 text-xs text-muted">Live quotes (output, price impact, fees) appear once you start paper trading.</p>;
   if (!hasAmount) return null;
   const q = query.data;
@@ -87,7 +153,7 @@ export function QuotePreview({ query, chain, symbol, side, nativeUsd, signedIn, 
   const buy = side === 'buy';
   const fees = q.platformFeeNative + q.networkFeeNative;
   return (
-    <dl className={clsx('flex flex-col gap-1 rounded bg-panel-2 p-2 text-xs transition-opacity', query.isFetching && query.isPlaceholderData && 'opacity-60')} aria-live="polite">
+    <dl className={clsx('flex flex-col gap-1 rounded bg-panel-2 p-2 text-xs transition-opacity', query.isFetching && query.isPlaceholderData && 'opacity-60')}>
       <Row label="You receive">
         <span className="font-semibold">
           ≈ {buy ? <Compact value={q.expectedOut} suffix={` ${symbol}`} /> : <Native value={q.expectedOut} chain={chain} />}

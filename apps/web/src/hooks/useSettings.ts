@@ -17,25 +17,40 @@ export const DEFAULT_DISPLAY: DisplaySettings = {
   riskThresholds: { top10: 0.3, dev: 0.3, insiders: 0.05, bundlers: 0.1, snipers: 0.1 },
 };
 
-function preset(chain: ChainId, id: PresetId, slippage: number, antiMev: boolean): TradePreset {
-  const fee = CHAINS[chain].baseNetworkFee;
-  return { id, slippage, autoSlippage: id === 'P1', priorityFee: fee * 2, tip: antiMev ? fee : 0, antiMev };
-}
+// Trade defaults for signed-out visitors. They mirror the server's
+// defaultSettings() (apps/server/src/accounts/settings.ts; a test keeps them
+// equal), so the panel previews exactly the presets, slippage, MEV mode and
+// quick amounts the account will start with.
+
+type Tiers = Record<PresetId, number>;
+
+/** Fee tiers per chain in native units (P1 Economy, P2 Standard, P3 Turbo). */
+const FEES: Record<ChainId, { priorityFee: Tiers; tip: Tiers }> = {
+  sol: { priorityFee: { P1: 0.0001, P2: 0.0008, P3: 0.003 }, tip: { P1: 0.001, P2: 0.002, P3: 0.004 } },
+  bsc: { priorityFee: { P1: 0.00005, P2: 0.00015, P3: 0.0005 }, tip: { P1: 0.00001, P2: 0.00003, P3: 0.0001 } },
+  base: { priorityFee: { P1: 0.000005, P2: 0.00002, P3: 0.0001 }, tip: { P1: 0.000002, P2: 0.000005, P3: 0.00002 } },
+  eth: { priorityFee: { P1: 0.0005, P2: 0.0015, P3: 0.004 }, tip: { P1: 0.0002, P2: 0.0005, P3: 0.001 } },
+};
+
+const PROFILES: Record<PresetId, Pick<TradePreset, 'slippage' | 'autoSlippage' | 'antiMev'>> = {
+  P1: { slippage: 0.2, autoSlippage: true, antiMev: true },
+  P2: { slippage: 0.25, autoSlippage: false, antiMev: true },
+  P3: { slippage: 0.35, autoSlippage: false, antiMev: false },
+};
+
+const PRESET_IDS: PresetId[] = ['P1', 'P2', 'P3'];
 
 function defaultsFor(chain: ChainId): ChainTradeSettings {
-  const presets = (): Record<PresetId, TradePreset> => ({
-    P1: preset(chain, 'P1', 0.15, false),
-    P2: preset(chain, 'P2', 0.25, true),
-    P3: preset(chain, 'P3', 0.4, true),
-  });
-  const amounts = CHAINS[chain].quickBuyAmounts;
+  const presets = (): Record<PresetId, TradePreset> =>
+    Object.fromEntries(PRESET_IDS.map((id) => [id, { id, ...PROFILES[id], priorityFee: FEES[chain].priorityFee[id], tip: FEES[chain].tip[id] }])) as Record<PresetId, TradePreset>;
+  const amounts = [...CHAINS[chain].quickBuyAmounts];
   return {
     buyPresets: presets(),
     sellPresets: presets(),
-    activeBuyPreset: 'P1',
-    activeSellPreset: 'P1',
+    activeBuyPreset: 'P2',
+    activeSellPreset: 'P2',
     quickBuyAmounts: amounts,
-    quickSellPercents: [25, 50, 75, 100],
+    quickSellPercents: [10, 25, 50, 100],
     instantBuyAmount: amounts[1] ?? amounts[0],
   };
 }

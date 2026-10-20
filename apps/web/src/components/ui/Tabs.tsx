@@ -25,7 +25,7 @@ interface BaseProps<T extends string> {
  * pattern). `tabStop` is the item reachable with Tab: the selected one, or
  * the first enabled item when `value` matches none.
  */
-function useRovingKeys<T extends string>(items: TabItem<T>[], value: T, onChange: (v: T) => void) {
+export function useRovingKeys<T extends string>(items: Pick<TabItem<T>, 'value' | 'disabled'>[], value: T, onChange: (v: T) => void) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const selected = items.findIndex((it) => it.value === value);
   const tabStop = selected >= 0 ? selected : items.findIndex((it) => !it.disabled);
@@ -48,7 +48,7 @@ function useRovingKeys<T extends string>(items: TabItem<T>[], value: T, onChange
 
 function Count({ count, active }: { count?: number | null; active: boolean }) {
   if (count === null || count === undefined) return null;
-  return <span className={clsx('num rounded px-1 text-2xs leading-4', active ? 'bg-accent/15 text-accent' : 'bg-panel-3 text-faint')}>{count}</span>;
+  return <span className={clsx('num rounded px-1 text-2xs leading-4', active ? 'bg-accent/15 text-accent' : 'bg-panel-3 text-muted')}>{count}</span>;
 }
 
 /** Underlined section tabs (page sections, panels). Controlled. */

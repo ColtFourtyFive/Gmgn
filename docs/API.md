@@ -45,14 +45,14 @@ current `low` tier can fail to land.
 | POST | `/api/:chain/trenches`, `/api/:chain/trending`, `/api/:chain/new-pairs` | the same params as a JSON body, `filters` as an object (not a string) | as the GET twin (for exclusion lists too long for a URL) |
 | GET | `/api/:chain/tokens/:address` | | `TokenDetail` |
 | GET | `/api/:chain/tokens/:address/candles` | `resolution` (`Resolution`, default `1m`), `limit?` (default 500, max 2000) | `CandleResponse` |
-| GET | `/api/:chain/tokens/:address/trades` | `filter?` = `all\|buy\|sell\|dev\|smart\|kol\|sniper\|insider\|bundler\|whale\|fresh\|following\|mine`, `wallet?`, `minUsd?`, `limit?` (default 100, max 500), `before?` (ms) | `Trade[]` newest first |
+| GET | `/api/:chain/tokens/:address/trades` | `filter?` = `all\|buy\|sell\|dev\|smart\|kol\|sniper\|insider\|bundler\|whale\|fresh\|following\|mine`, `wallet?`, `minUsd?`, `limit?` (default 100, max 500), `before?` (ms), `beforeId?` | `Trade[]` newest first (paging: see below) |
 | GET | `/api/:chain/tokens/:address/holders` | `tag?` (`all\|smart\|kol\|sniper\|bundler\|insider\|dev\|whale\|fresh\|bot\|sandwich\|top_holder\|following\|you`), `limit?` (default 100, max 500) | `Position[]` (curve/pool venue row first: `addrType` `curve` with a label in `wallet`, or `pool` with the pool address) |
 | GET | `/api/:chain/tokens/:address/top-traders` | `tag?`, `sort?` = `pnl\|realized\|unrealized\|bought\|sold`, `order?`, `limit?` | `Position[]` |
 | GET | `/api/:chain/tokens/:address/early-buyers` | | `EarlyBuyersResponse`: the first `EARLY_BUYERS_LIMIT` (70) distinct buyers by rank, and status counts |
 | GET | `/api/:chain/tokens/:address/dev` | | `DevInfo` |
 | GET | `/api/:chain/wallets/:address` | | `WalletProfile` |
 | GET | `/api/:chain/wallets/:address/holdings` | `includeClosed?` (`1`), `sort?` = `value\|pnl\|recent`, `limit?` (default 200, max 1000) | `TokenPositionRow[]` |
-| GET | `/api/:chain/wallets/:address/activity` | `type?` = `all\|buy\|sell`, `limit?`, `before?` | `FeedItem[]` (with `positionEvent`) |
+| GET | `/api/:chain/wallets/:address/activity` | `type?` = `all\|buy\|sell`, `limit?`, `before?`, `beforeId?` | `FeedItem[]` (with `positionEvent`; paging: see below) |
 | GET | `/api/:chain/wallets/:address/created-tokens` | `limit?` (default 100, max 500) | `DevToken[]` newest first: tokens the wallet launched that still exist |
 | GET | `/api/:chain/wallets/:address/calls` | `limit?` (default 50, max 200) | `WalletCalls` |
 | GET | `/api/:chain/leaderboard` | `tag?` = `smart\|kol\|sniper\|whale\|all`, `period?` (`1d\|7d\|30d`), `sort?` = `pnl\|winRate\|volume\|tokens\|pnlRate`, `order?` = `desc\|asc` (default `desc`), `limit?` | `LeaderboardRow[]` |
@@ -62,8 +62,13 @@ current `low` tier can fail to land.
 | GET | `/api/:chain/narratives` | | `Narrative[]` by heat |
 
 Limits above the documented maximum are clamped; zero or non-numeric limits return 400. EVM addresses
-are accepted in any case. Broadcast channels carry no viewer-relative tags (`you`, `following`): clients
-add them locally; REST responses include them when a token is presented.
+are accepted in any case. To page token trades or wallet activity, pass the last row's trade as the cursor:
+`before=<timestamp>&beforeId=<id>` continues right after that trade (many trades share a millisecond, so
+`before` alone, which keeps only trades strictly older, skips the rest of a split millisecond). When the
+cursor trade has left the server's history `before` applies alone; `beforeId` without `before` then returns
+an empty page. Broadcast channels carry no viewer-relative tags (`you`, `following`) or remarks,
+in their subscribe snapshot as in later pushes (only `feed:<chain>:follow` is per viewer): clients add them
+locally; REST responses (search included) include them when a token is presented.
 
 - `TokenSummary.initialLiquidityUsd` is the launch-time liquidity, or the pool's initial liquidity once
   migrated (`TokenDetail` inherits it).
@@ -91,6 +96,10 @@ add them locally; REST responses include them when a token is presented.
 - `TokenSecurity.safety` (every summary, list row and detail): see "Safety score" below.
 - `WalletProfile.createdTokenCount` counts the same tokens `/created-tokens` lists (launches the simulator
   has since deleted are left out of both).
+- `WalletPeriodStats` (profile `stats`, leaderboard rows) measures volume the same way in every period:
+  `buyVolumeUsd` is the fee-inclusive buy cost (the same as `totalCostUsd`; `avgBuyUsd` = cost / buys) and
+  `sellVolumeUsd` the sell proceeds net of fees. `all` still counts positions in tokens the simulator has
+  since deleted (realized PnL only).
 - Calls: a call is a `kol_call` signal; it **hits** once `maxMultiple >= 2`. `/calls` returns the wallet's
   calls newest first plus `hitRate7d` / `hitRate30d` (hits / calls made in the window, 0 without calls) and
   `avgMaxMultiple` (mean over the last 30d, 0 without calls). Stats cover the caller's last 200 calls and
@@ -121,7 +130,8 @@ security fields (formula in `analytics/tokens/security.ts`, after PRD §8.6.1 wi
   `renounced`, `tax`, `lp`, `top10`, `dev`, `bundlers`, `snipers`, `insiders`, `bots`, `fresh`, `wash`, `rug`,
   or `unverified` for unknown EVM flags), with a display `label`, `level` `warn` / `bad` and `impact` = points
   × section weight (scaled down when a section passes 100) plus whatever the binding cap removed, rounded
-  to 0.1. Largest impact first, at most 6; impacts add up to `100 − score` (before rounding, unless
+  to 0.1. Largest impact first, at most 6 (when more apply: the 5 largest and one `key: 'other'` reason,
+label "N more checks", carrying the rest); impacts add up to `100 − score` (before rounding, unless
   the score floors at 0).
 
 ## Accounts (accounts module)
@@ -129,8 +139,8 @@ security fields (formula in `analytics/tokens/security.ts`, after PRD §8.6.1 wi
 | Method | Path | Body | Response |
 |---|---|---|---|
 | POST | `/api/auth/guest` | `{ referralCode? }` | `AuthResponse` (instant paper account; `account.isGuest` true) |
-| POST | `/api/auth/register` | `{ username, password, referralCode? }` | `AuthResponse` (called with a guest's token, upgrades that guest in place) |
-| POST | `/api/auth/login` | `{ username, password }` | `AuthResponse` |
+| POST | `/api/auth/register` | `{ username, password, referralCode? }` | `AuthResponse` (called with a guest's token, upgrades that guest in place; a code binds only before the account's first trade, so a guest that already traded keeps `referredBy: null`) |
+| POST | `/api/auth/login` | `{ username, password }` | `AuthResponse` (401 `invalid_credentials` for a wrong username or password; a 🔒 endpoint's 401 for a missing or revoked session is `unauthorized`) |
 | POST | `/api/auth/logout` 🔒 | | `{ ok: true }` |
 | GET | `/api/me` 🔒 | | `Account` |
 | GET | `/api/settings` 🔒 | | `UserSettings` |
@@ -172,7 +182,13 @@ graduating), `error` for failed trades and a paused copy task; absent for neutra
 `RewardsSummary.referralLink` is relative (`/?ref=CODE`); clients prefix their own origin.
 
 Guest and register calls are limited per client IP (`ACCOUNT_CREATIONS_PER_IP` per 10 minutes, 429 with
-`retry-after`). Logins are limited to 10 attempts per account per 10 minutes (429 with `retry-after`).
+`retry-after`). Logins are limited per client IP (`LOGIN_ATTEMPTS_PER_IP` per 10 minutes, whatever the
+username) and to 10 attempts per username per client IP per 10 minutes (429 with `retry-after`), counted
+whether or not the username exists; a correct password from another address is not locked out. While the
+server's password-hashing queue is full, login and register answer 503 `busy` with `retry-after: 1`.
+Guest accounts idle for 30 days (no sign-in, authenticated request or fill) are deleted with their paper
+wallets and sessions, unless they still have open orders, copy-trade or sniper tasks, alerts, invitees, a
+token they launched, or a wallet someone follows.
 Logging out also revokes the session on open WebSockets (the socket receives `{ op: 'auth', ok: false }`
 and loses the `user` channel).
 
@@ -181,7 +197,7 @@ and loses the `user` channel).
 | Method | Path | Body | Response |
 |---|---|---|---|
 | POST | `/api/trade/quote` 🔒 | `QuoteRequest` | `Quote` (400 `quote_unavailable` when the trade cannot be priced) |
-| POST | `/api/trade/swap` 🔒 | `SwapRequest` | `SwapReceipt` (200 with `ok:false` + `error` for trade-level failures like slippage) |
+| POST | `/api/trade/swap` 🔒 | `SwapRequest` | `SwapReceipt` (200 with `ok:false` + `error` for trade-level failures like slippage; 429 `rate_limited` with `retry-after` past 10 manual swaps per account per second) |
 | GET | `/api/orders` 🔒 | `?status=open\|history&chain=&token=` | `Order[]` |
 | POST | `/api/orders` 🔒 | `CreateOrderRequest` | `Order` |
 | DELETE | `/api/orders/:id` 🔒 | | `Order` |
@@ -210,7 +226,20 @@ tokens traded.
 Copy trading pauses itself: `CopyTradeTask.consecutiveFailures` counts failed copies in a row (a
 successful copy resets it); at `COPY_AUTO_PAUSE_FAILURES` (3) the task is disabled and the owner gets a
 `copytrade` notification (`level: 'error'`) naming the last error. Re-enabling it (PATCH `enabled: true`)
-resets the count.
+resets the count. A target buy that completes the curve is skipped (nothing is tradable until the pool
+opens), without a notification or a failure. So is a mirror sell too small for its proceeds to cover the
+fees: its share stays with the task and leaves with a later mirror sell or the target's exit. Mirror sells only touch tokens the task bought: any sell from
+the account's wallet (by hand, a strategy leg) caps what the task still holds at the wallet balance, and a
+target sell that lands while a copy buy is still confirming is applied to that buy when it lands.
+
+Exit strategies (`SwapRequest.strategy`): take-profit legs and a trailing leg's activation measure from
+the fee-inclusive cost per token of the fill, never below the spot price right after it; stop-loss legs
+from the average fill price without tax and venue fee, never above that spot; an immediately armed
+trailing stop starts its peak at that spot (`Order.refPriceUsd` / `peakPriceUsd`). Percent sells
+(strategy legs, orders, `amountKind: 'percent'` swaps) size themselves from the holding minus what sells
+still in flight will take, so two "sell 50%" legs that trigger together leave 25%; a sell that lands after
+another sell of the same bag landed first sells what is left, its `minOut` scaled to that share. A dev-sell exit never
+fires on sells by its own account's wallets (a launcher's own sells).
 
 ## Token launch (trading module)
 
@@ -242,9 +271,12 @@ A-Z0-9 removed (so `Ѕ.О.L`, `ＵＳＤＴ`, `ΒΝΒ` and `Trеnch Ѕcope` are 
   exactly their buy plus fees; they show up as bundlers (and raise the token's rug ratio).
 - The creator is the account's chain wallet. The dev buy and the bundles fill in the creation block,
   without latency, slippage or MEV; receipts list the dev buy first, and its `orders` are the `strategy`
-  exits (`source: 'strategy'`). Fills are pushed on `user` like any swap.
+  exits (`source: 'strategy'`), created once the whole creation block has filled, so they measure from the
+  price after the bundle buys (the launcher's own buys never trip them). Fills are pushed on `user` like
+  any swap.
 - Bundle wallets follow the launcher out: whenever the account sells a token it launched, each bundle
-  wallet sells the same share of its bag and the proceeds return to the account's wallet.
+  wallet sells the same share of its bag (a `fill` on `user` for each, like their launch buys) and the
+  proceeds return to the account's wallet.
 - The simulated market adopts the launch: snipers, smart money, KOLs and retail trade it like their own
   launches, and its hidden outcome leans on what the launch shows (socials, description, a 1-6% dev buy
   help; a heavy dev bag hurts; bundles draw snipers and flippers). Scripted dev-side dumps never sell the
@@ -257,7 +289,26 @@ A-Z0-9 removed (so `Ѕ.О.L`, `ＵＳＤＴ`, `ΒΝΒ` and `Trеnch Ѕcope` are 
 
 Client → server: `WsClientMessage` (`auth`, `sub`, `unsub`, `ping`). Server → client: `WsServerMessage`.
 A `sub` gets an `ack` and normally an immediate snapshot `data` message. Re-sending `sub` for the same
-channel replaces its params.
+channel replaces its params (the old subscription is dropped only once the new one is in, so nothing
+buffered for the channel is lost). A connection's messages are handled one at a time, in order.
+
+Limits: channel names are exact (`market`, `user`, `trenches:<chain>`, `trending:<chain>`,
+`newpairs:<chain>`, `signals:<chain>`, `feed:<chain>:<kind>`, `token:<chain>:<address>`; extra segments
+are rejected); at most 300 subscriptions per connection (`error` "at most 300 subscriptions per
+connection"), whose params may total at most 1024 KB of JSON (`error` "subscription params over 1024 KB
+per connection"; a whole blacklist in every list filter fits); params nested deeper than 16 levels are
+rejected; a frame that is not a JSON object with a string `op` gets
+`{ op: 'error', message: 'invalid message' }`. At most `WS_CONNECTIONS_PER_IP` (20) sockets per client
+IP (local loopback clients exempt); extra sockets are closed with code 1008. Only frames over 16 KB are
+compressed (permessage-deflate). Backpressure: while over 2 MB of a socket's frames are unsent it misses
+public pushes (the next snapshot repairs them), but never `user` events; a socket over 8 MB behind when
+one is due is closed, so the client reconnects and resyncs. Liveness: the server pings every
+15 s and closes sockets that sent nothing (a pong counts) for 45 s, or whose send buffer stayed over
+2 MB for 15 s. Clients should check the other direction too: the web client pings every 10 s and drops
+(and reconnects) a socket that delivered no frame at all within 5 s of a ping, since a half-open
+connection can stay open for minutes. Address segments of channel names (`token:<chain>:<address>`,
+`wallet:<chain>:<address>`) must be in the server's canonical form (EVM lower-case), unlike REST paths;
+the web client normalizes them.
 
 | Channel | `type` | Payload | Cadence / params |
 |---|---|---|---|

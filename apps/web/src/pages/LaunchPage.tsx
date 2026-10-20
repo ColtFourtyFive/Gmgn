@@ -34,7 +34,7 @@ import {
 import { Page, PageHeader, useDeposit } from '@/components/layout';
 import { tokenKeys } from '@/components/token';
 import { DEFAULT_STRATEGY, describeStrategy } from '@/components/trade/StrategyEditor';
-import { Button, ErrorState, Modal, Skeleton, SkeletonText } from '@/components/ui';
+import { Button, ErrorState, focusFirstError, Modal, Skeleton, SkeletonText } from '@/components/ui';
 import { walletKeys } from '@/components/wallet';
 import { invalidateTradingQueries, trackManualSwap, useBreakpoint, useTradeSettings } from '@/hooks';
 import { api } from '@/lib/api';
@@ -146,7 +146,7 @@ function Launch({ chain, config }: { chain: ChainId; config: LaunchConfig }) {
     setSubmitted(true);
     setFromServer({});
     if (Object.keys(validateLaunch(form, chain, config)).length) {
-      requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${FORM_ID} [aria-invalid="true"]`)?.focus());
+      requestAnimationFrame(() => focusFirstError(FORM_ID));
       return;
     }
     requireAuth(() => setConfirming(true));
@@ -218,7 +218,7 @@ function Launch({ chain, config }: { chain: ChainId; config: LaunchConfig }) {
       </div>
       <MyLaunches chain={chain} launchesPerHour={config.limits.launchesPerHour} />
       {!wide && (
-        <div className="sticky bottom-0 z-sticky -mx-3 flex items-center gap-3 border-t border-line bg-panel/95 px-3 py-2 backdrop-blur md:-mx-4 md:px-4">
+        <div data-sticky-bottom className="sticky bottom-0 z-sticky -mx-3 flex items-center gap-3 border-t border-line bg-panel/95 px-3 py-2 backdrop-blur md:-mx-4 md:px-4">
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="text-2xs text-faint">Total cost</span>
             <Native value={cost.total} chain={chain} className="text-sm font-semibold" />

@@ -13,11 +13,14 @@ export interface ConfirmDialogProps {
   /** Tone of the confirm button for trades. */
   tone?: 'primary' | 'buy' | 'sell';
   pending?: boolean;
+  /** Confirm stays unavailable (e.g. until a risk acknowledgement is ticked); Cancel gets the initial focus. */
+  confirmDisabled?: boolean;
   children?: ReactNode;
 }
 
 /** Small yes/no dialog for deletes and confirm-before-trade. */
-export function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLabel = 'Confirm', danger, tone = 'primary', pending, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLabel = 'Confirm', danger, tone = 'primary', pending, confirmDisabled, children }: ConfirmDialogProps) {
+  const cancelFirst = danger || confirmDisabled;
   return (
     <Modal
       open={open}
@@ -28,10 +31,10 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, description, co
       bodyClassName={children ? undefined : '!pb-0'}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} data-autofocus={danger || undefined}>
+          <Button variant="ghost" onClick={onClose} data-autofocus={cancelFirst || undefined}>
             Cancel
           </Button>
-          <Button variant={danger ? 'danger' : tone} loading={pending} onClick={onConfirm} data-autofocus={danger ? undefined : true}>
+          <Button variant={danger ? 'danger' : tone} loading={pending} disabled={confirmDisabled} onClick={onConfirm} data-autofocus={cancelFirst ? undefined : true}>
             {confirmLabel}
           </Button>
         </>

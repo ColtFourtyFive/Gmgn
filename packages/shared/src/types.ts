@@ -1300,7 +1300,10 @@ export interface MetaResponse {
  *   feed:<chain>:<smart|kol|follow|all> -> 'feed' FeedItem[] batches
  *   signals:<chain>                -> 'signals'   Signal[] batches
  *   wallet:<chain>:<address>       -> 'trades'    Trade[] batches of that wallet
- *   user                           -> 'notification' | 'order' | 'balance' | 'position' (requires auth)
+ *   user (requires auth)           -> 'notification' AppNotification on event
+ *                                   -> 'order'     Order on create/fill/cancel/fail
+ *                                   -> 'balance'   UserWallet after its native balance changes
+ *                                   -> 'fill'      SwapReceipt after any swap executed for the user
  */
 export type WsClientMessage =
   | { op: 'auth'; token: string }

@@ -72,7 +72,8 @@ function Mark({ ok, label, hint }: { ok: boolean | null; label: string; hint: st
   return (
     <Tooltip content={`${hint}: ${ok === null ? 'n/a' : ok ? 'yes' : 'no'}`}>
       <span
-        className={clsx('chip !gap-0.5 !px-1', ok === null ? 'bg-panel-3 text-faint' : ok ? 'bg-up/10 text-up' : 'bg-down/15 text-down')}
+        className={clsx('chip !gap-0.5 !px-1', ok === null ? 'bg-panel-3 text-muted' : ok ? 'bg-up/10 text-up' : 'bg-down/15 text-down')}
+        role="img"
         aria-label={`${hint}: ${ok === null ? 'not applicable' : ok ? 'yes' : 'no'}`}
       >
         {Icon && <Icon size={10} strokeWidth={3} aria-hidden />}
@@ -102,7 +103,7 @@ export const SecuritySummary = memo(function SecuritySummary({ token: t, top10Th
         </>
       )}
       <Tooltip content={lp === null ? 'LP burn: n/a (on curve)' : `LP burned: ${formatPercent(lp, { sign: false, digits: 0 })}`}>
-        <span className={clsx('chip num !px-1', lp === null ? 'bg-panel-3 text-faint' : lp >= 0.99 ? 'bg-up/10 text-up' : 'bg-warn/15 text-warn')}>
+        <span className={clsx('chip num !px-1', lp === null ? 'bg-panel-3 text-muted' : lp >= 0.99 ? 'bg-up/10 text-up' : 'bg-warn/15 text-warn')}>
           <Flame size={10} aria-hidden />
           {lp === null ? '--' : formatPercent(lp, { sign: false, digits: 0 })}
         </span>

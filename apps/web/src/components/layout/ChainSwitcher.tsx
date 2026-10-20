@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { CHAIN_IDS, CHAINS, type ChainId } from '@trenchscope/shared';
 import clsx from 'clsx';
 import { CHAIN_SHORT, ChainIcon } from '@/components/common';
-import { Select } from '@/components/ui';
+import { Select, useRovingKeys } from '@/components/ui';
 import { useActiveChain } from '@/hooks/useActiveChain';
 import { useUi } from '@/store/ui';
 import { switchChainPath } from './nav';
@@ -43,18 +43,25 @@ export function ChainSwitcher({ compact, className }: { compact?: boolean; class
   );
 }
 
-/** Grid of chain buttons (mobile drawer). */
+const PICKER_ITEMS = CHAIN_IDS.map((id) => ({ value: id }));
+
+/** Grid of chain buttons (mobile drawer): a radio group (one Tab stop, arrow keys pick). */
 export function ChainPicker({ className }: { className?: string }) {
   const chain = useActiveChain();
   const switchChain = useSwitchChain();
+  const { refs, onKeyDown, tabStop } = useRovingKeys(PICKER_ITEMS, chain, switchChain);
   return (
-    <div role="radiogroup" aria-label="Chain" className={clsx('grid grid-cols-4 gap-1.5', className)}>
-      {CHAIN_IDS.map((id) => (
+    <div role="radiogroup" aria-label="Chain" onKeyDown={onKeyDown} className={clsx('grid grid-cols-4 gap-1.5', className)}>
+      {CHAIN_IDS.map((id, i) => (
         <button
           key={id}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
           type="button"
           role="radio"
           aria-checked={id === chain}
+          tabIndex={i === tabStop ? 0 : -1}
           onClick={() => switchChain(id)}
           className={clsx(
             'flex h-14 flex-col items-center justify-center gap-1 rounded border text-xs font-medium transition-colors',

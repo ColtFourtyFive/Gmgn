@@ -3,13 +3,12 @@
 // launches, when it is a dev).
 
 import { memo, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { formatDuration, formatInt, type ChainId, type DevToken, type TokenPositionRow } from '@trenchscope/shared';
 import { Coins, History, Rocket } from 'lucide-react';
 import { Age, Compact, FlashValue, Pct, Price, StatTile, TokenLink, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { Badge, DataTable, EmptyState, ErrorState, Toggle, type Column } from '@/components/ui';
-import { serverNow } from '@/hooks';
+import { serverNow, useOpenLink } from '@/hooks';
 import { routes } from '@/lib/chain';
 import { useCreatedTokens, useWalletHoldings } from './queries';
 
@@ -164,7 +163,7 @@ export interface WalletTableProps {
 
 /** Every token the wallet traded (open and closed), most recent first. `trader` names the wallet on share cards. */
 export const RecentPnlTab = memo(function RecentPnlTab({ chain, address, trader }: WalletTableProps & { trader: string }) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const q = useWalletHoldings(chain, address, true, 'recent');
   const columns = useMemo<Column<TokenPositionRow>[]>(
     () => [
@@ -189,7 +188,7 @@ export const RecentPnlTab = memo(function RecentPnlTab({ chain, address, trader 
       loading={q.isLoading}
       minWidth={820}
       maxHeight={640}
-      onRowClick={(r) => navigate(routes.token(chain, r.token))}
+      onRowClick={(r, e) => openLink(routes.token(chain, r.token), e)}
       empty={<EmptyState compact icon={<History size={16} />} title="No trades yet" description="This wallet has not traded a token on this chain." />}
     />
   );
@@ -197,7 +196,7 @@ export const RecentPnlTab = memo(function RecentPnlTab({ chain, address, trader 
 
 /** Open positions, by value. */
 export const HoldingsTab = memo(function HoldingsTab({ chain, address }: WalletTableProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const [hideDust, setHideDust] = useState(true);
   const q = useWalletHoldings(chain, address, false, 'value');
   const rows = useMemo(() => (q.data ?? []).filter((r) => r.balance > 0 && (!hideDust || r.valueUsd >= 1)), [q.data, hideDust]);
@@ -237,7 +236,7 @@ export const HoldingsTab = memo(function HoldingsTab({ chain, address }: WalletT
         defaultSort={{ key: 'value', dir: 'desc' }}
         minWidth={860}
         maxHeight={640}
-        onRowClick={(r) => navigate(routes.token(chain, r.token))}
+        onRowClick={(r, e) => openLink(routes.token(chain, r.token), e)}
         empty={<EmptyState compact icon={<Coins size={16} />} title="No open positions" description={hideDust ? 'Nothing worth $1 or more is held right now.' : 'This wallet holds no tokens right now.'} />}
       />
     </div>
@@ -291,7 +290,7 @@ function devStats(tokens: DevToken[]) {
 
 /** Tokens this wallet launched that are still on the market, newest first. */
 export const CreatedTokensTab = memo(function CreatedTokensTab({ chain, address }: WalletTableProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const q = useCreatedTokens(chain, address);
   const tokens = useMemo(() => q.data ?? [], [q.data]);
   const stats = useMemo(() => devStats(tokens), [tokens]);
@@ -315,7 +314,7 @@ export const CreatedTokensTab = memo(function CreatedTokensTab({ chain, address 
         defaultSort={{ key: 'age', dir: 'desc' }}
         minWidth={620}
         maxHeight={560}
-        onRowClick={(t) => navigate(routes.token(t.chain, t.address))}
+        onRowClick={(t, e) => openLink(routes.token(t.chain, t.address), e)}
         empty={<EmptyState compact icon={<Rocket size={16} />} title="No live launches" description="The tokens this wallet created are no longer on the market." />}
       />
     </div>

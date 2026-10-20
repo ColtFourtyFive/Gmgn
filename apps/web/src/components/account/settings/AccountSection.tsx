@@ -1,30 +1,18 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CHAIN_IDS, CHAINS } from '@trenchscope/shared';
 import { Compass, Gift, LogOut, UserPlus, UserRound, Wallet } from 'lucide-react';
 import { AddressLink, Age, ChainIcon, Native, WalletAvatar } from '@/components/common';
+import { requestSignOut } from '@/components/layout/SignOutDialog';
 import { Badge, Button, CopyButton, Panel } from '@/components/ui';
 import { routes } from '@/lib/chain';
 import { useSession } from '@/store/session';
-import { toast } from '@/store/toasts';
 import { startTour } from '@/store/tour';
-import { ConfirmDialog } from '../ConfirmDialog';
 import { DetailRow, Note } from '../FormBits';
 
 /** Profile facts, paper wallets, referral shortcut, the onboarding tour and sign-out. */
 export function AccountSection() {
   const account = useSession((s) => s.account);
-  const [confirmOut, setConfirmOut] = useState(false);
-  const [pending, setPending] = useState(false);
   if (!account) return null;
-
-  const signOut = async () => {
-    setPending(true);
-    await useSession.getState().logout();
-    setPending(false);
-    setConfirmOut(false);
-    toast.info('Signed out');
-  };
 
   return (
     <div className="grid gap-3 lg:grid-cols-2">
@@ -70,14 +58,16 @@ export function AccountSection() {
                 </Link>
               </span>
             </DetailRow>
-            {account.referredBy && <DetailRow label="Referred by">{account.referredBy}</DetailRow>}
+            {/* referredBy is the referrer's internal account id: say that an invite was used, never print the id. */}
+            {account.referredBy && <DetailRow label="Joined via">A referral invite</DetailRow>}
           </dl>
           <div className="flex justify-between gap-2 border-t border-line pt-3">
             <Button variant="outline" size="sm" icon={<Compass size={13} />} onClick={startTour}>
               Take the tour
             </Button>
-            <Button variant="danger" size="sm" icon={<LogOut size={13} />} onClick={() => setConfirmOut(true)}>
-              Log out
+            {/* The same sign-out as the account menu: guests confirm (with "Register instead"), registered accounts sign out at once. */}
+            <Button variant="danger" size="sm" icon={<LogOut size={13} />} onClick={requestSignOut}>
+              Sign out
             </Button>
           </div>
         </div>
@@ -104,21 +94,6 @@ export function AccountSection() {
           Top wallets up from the <Link to={routes.portfolio()} className="text-accent hover:underline">Portfolio</Link> page (Deposit, once a minute per chain).
         </p>
       </Panel>
-
-      <ConfirmDialog
-        open={confirmOut}
-        onClose={() => setConfirmOut(false)}
-        onConfirm={() => void signOut()}
-        pending={pending}
-        danger={account.isGuest}
-        title="Log out?"
-        description={
-          account.isGuest
-            ? 'This is a guest account: once you log out it cannot be recovered. Register first to keep it.'
-            : 'You can log back in with your username and password.'
-        }
-        confirmLabel="Log out"
-      />
     </div>
   );
 }

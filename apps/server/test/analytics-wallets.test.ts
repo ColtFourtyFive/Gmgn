@@ -13,6 +13,7 @@ import {
   type FeedItem,
   type LeaderboardRow,
   type PnlDistribution,
+  type SearchResult,
   type Signal,
   type TokenPositionRow,
   type Trade,
@@ -314,6 +315,76 @@ describe('period stats', () => {
     expect(prof.stats['all'].tokensTraded).toBe(1);
   });
 
+  it('measures buy / sell volume the same way in every period: fee-inclusive cost and net proceeds', () => {
+    const w = mkWallet();
+    const t = mkToken();
+    // paper-trade style swaps: platform and network fees on top
+    const paid = (side: 'buy' | 'sell', amount: number) => {
+      world.now += 1_000;
+      const r = world.executeSwap(w, t, side, amount, { platformFeeRate: 0.008, networkFee: 0.003 });
+      expect(r.ok).toBe(true);
+      return r.trade!;
+    };
+    const first = paid('buy', 0.1);
+    const periods = ['1d', '7d', '30d', 'all'] as const;
+    let stats = wa.profile(w, { accountId: null }).stats;
+    const pos = w.positions.get(t.address)!;
+    expect(pos.boughtUsd).toBeGreaterThan(first.usdAmount); // fees on top of the gross trade
+    for (const p of periods) {
+      expect(stats[p].buys).toBe(1);
+      expect(stats[p].buyVolumeUsd).toBeCloseTo(pos.boughtUsd, 9);
+      expect(stats[p].avgBuyUsd).toBeCloseTo(stats[p].buyVolumeUsd, 9); // the average of one buy is that buy
+    }
+    paid('buy', 0.3);
+    buy(pumper, t, 5);
+    const grossSold = paid('sell', pos.balance * 0.4).usdAmount + paid('sell', pos.balance).usdAmount;
+    expect(pos.soldUsd).toBeLessThan(grossSold); // proceeds are net of the fees
+    stats = wa.profile(w, { accountId: null }).stats;
+    for (const p of periods) {
+      expect([p, stats[p].buyVolumeUsd]).toEqual([p, expect.closeTo(pos.boughtUsd, 9)]);
+      expect([p, stats[p].sellVolumeUsd]).toEqual([p, expect.closeTo(pos.soldUsd, 9)]);
+      expect([p, stats[p].totalCostUsd]).toEqual([p, expect.closeTo(pos.boughtUsd, 9)]);
+      expect(stats[p].avgBuyUsd).toBeCloseTo(pos.boughtUsd / 2, 9);
+    }
+  });
+
+  it('keeps every period stat when pruning drops tokens with the positions in them', () => {
+    const w = mkWallet();
+    const user = world.createWallet('sol', 'user', { native: 100, accountId: 'acc_keep' });
+    // Bought three days ago, sold today: the 1d window only sees the sell (its ratio base is the lifetime cost).
+    const old = mkToken();
+    buy(w, old, 1);
+    buy(user, old, 0.2);
+    world.now += 3 * DAY_MS;
+    buy(pumper, old, 20);
+    sellFrac(w, old);
+    const [win, loss] = trade(w, 1, 1);
+    const held = mkToken();
+    buy(w, held, 0.5);
+    buy(pumper, held, 5);
+
+    const before = wa.profile(w, { accountId: null }).stats;
+    const gone = [old, win, loss];
+    for (const t of gone) world.tokens.delete(t.address);
+    world.dropPositions(gone);
+    expect([...w.positions.keys()]).toEqual([held.address]);
+    expect(w.pruned).toMatchObject({ tokens: 3, wins: 2, buys: 3, sells: 3 });
+    expect(user.positions.has(old.address)).toBe(true); // account wallets keep theirs
+    (wa as unknown as { sweep(): void }).sweep(); // full sweep: what the period stats need survives it
+
+    w.lastActiveAt += 1; // bust the profile cache key
+    const after = wa.profile(w, { accountId: null }).stats;
+    for (const period of ['1d', '7d', '30d', 'all'] as const) {
+      const [a, b] = [after[period], before[period]];
+      expect({ period, ...a.distribution }).toEqual({ period, ...b.distribution });
+      for (const k of ['tokensTraded', 'wins', 'losses', 'buys', 'sells'] as const) expect([period, k, a[k]]).toEqual([period, k, b[k]]);
+      for (const k of ['realizedPnlUsd', 'unrealizedPnlUsd', 'buyVolumeUsd', 'sellVolumeUsd', 'totalCostUsd', 'winRate', 'pnlRate', 'avgHoldSeconds'] as const) {
+        expect(a[k]).toBeCloseTo(b[k], 6);
+      }
+    }
+    expect(after.all.tokensTraded).toBe(4);
+  });
+
   it('handles positions whose token was deleted by the simulator', () => {
     const w = mkWallet();
     const [t1] = trade(w, 1, 1);
@@ -369,9 +440,14 @@ describe('deleted tokens', () => {
     expect(prof.stats['7d'].tokensTraded).toBe(2); // the deleted token still counts (unrealized 0)
     expect(prof.stats['7d'].unrealizedPnlUsd).toBeCloseTo(prof.stats.all.unrealizedPnlUsd, 6);
 
-    // The first classification run is a full sweep: per-wallet token records of deleted tokens are dropped.
+    // The first classification run is a full sweep: per-wallet token records of deleted tokens go once no
+    // bucket counts the token any more (here: after the wallet's next trade a month later rolls them out).
     wa.classifyTick();
     const tr = (wa as unknown as { tracks: Map<string, { tokens: Map<string, unknown> }> }).tracks.get(s.address)!;
+    expect(tr.tokens.has(gone.address)).toBe(true);
+    world.now += 31 * DAY_MS;
+    buy(s, kept, 0.1);
+    (wa as unknown as { sweep(): void }).sweep();
     expect(tr.tokens.has(gone.address)).toBe(false);
     expect(tr.tokens.has(kept.address)).toBe(true);
     // A wallet with positions but no tracked history still gets zero-filled series.
@@ -662,6 +738,26 @@ describe('profile / holdings / activity', () => {
     expect(wa.activity(w, { before: t3.timestamp }, { accountId: null }).map((i) => i.trade.id)).toEqual([t2.id, t1.id]);
   });
 
+  it('pages activity with a before + beforeId cursor without losing trades that share a millisecond', () => {
+    const w = mkWallet();
+    for (let burst = 0; burst < 4; burst++) {
+      const t = mkToken();
+      for (let i = 0; i < 3; i++) buy(w, t, 0.05, 0); // same timestamp
+      world.now += 500;
+    }
+    const all = wa.activity(w, { limit: 100 }, { accountId: null }).map((i) => i.trade);
+    expect(all).toHaveLength(12);
+    const seen: string[] = [];
+    let page = wa.activity(w, { limit: 5 }, { accountId: null });
+    while (page.length) {
+      seen.push(...page.map((i) => i.trade.id));
+      const last = page[page.length - 1].trade;
+      page = wa.activity(w, { limit: 5, before: last.timestamp, beforeId: last.id }, { accountId: null });
+    }
+    expect(seen).toEqual(all.map((x) => x.id));
+    expect(wa.activity(w, { beforeId: 'tx_gone' }, { accountId: null })).toEqual([]);
+  });
+
   it('labels what each trade did to the position: open, add, reduce, close, and a re-entry opens again', () => {
     const w = mkWallet();
     w.tags.add('smart');
@@ -727,16 +823,24 @@ describe('leaderboard', () => {
     const toks = byTokens.map((r) => r.stats.tokensTraded);
     expect(toks.every((x, i) => i === 0 || toks[i - 1] >= x)).toBe(true);
 
-    // The first live tick after warmup builds every chain at once.
-    const lbFirst = () => (wa as unknown as { lb: Map<string, { at: number; entries: unknown[] }> }).lb;
-    lbFirst().clear();
-    wa.leaderboardTick();
-    expect(lbFirst().size).toBe(4);
-    expect(lbFirst().get('sol')?.at).toBe(world.now);
+    // With nothing built (the server builds them all before it listens), the live ticker never builds
+    // every chain in one go: it fills the missing ones a time slice at a time.
+    const lbInternal = () => (wa as unknown as { lb: Map<string, { at: number; entries: unknown[] }> }).lb;
+    lbInternal().clear();
+    const whole = vi.spyOn(wa, 'refreshLeaderboards');
+    const oneChain = vi.spyOn(wa, 'refreshLeaderboard');
+    for (let i = 0; i < 40 && lbInternal().size < 4; i++) {
+      world.now += 1_000;
+      wa.leaderboardTick();
+    }
+    expect(lbInternal().size).toBe(4);
+    expect(whole).not.toHaveBeenCalled();
+    expect(oneChain).not.toHaveBeenCalled();
+    whole.mockRestore();
+    oneChain.mockRestore();
 
     // Afterwards the live ticker rebuilds one chain at a time in time slices, each about every 30s.
-    const lbInternal = lbFirst;
-    const builtAt = lbInternal().get('sol')!.at;
+    const builtAt = Math.max(...[...lbInternal().values()].map((c) => c.at));
     world.now += 30_000;
     for (let i = 0; i < 12; i++) {
       world.now += 1_000;
@@ -759,6 +863,18 @@ describe('leaderboard', () => {
 // ---------------------------------------------------------------------------
 // Signals
 // ---------------------------------------------------------------------------
+
+describe('leaderboard at boot', () => {
+  it('is built for every chain before the server starts serving', async () => {
+    const live = await buildApp(defaultConfig({ warmupMinutes: 5, snapshotEveryMs: 0 }), { start: true, persist: false });
+    try {
+      const lw = (live.ctx.analytics as Analytics).wallets as unknown as { lb: Map<string, unknown> };
+      expect(lw.lb.size).toBe(4);
+    } finally {
+      await live.close();
+    }
+  });
+});
 
 describe('signals', () => {
   const kinds = (token: TokenState) =>
@@ -1037,6 +1153,20 @@ describe('routes', () => {
     expect(fresh.walletCalls(kol, 50)).toEqual(wa.walletCalls(kol, 50));
   });
 
+  it("marks search wallet hits with the viewer's 'following' / 'you' tags and remark", async () => {
+    const res = await built.app.inject({ method: 'POST', url: '/api/auth/guest', payload: {} });
+    const auth = res.json() as AuthResponse;
+    const kol = mkWallet('sol', { label: '@searchsam' });
+    kol.tags.add('kol');
+    const f = await built.app.inject({ method: 'POST', url: '/api/follows', headers: { authorization: `Bearer ${auth.token}` }, payload: { chain: 'sol', address: kol.address, remark: 'mine' } });
+    expect(f.statusCode).toBe(200);
+    const search = async (q: string, token?: string) => (await call<SearchResult>(`/api/search?q=${encodeURIComponent(q)}`, token)).body.wallets[0];
+    expect(await search('@searchsam', auth.token)).toMatchObject({ address: kol.address, label: 'mine', tags: ['kol', 'following'] });
+    expect(await search('@searchsam')).toMatchObject({ label: '@searchsam', tags: ['kol'] });
+    const own = auth.account.wallets.sol.address;
+    expect(await search(own, auth.token)).toMatchObject({ address: own, tags: ['you'] });
+  });
+
   it('serves the follow feed for an authenticated viewer', async () => {
     const res = await built.app.inject({ method: 'POST', url: '/api/auth/guest', payload: {} });
     if (res.statusCode !== 200) return; // accounts module not available
@@ -1148,6 +1278,37 @@ describe('realtime channels', () => {
     const batchesA = a.data('feed');
     expect((batchesA[batchesA.length - 1].data as FeedItem[]).map((i) => i.trade.id)).toEqual([mine.id]);
     expect(b.data('feed')).toHaveLength(1); // only the (empty) snapshot
+  });
+
+  it('broadcast feed snapshots carry no viewer tags or remarks, like their batches', async () => {
+    const res = await built.app.inject({ method: 'POST', url: '/api/auth/guest', payload: {} });
+    const auth = res.json() as AuthResponse;
+    const s = mkWallet();
+    s.tags.add('smart');
+    const t = mkToken();
+    buy(s, t, 0.2);
+    const f = await built.app.inject({ method: 'POST', url: '/api/follows', headers: { authorization: `Bearer ${auth.token}` }, payload: { chain: 'sol', address: s.address, remark: 'secret' } });
+    expect(f.statusCode).toBe(200);
+    const c = fakeClient();
+    await c.msg({ op: 'auth', token: auth.token });
+    await c.msg({ op: 'sub', ch: 'feed:sol:smart' });
+    buy(s, t, 0.2);
+    wa.flushRealtime();
+    const [snapshot, batch] = c.data('feed', 'feed:sol:smart').map((m) => m.data as FeedItem[]);
+    for (const item of [...snapshot, ...batch].filter((i) => i.trade.wallet === s.address)) {
+      expect(item.trade.walletTags).not.toContain('following');
+      expect(item.trade.walletLabel).not.toBe('secret');
+    }
+    expect(snapshot.length).toBeGreaterThan(0);
+    // the per-viewer follow feed is the one that is decorated
+    await c.msg({ op: 'sub', ch: 'feed:sol:follow' });
+    const follow = c.data('feed', 'feed:sol:follow')[0].data as FeedItem[];
+    expect(follow[0].trade).toMatchObject({ walletLabel: 'secret' });
+    expect(follow[0].trade.walletTags).toContain('following');
+    // channel names must be exact
+    await c.msg({ op: 'sub', ch: 'feed:sol:smart:2' });
+    await c.msg({ op: 'sub', ch: 'signals:sol:2' });
+    expect(c.sent.filter((m) => m.op === 'error').map((m) => m.ch)).toEqual(['feed:sol:smart:2', 'signals:sol:2']);
   });
 
   it('wallet channel batches that wallet’s trades oldest first; signals push on trigger', async () => {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type UIEvent } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type UIEvent } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import clsx from 'clsx';
 import { Skeleton } from './Skeleton';
@@ -21,6 +21,11 @@ export interface Column<T> {
   sortable?: boolean;
   /** Value used for client-side sorting (ignored with `manualSort`). Nulls sort last. */
   sortValue?: (row: T) => number | string | null | undefined;
+  /**
+   * Cell content. Declare the `index` parameter only when the cell shows the
+   * row's position (rank): such tables re-render every row whose position
+   * changes, others only re-render rows whose data changed (live prepends).
+   */
   render: (row: T, index: number) => ReactNode;
   /** Extra classes for body cells. */
   className?: string;
@@ -44,6 +49,10 @@ export interface DataTableProps<T> {
   onSortChange?: (sort: SortState) => void;
   /** Rows arrive already sorted (server-side); only the header state changes. */
   manualSort?: boolean;
+  /**
+   * Row activation: click, Enter, and middle click (`e.button === 1`, also
+   * forwarded so rows that navigate can open a new tab: use useOpenLink).
+   */
   onRowClick?: (row: T, e: MouseEvent | KeyboardEvent) => void;
   rowClassName?: (row: T) => string | undefined;
   /** Shows skeleton rows while there is no data yet. */
@@ -123,6 +132,9 @@ function RowImpl<T>({ row, index, columns, compact, className, onActivate }: Row
     <tr
       className={clsx('group transition-colors hover:bg-panel-2', onActivate && 'cursor-pointer', className)}
       onClick={onActivate ? activate : undefined}
+      // Middle click opens a navigating row in a new tab (no autoscroll on press, as on a link).
+      onMouseDown={onActivate ? (e) => e.button === 1 && !(e.target as HTMLElement).closest(INTERACTIVE) && e.preventDefault() : undefined}
+      onAuxClick={onActivate ? (e) => e.button === 1 && activate(e) : undefined}
       onKeyDown={onActivate ? (e) => e.key === 'Enter' && e.target === e.currentTarget && activate(e) : undefined}
       tabIndex={onActivate ? 0 : undefined}
     >
@@ -173,6 +185,10 @@ export function DataTable<T>({
   clickRef.current = onRowClick;
   const activate = useCallback((row: T, e: MouseEvent | KeyboardEvent) => clickRef.current?.(row, e), []);
 
+  // Only pass the real index when a cell renders it: otherwise every prepend
+  // (live trades) shifts all indexes and defeats the row memo.
+  const indexed = useMemo(() => columns.some((c) => c.render.length > 1), [columns]);
+
   const sorted = useMemo(() => {
     if (manualSort || !sort) return rows;
     const get = columns.find((c) => c.key === sort.key)?.sortValue;
@@ -187,9 +203,34 @@ export function DataTable<T>({
 
   const style: CSSProperties = { maxHeight };
   const showSkeleton = loading && rows.length === 0;
+  const showEmpty = !loading && rows.length === 0;
+
+  // The empty state spans the table's min-width; pin it to the visible part of
+  // the scroller (on a phone the table is far wider than the screen, and a
+  // message centred across it sat off-screen).
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const setScroller = useCallback(
+    (el: HTMLDivElement | null) => {
+      scroller.current = el;
+      if (typeof scrollRef === 'function') scrollRef(el);
+      else if (scrollRef) (scrollRef as { current: HTMLDivElement | null }).current = el;
+    },
+    [scrollRef],
+  );
+  const [viewWidth, setViewWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!showEmpty || !el) return;
+    const measure = () => setViewWidth(el.clientWidth || null);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showEmpty]);
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className={clsx('relative w-full overflow-auto', className)} style={style}>
+    <div ref={setScroller} onScroll={onScroll} className={clsx('relative w-full overflow-auto', className)} style={style}>
       <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth }} aria-label={ariaLabel} aria-busy={loading || undefined}>
         <thead>
           <tr>
@@ -246,11 +287,15 @@ export function DataTable<T>({
                 </tr>
               ))
             : sorted.map((row, i) => (
-                <Row key={rowKey(row)} row={row} index={i} columns={columns} compact={compact} className={rowClassName?.(row)} onActivate={onRowClick ? activate : undefined} />
+                <Row key={rowKey(row)} row={row} index={indexed ? i : 0} columns={columns} compact={compact} className={rowClassName?.(row)} onActivate={onRowClick ? activate : undefined} />
               ))}
-          {!loading && rows.length === 0 && (
+          {showEmpty && (
             <tr>
-              <td colSpan={columns.length}>{empty ?? <EmptyState compact title="No results" description="Nothing matches right now." />}</td>
+              <td colSpan={columns.length}>
+                <div data-table-empty className="sticky left-0" style={viewWidth ? { width: viewWidth } : undefined}>
+                  {empty ?? <EmptyState compact title="No results" description="Nothing matches right now." />}
+                </div>
+              </td>
             </tr>
           )}
         </tbody>

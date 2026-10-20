@@ -13,7 +13,7 @@ let closing = false;
 const shutdown = async (signal: string) => {
   if (closing) return;
   closing = true;
-  console.log(`[trenchscope] ${signal} received, saving snapshot...`);
+  console.log(`[trenchscope] ${signal} received, ${config.snapshotEveryMs > 0 ? 'saving snapshot...' : 'shutting down (SNAPSHOT_EVERY_MS=0: persistence off, nothing saved)'}`);
   await built.close();
   process.exit(0);
 };

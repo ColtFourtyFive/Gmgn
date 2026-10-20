@@ -3,7 +3,6 @@
 // viewer's blacklist merged in).
 
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CHAINS, formatDuration, formatPercent, STAT_WINDOWS, type ChainId, type DisplaySettings, type StatWindow, type TokenSummary, type WalletTag } from '@trenchscope/shared';
 import { Sparkles } from 'lucide-react';
 import { Age, Compact, FlashValue, Pct, Usd } from '@/components/common';
@@ -30,6 +29,7 @@ import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { Button, DataTable, EmptyState, ErrorState, SegmentedControl, type Column } from '@/components/ui';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useIsMobile } from '@/hooks/useMediaQuery';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
@@ -206,7 +206,7 @@ function newPairColumns({ win, thresholds, buyAmount, devTags, mobile }: ColumnD
 }
 
 function NewPairs({ chain }: { chain: ChainId }) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const display = useDisplaySettings();
   const devTags = useViewerTags(chain);
   const mobile = useIsMobile();
@@ -262,11 +262,7 @@ function NewPairs({ chain }: { chain: ChainId }) {
             rows={rows ?? []}
             rowKey={(t) => t.address}
             defaultSort={{ key: 'pool', dir: 'desc' }}
-            onRowClick={(t, e) => {
-              const href = routes.token(t.chain, t.address);
-              if ('metaKey' in e && (e.metaKey || e.ctrlKey)) window.open(href, '_blank', 'noopener');
-              else navigate(href);
-            }}
+            onRowClick={(t, e) => openLink(routes.token(t.chain, t.address), e)}
             loading={snap.loading}
             skeletonRows={14}
             compact={display.compactRows}

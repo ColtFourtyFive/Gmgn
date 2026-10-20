@@ -129,6 +129,8 @@ export interface TradesQuery {
   minUsd?: number;
   limit?: number;
   before?: number;
+  /** Page cursor: the id of the last trade already seen (see `trades`). */
+  beforeId?: string;
 }
 export interface HoldersQuery {
   tag?: string;
@@ -186,6 +188,9 @@ function jitterOf(address: string): number {
   for (let i = 0; i < address.length; i++) h = (Math.imul(h, 31) + address.charCodeAt(i)) | 0;
   return ((h >>> 0) % 2000) - 1000;
 }
+
+/** Default and maximum rows of the list endpoints / channels (per column for Trenches). */
+export const LIST_LIMITS = { trenches: 60, trending: 100, newpairs: 60, max: 100 } as const;
 
 const clampInt = (v: number | undefined, def: number, lo: number, hi: number) => {
   if (v === undefined || !Number.isFinite(v)) return def;
@@ -870,9 +875,21 @@ export class TokenAnalytics {
     const cohorts = this.cohortsFor(t);
     const out: Trade[] = [];
     const list = t.trades;
-    for (let i = list.length - 1; i >= 0 && out.length < limit; i--) {
+    // A beforeId cursor resumes right after that trade, so trades sharing its millisecond are not
+    // skipped; without one (or once it has left the ring) `before` pages by time alone.
+    let start = list.length - 1;
+    let before = opts.before;
+    if (opts.beforeId !== undefined) {
+      let at = start;
+      while (at >= 0 && list[at].id !== opts.beforeId) at--;
+      if (at >= 0) {
+        start = at - 1;
+        before = undefined;
+      } else if (before === undefined) return [];
+    }
+    for (let i = start; i >= 0 && out.length < limit; i--) {
       const tr = list[i];
-      if (opts.before !== undefined && tr.timestamp >= opts.before) continue;
+      if (before !== undefined && tr.timestamp >= before) continue;
       if (opts.wallet && tr.wallet !== opts.wallet) continue;
       if (opts.minUsd !== undefined && tr.usdAmount < opts.minUsd) continue;
       if (!this.matchTrade(tr, filter, t, cohorts, viewer)) continue;
@@ -1168,11 +1185,12 @@ export class TokenAnalytics {
     return s;
   }
 
-  trenches = (q: TrenchesQuery): TrenchesSnapshot => {
+  /** `maxLimit` lets the list channels compute a longer shared list (see TokenChannels.publishLists). */
+  trenches = (q: TrenchesQuery, maxLimit: number = LIST_LIMITS.max): TrenchesSnapshot => {
     const { world } = this.ctx;
     const now = world.now;
     const chain = q.chain;
-    const limit = clampInt(q.limit, 60, 1, 100);
+    const limit = clampInt(q.limit, LIST_LIMITS.trenches, 1, maxLimit);
     const f = q.filters ?? {};
 
     const fresh24 = now - DAY_MS;
@@ -1220,17 +1238,17 @@ export class TokenAnalytics {
     return out;
   }
 
-  newPairs = (chain: ChainId, filters: TokenFilters | undefined, limit?: number): TokenSummary[] => {
-    return this.migratedList(chain, filters, clampInt(limit, 60, 1, 100), this.ctx.world.now);
+  newPairs = (chain: ChainId, filters: TokenFilters | undefined, limit?: number, maxLimit: number = LIST_LIMITS.max): TokenSummary[] => {
+    return this.migratedList(chain, filters, clampInt(limit, LIST_LIMITS.newpairs, 1, maxLimit), this.ctx.world.now);
   };
 
-  trending = (q: TrendingQuery): TrendingSnapshot => {
+  trending = (q: TrendingQuery, maxLimit: number = LIST_LIMITS.max): TrendingSnapshot => {
     const { world } = this.ctx;
     const now = world.now;
     const window: StatWindow = q.window ?? '1h';
     const sort: TrendingSort = q.sort ?? 'hot';
     const asc = q.order === 'asc';
-    const limit = clampInt(q.limit, 100, 1, 100);
+    const limit = clampInt(q.limit, LIST_LIMITS.trending, 1, maxLimit);
     const since = now - WINDOW_MS[window];
     const rows: { s: TokenSummary; key: number; hot: number }[] = [];
     for (const addr of this.active[q.chain]) {
@@ -1386,7 +1404,7 @@ export class TokenAnalytics {
   // Search
   // -------------------------------------------------------------------------
 
-  search = (q: string, chain?: ChainId): SearchResult => {
+  search = (q: string, chain?: ChainId, viewer: Viewer = { accountId: null }): SearchResult => {
     const { world } = this.ctx;
     // Strip control / zero-width / bidi characters, trim, cap length.
     const query = (q ?? '')
@@ -1449,8 +1467,8 @@ export class TokenAnalytics {
     result.wallets = walletHits.slice(0, 10).map((w) => ({
       chain: w.chain,
       address: w.address,
-      label: w.label,
-      tags: this.walletTagsOf(w),
+      label: viewerLabel(this.ctx, viewer, w.chain, w.address, w.label),
+      tags: viewerTags(this.ctx, viewer, w.chain, w.address, this.walletTagsOf(w)),
       avatarSeed: w.address,
     }));
     return result;

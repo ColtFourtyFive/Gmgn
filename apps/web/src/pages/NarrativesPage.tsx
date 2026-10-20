@@ -2,7 +2,6 @@
 // every 10s). Each card expands into the theme's top tokens.
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CHAINS, type ChainId, type Narrative, type TokenRef } from '@trenchscope/shared';
 import { ChevronDown, Flame, Layers } from 'lucide-react';
@@ -13,6 +12,8 @@ import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { DataTable, EmptyState, ErrorState, SegmentedControl, Skeleton, type Column } from '@/components/ui';
 import { useQuickBuyAmount } from '@/components/discovery';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useOpenLink } from '@/hooks/useOpenLink';
+import { useStickyError } from '@/hooks/useStickyError';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
 
@@ -82,7 +83,7 @@ function tokenColumns(buyAmount: number, chain: ChainId): Column<TokenRef>[] {
 }
 
 function NarrativeCard({ n, rank, expanded, onToggle, columns }: { n: Narrative; rank: number; expanded: boolean; onToggle: () => void; columns: Column<TokenRef>[] }) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const bodyId = `narrative-${n.id}`;
   return (
     <article className={clsx('panel flex min-w-0 flex-col', expanded && 'border-line-strong sm:col-span-2 xl:col-span-3')}>
@@ -149,7 +150,7 @@ function NarrativeCard({ n, rank, expanded, onToggle, columns }: { n: Narrative;
             columns={columns}
             rows={n.topTokens}
             rowKey={(t) => t.address}
-            onRowClick={(t) => navigate(routes.token(t.chain, t.address))}
+            onRowClick={(t, e) => openLink(routes.token(t.chain, t.address), e)}
             compact
             empty={<EmptyState compact title="No active tokens" description="None of this theme’s tokens traded recently." />}
           />
@@ -161,6 +162,7 @@ function NarrativeCard({ n, rank, expanded, onToggle, columns }: { n: Narrative;
 
 function Narratives({ chain }: { chain: ChainId }) {
   const q = useQuery({ queryKey: ['narratives', chain], queryFn: () => api.narratives(chain), refetchInterval: 10_000, staleTime: 5_000 });
+  const failed = useStickyError(q);
   const [rawSort, setSort] = useLocalStorage<NarrativeSort>('ts.narratives.sort', 'heat');
   const sort: NarrativeSort = rawSort in SORT_VALUE ? rawSort : 'heat';
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -184,9 +186,9 @@ function Narratives({ chain }: { chain: ChainId }) {
         subtitle={<span className="hidden sm:inline">Meme themes on {CHAINS[chain].name}, ranked by trading heat</span>}
         actions={<SegmentedControl value={sort} onChange={setSort} items={SORTS} aria-label="Sort narratives" />}
       />
-      {q.isError && !q.data ? (
+      {failed !== null && !q.data ? (
         <div className="panel">
-          <ErrorState title="Couldn’t load narratives" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+          <ErrorState title="Couldn’t load narratives" error={failed} onRetry={() => void q.refetch()} retrying={q.isFetching} />
         </div>
       ) : q.isLoading ? (
         <>

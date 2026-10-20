@@ -11,7 +11,7 @@ import { CHAIN_IDS, LAUNCHPADS, PLATFORM_FEE_RATE, type MetaResponse } from '@tr
 import { Accounts, registerAccountRoutes } from './accounts';
 import { Analytics, registerMarketRoutes } from './analytics';
 import { HttpError, sendError, type AppConfig, type AppContext } from './context';
-import { loadSnapshot, saveSnapshot, SNAPSHOT_VERSION, type Snapshot } from './persistence';
+import { loadSnapshot, saveSnapshot, saveSnapshotAsync, SNAPSHOT_VERSION, type Snapshot } from './persistence';
 import { congestionOf, priorityFeeTiers } from './sim/congestion';
 import { Engine } from './sim/engine';
 import { MarketSim } from './sim/market';
@@ -23,8 +23,14 @@ export interface BuiltApp {
   app: FastifyInstance;
   ctx: AppContext;
   market: MarketSim;
-  /** Persist a snapshot now (no-op when persistence is disabled). */
+  /** Persist a snapshot now, in one blocking pass (no-op when persistence is disabled). */
   save(): void;
+  /**
+   * Persist a snapshot a slice at a time with the sim held, so requests and sockets
+   * stay served meanwhile (the periodic save). Resolves when written; overlapping
+   * calls share the save in progress.
+   */
+  saveInBackground(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -37,8 +43,10 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     warmupMinutes: Number(process.env.WARMUP_MINUTES ?? 90),
     snapshotEveryMs: Number(process.env.SNAPSHOT_EVERY_MS ?? 900000),
     webDist: process.env.WEB_DIST ?? null,
-    trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true',
+    trustProxy: proxyHops(process.env.TRUST_PROXY),
     accountCreationsPerIpPer10Min: Number(process.env.ACCOUNT_CREATIONS_PER_IP ?? 30),
+    loginAttemptsPerIpPer10Min: Number(process.env.LOGIN_ATTEMPTS_PER_IP ?? 60),
+    wsConnectionsPerIp: Number(process.env.WS_CONNECTIONS_PER_IP ?? 20),
     ...overrides,
   };
 }
@@ -49,7 +57,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
 
   const world = snapshot ? World.restore(snapshot.world) : new World(config.seed);
   const engine = new Engine(world);
-  const hub = new Hub();
+  const hub = new Hub({ maxConnectionsPerIp: config.wsConnectionsPerIp });
   const ctx = { config, world, engine, hub } as AppContext;
   const accounts = new Accounts(ctx);
   const analytics = new Analytics(ctx);
@@ -79,18 +87,28 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   }
 
   // Headers up to 128KB so list URLs can carry exclusion filters (the `filters` param itself stops at 64KB).
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy, http: { maxHeaderSize: 128 * 1024 } });
+  // Trust a hop count, never every hop: with `true` the client's own leftmost X-Forwarded-For entry
+  // would become req.ip, so anyone could pick the address the per-IP limits count against.
+  const hops = config.trustProxy === true ? 1 : config.trustProxy || 0;
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: hops > 0 ? hops : false, http: { maxHeaderSize: 128 * 1024 } });
   await app.register(cors, { origin: true });
-  // List snapshots are large, repetitive JSON: permessage-deflate shrinks them ~10x. Subscriptions
-  // may carry a whole blacklist in their filters (up to 2 x 500 addresses per list).
+  // List snapshots are large, repetitive JSON: permessage-deflate shrinks them ~10x. Every deflate job
+  // shares ws's process-wide queue (concurrencyLimit), so only frames over `threshold` are compressed:
+  // pongs, acks, fills, orders, balances, trades and candles skip the queue. ws applies the threshold
+  // only with server_no_context_takeover (otherwise it deflates every frame, however small).
+  // Subscriptions may carry a whole blacklist in their filters (up to 2 x 500 addresses per list).
   await app.register(websocket, {
-    options: { maxPayload: 256 * 1024, perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 3 }, concurrencyLimit: 4 } },
+    options: {
+      maxPayload: 256 * 1024,
+      perMessageDeflate: { threshold: 16 * 1024, serverNoContextTakeover: true, zlibDeflateOptions: { level: 3 }, concurrencyLimit: 4 },
+    },
   });
   const headers = securityHeaders(config.webDist);
   app.addHook('onRequest', async (_req, reply) => {
     reply.headers(headers);
   });
-  installAccountCreationLimit(app, config.accountCreationsPerIpPer10Min);
+  installIpLimit(app, ['/api/auth/guest', '/api/auth/register'], config.accountCreationsPerIpPer10Min, 'too many new accounts from this address');
+  installIpLimit(app, ['/api/auth/login'], config.loginAttemptsPerIpPer10Min, 'too many sign-in attempts from this address');
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return sendError(reply, err);
@@ -101,8 +119,10 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     return reply.status(500).send({ error: 'internal error' });
   });
 
-  app.get('/ws', { websocket: true }, (socket) => {
-    hub.attach(socket);
+  // Sockets count against their client IP (behind a remote proxy set TRUST_PROXY, or every user shares
+  // the proxy's IP); loopback peers (local dev proxy, same-host reverse proxy, tests) are not capped.
+  app.get('/ws', { websocket: true }, (socket, req) => {
+    hub.attach(socket, connectionCapAddress(req.ip, req.socket.remoteAddress));
   });
 
   app.get('/api/health', async () => ({ ok: true, now: world.now, tokens: world.tokens.size, clients: hub.clientCount, tps: engine.tps }));
@@ -116,6 +136,8 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   // `market` channel: chain-level info every 5s.
   hub.register('market', {
     onSubscribe(sub) {
+      // pushes go to the exact name only: a `market:<x>` subscription would never hear again
+      if (sub.ch !== 'market') throw new Error('invalid channel (market)');
       hub.send(sub, 'market', buildMeta(ctx).chains);
     },
   });
@@ -129,29 +151,56 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     });
   }
 
+  // Section order is write order: analytics (derived, and the bulk of the file) goes last.
+  const capture = (): Snapshot => ({
+    version: SNAPSHOT_VERSION,
+    savedAt: Date.now(),
+    world: world.serialize(),
+    market: market.serialize(),
+    accounts: ctx.accounts.serialize(),
+    trading: ctx.trading.serialize(),
+    analytics: ctx.analytics.serialize(),
+  });
   const save = () => {
     if (!persist) return;
-    const snap: Snapshot = {
-      version: SNAPSHOT_VERSION,
-      savedAt: Date.now(),
-      world: world.serialize(),
-      market: market.serialize(),
-      accounts: ctx.accounts.serialize(),
-      analytics: ctx.analytics.serialize(),
-      trading: ctx.trading.serialize(),
-    };
     try {
-      saveSnapshot(config.dataDir, snap);
+      saveSnapshot(config.dataDir, capture());
     } catch (err) {
       console.error('[app] snapshot failed', err);
     }
   };
+  // The captured state references live objects: hold the sim while the ledger and everything that
+  // refers to it (world, market, accounts, trading) is written, so those slices agree (only user actions
+  // in those seconds can still land in between). Analytics is derived rolling state: the sim runs again
+  // while it is written, so live streams and order triggers stall only for the ledger part (the engine
+  // then catches up in tick-sized steps), and its drift of a few trades heals with the next ones.
+  let saving: Promise<void> | null = null;
+  let closed = false;
+  const saveInBackground = (): Promise<void> => {
+    if (!persist || closed) return Promise.resolve();
+    if (saving) return saving;
+    const release = engine.hold();
+    saving = saveSnapshotAsync(config.dataDir, capture(), (section) => {
+      if (section === 'analytics') release();
+    })
+      .catch((err) => console.error('[app] snapshot failed', err))
+      .finally(() => {
+        release();
+        saving = null;
+      });
+    return saving;
+  };
 
   let snapTimer: NodeJS.Timeout | null = null;
+  let stopHeartbeat: (() => void) | null = null;
   if (opts.start ?? true) {
+    // Build the leaderboards (seconds of work in a big world) before the port opens, not on the first
+    // live tick, when reconnecting clients resubscribe; the ticker keeps them fresh in time slices.
+    analytics.wallets.refreshLeaderboards();
     engine.start();
+    stopHeartbeat = hub.startHeartbeat();
     if (persist && config.snapshotEveryMs > 0) {
-      snapTimer = setInterval(save, config.snapshotEveryMs);
+      snapTimer = setInterval(() => void saveInBackground(), config.snapshotEveryMs);
       snapTimer.unref?.();
     }
   }
@@ -161,9 +210,13 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     ctx,
     market,
     save,
+    saveInBackground,
     async close() {
+      closed = true;
       if (snapTimer) clearInterval(snapTimer);
+      stopHeartbeat?.();
       engine.stop();
+      if (saving) await saving;
       save();
       await app.close();
     },
@@ -214,25 +267,47 @@ function inlineScriptHashes(webDist: string | null): string[] {
   return hashes;
 }
 
+function isLoopback(ip: string): boolean {
+  return ip === '::1' || ip.startsWith('127.') || ip.startsWith('::ffff:127.');
+}
+
 /**
- * Guest and register endpoints need no auth and each new account adds wallets
- * to the world, so cap them per client IP (set TRUST_PROXY behind a proxy, or
- * every user shares the proxy's IP).
+ * The address a WebSocket counts against for the per-IP cap, or null for an uncapped local client. Both
+ * the client address and the transport peer must be loopback: a remote client claiming 127.0.0.1 in
+ * X-Forwarded-For (TRUST_PROXY on, port reachable directly) is still capped.
  */
-function installAccountCreationLimit(app: FastifyInstance, perWindow: number): void {
+export function connectionCapAddress(clientIp: string, peerIp: string | undefined): string | null {
+  return isLoopback(clientIp) && isLoopback(peerIp ?? '') ? null : clientIp;
+}
+
+/** TRUST_PROXY: `1` / `true` trusts the one proxy in front, `N` a chain of N proxies; anything else is off. */
+function proxyHops(raw: string | undefined): number {
+  if (raw === 'true') return 1;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Cap unauthenticated POST endpoints per client IP per 10 minutes (set TRUST_PROXY behind a proxy,
+ * or every user shares the proxy's IP): guest and register each add wallets to the world, and every
+ * login runs a password hash, whether or not the username exists.
+ */
+function installIpLimit(app: FastifyInstance, routes: string[], perWindow: number, what: string): void {
   if (perWindow <= 0) return;
   const WINDOW_MS = 10 * 60_000;
   const hits = new Map<string, { count: number; resetAt: number }>();
-  const limited = new Set(['/api/auth/guest', '/api/auth/register']);
+  const limited = new Set(routes);
   app.addHook('onRequest', async (req, reply) => {
-    if (req.method !== 'POST' || !limited.has(req.url.split('?')[0])) return;
+    // Match the route the router resolved, not the raw URL: any spelling that reaches the
+    // handlers (percent-encoded letters, e.g. /api/auth/gues%74) must count too.
+    if (req.method !== 'POST' || !limited.has(req.routeOptions.url ?? '')) return;
     const now = Date.now();
     if (hits.size > 10_000) for (const [ip, h] of hits) if (h.resetAt <= now) hits.delete(ip);
     let h = hits.get(req.ip);
     if (!h || h.resetAt <= now) hits.set(req.ip, (h = { count: 0, resetAt: now + WINDOW_MS }));
     if (++h.count > perWindow) {
       const retry = Math.ceil((h.resetAt - now) / 1000);
-      return reply.status(429).header('retry-after', String(retry)).send({ error: `too many new accounts from this address, try again in ${retry}s`, code: 'rate_limited' });
+      return reply.status(429).header('retry-after', String(retry)).send({ error: `${what}, try again in ${retry}s`, code: 'rate_limited' });
     }
   });
 }

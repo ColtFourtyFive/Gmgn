@@ -48,6 +48,7 @@ const schemas = {
     minUsd: z.coerce.number().finite().min(0).optional(),
     limit: intParam(1, 500),
     before: z.coerce.number().finite().optional(),
+    beforeId: z.string().min(1).max(100).optional(),
   }),
   holders: z.object({ tag: z.enum(WALLET_TAG_FILTERS).optional(), limit: intParam(1, 500) }),
   topTraders: z.object({
@@ -196,6 +197,6 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
     const q = parseQuery(schemas.search, req);
     let chain: ChainId | undefined;
     if (q.chain !== undefined && q.chain !== '' && q.chain !== 'all') chain = parseChain(q.chain);
-    return ta().search(q.q ?? '', chain);
+    return ta().search(q.q ?? '', chain, viewerOf(ctx, req));
   });
 }

@@ -2,12 +2,13 @@
 // search, routes, realtime channels, performance and rug-ratio evaluation.
 
 import { deserialize, serialize } from 'node:v8';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   CHAIN_IDS,
   EARLY_BUYERS_LIMIT,
   STAT_WINDOWS,
   launchpadsFor,
+  type Candle,
   type ChainId,
   type EarlyBuyersResponse,
   type Position,
@@ -15,6 +16,7 @@ import {
   type TokenFilters,
   type TokenSummary,
   type Trade,
+  type TrenchesSnapshot,
   type WalletTag,
   type WindowStats,
   type WsServerMessage,
@@ -29,6 +31,7 @@ import {
   parseTrenchesFiltersParam,
 } from '../src/analytics/filters';
 import { tokenAnalyticsFor, type TokenAnalytics } from '../src/analytics/tokens';
+import { parseTrenchesSub } from '../src/analytics/tokens/channels';
 import { RUG_WEIGHTS, rugRatio, rugSignals, safetyScore, type RugInputs, type SafetyInputs } from '../src/analytics/tokens/security';
 import { computeWindows, computeWindowsCached, multiWindowStats, priceChangeAt, repriceWindows, type WindowsBase } from '../src/analytics/tokens/stats';
 import type { TokenFate, TokenState, WalletState, World } from '../src/sim/world';
@@ -829,6 +832,33 @@ describe('holders and top traders', () => {
     const before = all[1].timestamp;
     expect(fx.ta.trades(t, { before }, { accountId: null }).every((x) => x.timestamp < before)).toBe(true);
   });
+
+  it('pages trades sharing a millisecond without losing any (before + beforeId cursor)', async () => {
+    const { t } = tokenWithBuyers(fx, 'sol', 'PGE', 2);
+    for (let burst = 0; burst < 5; burst++) {
+      for (let i = 0; i < 4; i++) buy(fx, wallet(fx, 'sol'), t, 0.05); // one block, one timestamp
+      tick(fx, 400);
+    }
+    const all = fx.ta.trades(t, { limit: 500 }, { accountId: null });
+    const pageAll = (limit: number, withId: boolean) => {
+      const seen: string[] = [];
+      let page = fx.ta.trades(t, { limit }, { accountId: null });
+      while (page.length) {
+        seen.push(...page.map((x) => x.id));
+        const last = page[page.length - 1];
+        page = fx.ta.trades(t, { limit, before: last.timestamp, ...(withId ? { beforeId: last.id } : {}) }, { accountId: null });
+      }
+      return seen;
+    };
+    for (const limit of [3, 7]) expect(pageAll(limit, true)).toEqual(all.map((x) => x.id));
+    expect(pageAll(3, false).length).toBeLessThan(all.length); // time alone skips the rest of a split millisecond
+    // a cursor that left the ring falls back to `before`; with nothing else to go on, the page is empty
+    expect(fx.ta.trades(t, { before: all[3].timestamp, beforeId: 'tx_gone' }, { accountId: null })[0].timestamp).toBeLessThan(all[3].timestamp);
+    expect(fx.ta.trades(t, { beforeId: 'tx_gone' }, { accountId: null })).toEqual([]);
+    // over REST
+    const res = await fx.built.app.inject({ method: 'GET', url: `/api/sol/tokens/${t.address}/trades?limit=2&before=${all[1].timestamp}&beforeId=${all[1].id}` });
+    expect((res.json() as Trade[]).map((x) => x.id)).toEqual(all.slice(2, 4).map((x) => x.id));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1104,12 +1134,15 @@ describe('safety score', () => {
     expect(score(clean({ top10HolderRate: 0.4 }))).toEqual(score(clean({ top10HolderRate: 0.4 })));
   });
 
-  it('weights holder deductions 0.4375 (worst tier per field) and lists the 6 largest reasons', () => {
+  it('weights holder deductions 0.4375 (worst tier per field) and folds reasons past 6 into "other"', () => {
     const s = score(clean({ top10HolderRate: 0.35, devHoldRate: 0.06, bundlerRate: 0.2, sniperHoldRate: 0.1, insiderHoldRate: 0.02, botDegenRate: 0.6, freshWalletRate: 0.6 }));
     // 14 + 20 + 10 + 6 + 5 + 6 + 8 = 69 points x 0.4375
     expect(s.score).toBe(Math.round(100 - 69 * 0.4375));
     expect(s.band).toBe('safe');
-    expect(keys(s)).toEqual(['dev', 'top10', 'bundlers', 'fresh', 'bots', 'snipers']);
+    // the 5 largest, and snipers (6) + insiders (5) points summed: the reasons still explain the whole gap
+    expect(keys(s)).toEqual(['dev', 'top10', 'other', 'bundlers', 'fresh', 'bots']);
+    expect(s.reasons[2]).toEqual({ key: 'other', label: '2 more checks', impact: 4.8, level: 'warn' });
+    expect(impactSum(s)).toBeCloseTo(69 * 0.4375, 1);
     expect(s.reasons[0]).toEqual({ key: 'dev', label: 'Dev holds 6.0%', impact: 8.8, level: 'bad' });
     expect(s.reasons[1]).toMatchObject({ key: 'top10', impact: 6.1, level: 'warn' });
     // a field over its top tier takes only that tier
@@ -1156,6 +1189,8 @@ describe('safety score', () => {
     expect(bad.band).toBe('danger');
     expect(bad.reasons).toHaveLength(6);
     expect(bad.reasons.map((r) => r.impact)).toEqual([...bad.reasons.map((r) => r.impact)].sort((a, b) => b - a));
+    expect(bad.reasons.find((r) => r.key === 'other')).toMatchObject({ label: '3 more checks', level: 'bad' });
+    expect(impactSum(bad)).toBeCloseTo(100 - bad.score, 0);
   });
 
   it('reads unknown while most checks lack data (nobody holds the token yet)', () => {
@@ -1448,6 +1483,142 @@ describe('realtime channels', () => {
     buy(fx, buyers[0], t, 0.1);
     fx.ta.channels.flushToken();
     expect(sock.data(ch, 'trades')).toHaveLength(1);
+  });
+
+  it("pushes a candle's final state when the next bucket opens before its last change went out", async () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'WSR', 2);
+    const ch = `token:sol:${t.address}`;
+    const sock = new FakeSocket();
+    fx.ctx.hub.attach(sock as never);
+    fx.world.now = Math.ceil(fx.world.now / 1000) * 1000 + 100; // early in a 1s bucket
+    await sock.client({ op: 'sub', ch, params: { resolution: '1s' } });
+    const candles = () => sock.data(ch, 'candle').map((m) => (m.data as { candle: Candle }).candle);
+    buy(fx, buyers[0], t, 0.3);
+    fx.ta.channels.flushToken();
+    expect(candles()).toHaveLength(1);
+    const bucket = candles()[0].time;
+    tick(fx, 800);
+    buy(fx, buyers[1], t, 0.2); // e.g. a REST swap between ticks: lands after this tick's flush
+    tick(fx, 200);
+    buy(fx, buyers[0], t, 0.1); // the next tick's trades open the next bucket before the flush
+    fx.ta.channels.flushToken();
+    const arr = t.candles['1s'];
+    expect(candles().slice(1)).toEqual([arr[arr.length - 2], arr[arr.length - 1]]);
+    expect(candles()[1].time).toBe(bucket);
+    expect(candles()[2].time).toBeGreaterThan(bucket);
+    fx.ta.channels.flushToken(); // nothing changed since
+    expect(candles()).toHaveLength(3);
+    // a rolled-over candle that did not change after its last push is not repeated
+    tick(fx, 1000);
+    buy(fx, buyers[1], t, 0.1);
+    fx.ta.channels.flushToken();
+    expect(candles().slice(3)).toEqual([arr[arr.length - 1]]);
+  });
+
+  it('accepts list channels only as exactly <list>:<chain>', async () => {
+    const sock = new FakeSocket();
+    fx.ctx.hub.attach(sock as never);
+    const bad = ['trenches:sol:1', 'trenches:sol:', 'trending:sol:x', 'newpairs:sol:zz'];
+    for (const ch of bad) await sock.client({ op: 'sub', ch });
+    expect(sock.sent.filter((m) => m.op === 'error').map((m) => m.ch)).toEqual(bad);
+    expect(sock.sent.some((m) => m.op === 'ack')).toBe(false);
+  });
+
+  it('computes one list for viewers whose filters differ only in their blacklists', async () => {
+    const made = [0, 1, 2].map(() => tokenWithBuyers(fx, 'base', 'BLK', 1).t);
+    const viewers = [
+      { filters: { new: { excludeAddresses: [made[2].address] } }, limit: 5 },
+      { filters: { new: { excludeAddresses: [made[1].address], excludeKeywords: [made[0].symbol] } }, limit: 5 },
+      { limit: 3 },
+    ];
+    const socks = viewers.map(() => new FakeSocket());
+    for (let i = 0; i < viewers.length; i++) {
+      fx.ctx.hub.attach(socks[i] as never);
+      await socks[i].client({ op: 'sub', ch: 'trenches:base', params: viewers[i] });
+    }
+    const spy = vi.spyOn(fx.ta, 'trenches');
+    (fx.ta.channels as unknown as { publishLists(p: string): void }).publishLists('trenches');
+    expect(spy.mock.calls.filter(([q]) => q.chain === 'base')).toHaveLength(1);
+    spy.mockRestore();
+    for (let i = 0; i < viewers.length; i++) {
+      const pushed = socks[i].data('trenches:base', 'trenches').at(-1)!.data as TrenchesSnapshot;
+      // exactly what the viewer's own query computes
+      expect(pushed).toEqual(fx.ta.trenches(parseTrenchesSub('trenches:base', viewers[i])));
+    }
+    const newest = (i: number) => (socks[i].data('trenches:base', 'trenches').at(-1)!.data as TrenchesSnapshot).new.map((x) => x.address);
+    expect(newest(0)).not.toContain(made[2].address);
+    expect(newest(0)).toContain(made[1].address);
+    expect(newest(1)).not.toContain(made[1].address);
+    expect(newest(1)).not.toContain(made[0].address);
+    expect(newest(2)).toHaveLength(3);
+    for (const sock of socks) await sock.client({ op: 'unsub', ch: 'trenches:base' });
+  });
+
+  it("falls back to a viewer's own list when its blacklist empties the shared one", async () => {
+    const made = Array.from({ length: 45 }, () => tokenWithBuyers(fx, 'eth', 'BLE', 1).t);
+    const viewers = [{ limit: 1 }, { limit: 1, filters: { new: { excludeAddresses: made.slice(1).map((t) => t.address) } } }];
+    const socks = viewers.map(() => new FakeSocket());
+    for (let i = 0; i < viewers.length; i++) {
+      fx.ctx.hub.attach(socks[i] as never);
+      await socks[i].client({ op: 'sub', ch: 'trenches:eth', params: viewers[i] });
+    }
+    const spy = vi.spyOn(fx.ta, 'trenches');
+    (fx.ta.channels as unknown as { publishLists(p: string): void }).publishLists('trenches');
+    expect(spy.mock.calls.filter(([q]) => q.chain === 'eth')).toHaveLength(2); // shared + the exact fallback
+    spy.mockRestore();
+    for (let i = 0; i < viewers.length; i++) {
+      const pushed = socks[i].data('trenches:eth', 'trenches').at(-1)!.data as TrenchesSnapshot;
+      expect(pushed).toEqual(fx.ta.trenches(parseTrenchesSub('trenches:eth', viewers[i])));
+    }
+    const [own] = (socks[1].data('trenches:eth', 'trenches').at(-1)!.data as TrenchesSnapshot).new;
+    expect(made.slice(1).map((t) => t.address)).not.toContain(own.address);
+    for (const sock of socks) await sock.client({ op: 'unsub', ch: 'trenches:eth' });
+  });
+
+  it('forgets parsed list params as soon as their last subscriber leaves, even with no live list group', async () => {
+    const parsed = (fx.ta.channels as unknown as { parsed: Map<string, unknown> }).parsed;
+    const listKeys = () => [...parsed.keys()].filter((k) => /^(trenches|trending|newpairs):/.test(k));
+    const sock = new FakeSocket();
+    fx.ctx.hub.attach(sock as never);
+    const before = listKeys().length;
+    const lists = ['trenches:sol', 'trending:sol', 'newpairs:sol'] as const;
+    for (let i = 0; i < 30; i++) {
+      const ch = lists[i % 3];
+      const excludeAddresses = Array.from({ length: 20 }, (_, j) => `churn${i}x${j}`);
+      const params = ch === 'trenches:sol' ? { filters: { new: { excludeAddresses } } } : { filters: { excludeAddresses } };
+      await sock.client({ op: 'sub', ch, params });
+      await sock.client({ op: 'unsub', ch });
+    }
+    expect(sock.sent.filter((m) => m.op === 'error')).toEqual([]);
+    expect(listKeys()).toHaveLength(before);
+
+    // Two viewers of one group: the key stays until the last of them leaves; re-subscribing swaps it.
+    const other = new FakeSocket();
+    fx.ctx.hub.attach(other as never);
+    await sock.client({ op: 'sub', ch: 'newpairs:sol', params: { limit: 7 } });
+    await other.client({ op: 'sub', ch: 'newpairs:sol', params: { limit: 7 } });
+    await sock.client({ op: 'unsub', ch: 'newpairs:sol' });
+    expect(parsed.has('newpairs:sol|{"limit":7}')).toBe(true);
+    await other.client({ op: 'sub', ch: 'newpairs:sol', params: { limit: 8 } });
+    expect(parsed.has('newpairs:sol|{"limit":7}')).toBe(false);
+    expect(parsed.has('newpairs:sol|{"limit":8}')).toBe(true);
+    await other.client({ op: 'unsub', ch: 'newpairs:sol' });
+    expect(listKeys()).toHaveLength(before);
+  });
+
+  it("keeps a sole viewer's buffered trades when it re-subscribes with new params", async () => {
+    const { t, buyers } = tokenWithBuyers(fx, 'sol', 'WSR', 1);
+    const ch = `token:sol:${t.address}`;
+    const sock = new FakeSocket();
+    fx.ctx.hub.attach(sock as never);
+    await sock.client({ op: 'sub', ch, params: { resolution: '1m' } });
+    const tr = buy(fx, buyers[0], t, 0.1); // a user fill landing between engine ticks
+    await sock.client({ op: 'sub', ch, params: { resolution: '5m' } }); // chart resolution change
+    expect(fx.ta.channels.viewerCount(t)).toBe(1);
+    fx.ta.channels.flushToken();
+    expect(sock.data(ch, 'trades').flatMap((m) => (m.data as Trade[]).map((x) => x.id))).toContain(tr.id);
+    await sock.client({ op: 'unsub', ch });
+    expect(fx.ta.channels.viewerCount(t)).toBe(0);
   });
 
   it('never strands the last detail update when a trade lands inside the 1s cache floor', async () => {

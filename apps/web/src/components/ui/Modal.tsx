@@ -2,6 +2,7 @@ import { useId, useRef, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { HeadingScope } from './Heading';
 import { IconButton } from './IconButton';
 import { useOverlay } from './overlay';
 
@@ -85,7 +86,10 @@ export function Modal({
             {!hideClose && <IconButton label="Close" size="sm" icon={<X size={16} />} onClick={onClose} className="-mr-1.5 -mt-0.5" />}
           </div>
         )}
-        <div className={clsx('min-h-0 px-4 pb-4', !title && hideClose && 'pt-4', bodyClassName)}>{children}</div>
+        {/* The dialog has its own outline: its h2 title, then h3 sections, wherever it was opened from. */}
+        <div className={clsx('min-h-0 px-4 pb-4', !title && hideClose && 'pt-4', bodyClassName)}>
+          <HeadingScope level={3}>{children}</HeadingScope>
+        </div>
         {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3">{footer}</div>}
       </div>
     </div>,

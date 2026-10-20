@@ -6,6 +6,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { formatCompact, formatPrice, type AppNotification, type ChainId, type SwapReceipt, type UserWallet } from '@trenchscope/shared';
 import { routes } from '@/lib/chain';
 import { formatNativeFor } from '@/lib/format';
+import { playCue } from '@/lib/sounds';
 import { useChannel } from '@/lib/ws';
 import { useSession } from '@/store/session';
 import { toast, type ToastKind } from '@/store/toasts';
@@ -67,6 +68,7 @@ function arm(tradeId: string): void {
     if (claimed.has(tradeId)) return;
     claim(tradeId);
     toastFill(entry.receipt);
+    playCue('fill');
   }, FILL_TOAST_DELAY_MS);
 }
 
@@ -135,6 +137,7 @@ function notificationToast(n: AppNotification): void {
         ? { to: routes.wallet(n.chain, n.wallet), label: 'View wallet' }
         : undefined;
   toast.push({ kind, title: n.title, body: n.body, link });
+  playCue(kind === 'error' ? 'error' : kind === 'success' ? 'fill' : 'alert');
 }
 
 /** Apply one `user` channel event: caches, balance, unread count and toasts. */

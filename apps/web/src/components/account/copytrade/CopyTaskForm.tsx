@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatNative, type ChainId, type CopyTradeTask, type PresetId, type Range, type StrategySpec } from '@trenchscope/shared';
 import { Save } from 'lucide-react';
 import { DEFAULT_STRATEGY, StrategyEditor } from '@/components/trade/StrategyEditor';
-import { Button, Drawer, Field, Input, NumberInput, RangeInput, SegmentedControl, Toggle } from '@/components/ui';
+import { Button, Drawer, Field, focusFirstError, Input, NumberInput, RangeInput, SegmentedControl, Toggle } from '@/components/ui';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api, ApiError } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
@@ -152,7 +152,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
     setErrors({});
     const v = validate(form);
     if (Object.keys(v).length) {
-      requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${FORM_ID} [aria-invalid="true"]`)?.focus());
+      requestAnimationFrame(() => focusFirstError(FORM_ID));
       return;
     }
     const body: CopyBody = {
@@ -284,7 +284,7 @@ function CopyTaskDrawer({ onClose, chain, task, initialTarget = '' }: CopyTaskFo
 
         <FormSection title="Filters" description="Skip buys that don’t match. Leave empty to copy everything.">
           <Field label="Market cap at the target’s buy (USD)" error={shown.mcap}>
-            <RangeInput value={form.mcap} onChange={(v) => set('mcap', v)} prefix="$" label="Market cap" size="md" />
+            <RangeInput value={form.mcap} onChange={(v) => set('mcap', v)} prefix="$" label="Market cap" size="md" invalid={!!shown.mcap} />
           </Field>
           <Field label="Min liquidity (USD)" htmlFor={`${ids}-liq`} error={shown.minLiquidityUsd}>
             <NumberInput id={`${ids}-liq`} value={form.minLiquidityUsd} onChange={(v) => set('minLiquidityUsd', v)} min={0} step={1000} prefix="$" placeholder="Any" />

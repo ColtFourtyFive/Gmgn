@@ -64,6 +64,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { MOD_KEY } from '@/hooks/useHotkeys';
+import { scrollBehavior } from '@/hooks/useMediaQuery';
 import { useTheme } from '@/hooks/useTheme';
 import { openDock } from '@/store/dock';
 import { toast } from '@/store/toasts';
@@ -625,7 +626,7 @@ export default function UiGalleryPage() {
                 size="sm"
                 icon={<ArrowUpToLine size={14} />}
                 disabled={scrolled === 0}
-                onClick={() => tableScroll.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                onClick={() => tableScroll.current?.scrollTo({ top: 0, behavior: scrollBehavior() })}
               />
               <Toggle size="sm" label="Compact" checked={compact} onChange={setCompact} />
               <Toggle size="sm" label="Loading" checked={loading} onChange={setLoading} />

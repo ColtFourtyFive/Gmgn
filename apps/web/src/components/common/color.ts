@@ -21,11 +21,12 @@ export function contrastText(hex: string): string {
 
 /**
  * Tinted chip colors for an arbitrary color (hex or rgb()). The text is
- * pulled toward the theme foreground so pale brand colors stay legible in
- * the light theme and saturated ones in the dark theme.
+ * pulled toward the theme foreground (by --tint-text, set per theme in
+ * index.css) so pale brand colors stay legible (>= 4.5:1) in the light theme
+ * and saturated ones in the dark theme.
  */
 export function tint(color: string, alpha = 16): { color: string; backgroundColor: string } {
-  return { color: `color-mix(in srgb, ${color} 72%, rgb(var(--fg)))`, backgroundColor: `color-mix(in srgb, ${color} ${alpha}%, transparent)` };
+  return { color: `color-mix(in srgb, ${color} var(--tint-text), rgb(var(--fg)))`, backgroundColor: `color-mix(in srgb, ${color} ${alpha}%, transparent)` };
 }
 
 /** Resolve a theme token ("up", "accent") to an rgb() string with alpha, for canvas/WAAPI. */

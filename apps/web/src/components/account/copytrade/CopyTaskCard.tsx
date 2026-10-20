@@ -61,7 +61,9 @@ export interface CopyTaskCardProps {
 /** One copy-trade task: target, rules, stats and controls. */
 export function CopyTaskCard({ task, onEdit, onDelete, onToggle, toggling }: CopyTaskCardProps) {
   const profile = useWalletProfile(task.chain, task.target).data;
-  const name = task.label || profile?.remark || profile?.label || profile?.style.title || shortAddress(task.target);
+  // Identity, like the wallet page: the trading style is a shared archetype ("Money Printer"), shown as a badge.
+  const name = task.label || profile?.remark || profile?.label || shortAddress(task.target);
+  const style = profile?.style.title;
   const s = task.stats;
   const net = s.receivedNative - s.spentNative;
   return (
@@ -71,6 +73,11 @@ export function CopyTaskCard({ task, onEdit, onDelete, onToggle, toggling }: Cop
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-center gap-1.5">
             <span className="truncate font-semibold text-fg">{name}</span>
+            {style && (
+              <Badge title="Trading style" className="shrink-0">
+                {style}
+              </Badge>
+            )}
             {profile && <WalletTags tags={profile.tags} max={3} />}
           </p>
           <AddressLink chain={task.chain} address={task.target} className="text-xs text-muted" />

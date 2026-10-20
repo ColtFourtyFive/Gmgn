@@ -66,8 +66,7 @@ export default {
         toast: '70',
       },
       keyframes: {
-        'flash-up': { '0%': { backgroundColor: 'rgb(var(--up) / 0.28)' }, '100%': { backgroundColor: 'transparent' } },
-        'flash-down': { '0%': { backgroundColor: 'rgb(var(--down) / 0.28)' }, '100%': { backgroundColor: 'transparent' } },
+        // Live flashes fade a tinted overlay's opacity (FlashValue, .row-flash-* in index.css), never animate a color.
         'slide-in': { '0%': { transform: 'translateY(-8px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
         'slide-up': { '0%': { transform: 'translateY(8px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
         'fade-in': { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
@@ -79,8 +78,6 @@ export default {
         pulse2: { '0%,100%': { opacity: '1' }, '50%': { opacity: '0.45' } },
       },
       animation: {
-        'flash-up': 'flash-up 900ms ease-out',
-        'flash-down': 'flash-down 900ms ease-out',
         'slide-in': 'slide-in 240ms ease-out',
         'slide-up': 'slide-up 240ms ease-out',
         'fade-in': 'fade-in 140ms ease-out',

@@ -36,7 +36,7 @@ export class Analytics implements AnalyticsApi {
   trending: AnalyticsApi['trending'] = (q) => this.tokens.trending(q);
   newPairs: AnalyticsApi['newPairs'] = (chain, filters, limit) => this.tokens.newPairs(chain, filters, limit);
   narratives: AnalyticsApi['narratives'] = (chain) => this.tokens.narratives(chain);
-  search: AnalyticsApi['search'] = (q, chain) => this.tokens.search(q, chain);
+  search: AnalyticsApi['search'] = (q, chain, viewer) => this.tokens.search(q, chain, viewer);
 
   walletTags: AnalyticsApi['walletTags'] = (w) => this.wallets.tags(w);
   walletProfile: AnalyticsApi['walletProfile'] = (w, viewer) => this.wallets.profile(w, viewer);

@@ -28,7 +28,7 @@ function Congestion({ market: m }: { market: ChainMarketInfo }) {
   const symbol = CHAINS[m.chain].nativeSymbol;
   return (
     <Tooltip content={`${CHAINS[m.chain].name} network: ${load.label.toLowerCase()} (load ${Math.round(c.level * 100)}%). Suggested priority fee ${formatNative(m.priorityFee.medium, symbol)} (low ${formatNative(m.priorityFee.low)}, fast ${formatNative(m.priorityFee.high)}).`}>
-      <span className={clsx('flex items-center gap-1 text-2xs', load.text)} tabIndex={0} aria-label={`${CHAINS[m.chain].name} network ${load.label}`}>
+      <span className={clsx('flex items-center gap-1 text-2xs', load.text)} tabIndex={0} role="img" aria-label={`${CHAINS[m.chain].name} network ${load.label}`}>
         <span className={clsx('h-1.5 w-1.5 rounded-full', load.dot)} aria-hidden />
         {c.label !== 'normal' && <span className="hidden xl:inline">{load.label}</span>}
       </span>

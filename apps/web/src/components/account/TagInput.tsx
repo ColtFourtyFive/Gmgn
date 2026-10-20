@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useFieldDescription } from '@/components/ui';
 
 export interface TagInputProps {
   value: string[];
@@ -48,6 +49,7 @@ export function TagInput({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const errId = useId();
+  const fieldDescription = useFieldDescription(id, clsx(describedBy, error && errId) || undefined);
   const full = max !== undefined && value.length >= max;
 
   /** Try to add entries; returns the ones that could not be added. */
@@ -145,7 +147,7 @@ export function TagInput({
           placeholder={full ? `Limit of ${max} reached` : value.length ? undefined : placeholder}
           aria-label={ariaLabel}
           aria-invalid={invalid || !!error || undefined}
-          aria-describedby={clsx(describedBy, error && errId) || undefined}
+          aria-describedby={fieldDescription}
           autoComplete="off"
           spellCheck={false}
           onChange={(e) => {

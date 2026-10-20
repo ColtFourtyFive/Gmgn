@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { Check, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { Floating, type Placement } from './Floating';
+import { useFieldDescription, useFieldLabelId } from './Input';
 
 export interface SelectOption<T extends string | number> {
   value: T;
@@ -54,6 +55,13 @@ export function Select<T extends string | number>({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
+  const labelId = useId();
+  const valueId = useId();
+  // Name = label + current value ("Sort trending by Hot (rank)"): the value is what is
+  // on screen (speech input, Label in Name) and what a screen reader should hear.
+  const fieldLabelId = useFieldLabelId(id);
+  const labelledBy = ariaLabel ? `${labelId} ${valueId}` : fieldLabelId ? `${fieldLabelId} ${valueId}` : undefined;
+  const describedBy = useFieldDescription(id);
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selected = options[selectedIndex];
 
@@ -118,7 +126,8 @@ export function Select<T extends string | number>({
         id={id}
         type="button"
         disabled={disabled}
-        aria-label={ariaLabel}
+        aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -132,7 +141,12 @@ export function Select<T extends string | number>({
           className,
         )}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+        {ariaLabel && (
+          <span id={labelId} hidden>
+            {ariaLabel}
+          </span>
+        )}
+        <span id={valueId} className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
           {renderValue ? (
             renderValue(selected)
           ) : selected ? (
@@ -161,6 +175,8 @@ export function Select<T extends string | number>({
           role="listbox"
           tabIndex={-1}
           aria-label={ariaLabel}
+          // Labelled through a Field: the listbox takes the Field label's name.
+          aria-labelledby={ariaLabel ? undefined : fieldLabelId}
           aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
           onKeyDown={onListKey}
           className="outline-none"
@@ -179,13 +195,14 @@ export function Select<T extends string | number>({
                 className={clsx(
                   'flex cursor-pointer items-center gap-2 rounded px-2 text-sm',
                   sm ? 'h-7' : 'h-8',
-                  i === active && 'bg-panel-3',
+                  i === active && 'option-active',
                   o.disabled ? 'cursor-not-allowed opacity-40' : 'text-fg',
                 )}
               >
                 {o.icon}
                 <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                {o.hint && <span className="num text-xs text-faint">{o.hint}</span>}
+                {/* text-muted: the active row is panel-3, where text-faint is under 4.5:1. */}
+                {o.hint && <span className="num text-xs text-muted">{o.hint}</span>}
                 <Check size={13} className={clsx('shrink-0 text-accent', !isSelected && 'invisible')} />
               </li>
             );

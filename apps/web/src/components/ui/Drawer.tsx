@@ -2,6 +2,7 @@ import { useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { HeadingScope } from './Heading';
 import { IconButton } from './IconButton';
 import { useOverlay } from './overlay';
 
@@ -50,7 +51,10 @@ export function Drawer({ open, onClose, side = 'right', title, children, footer,
           </h2>
           <IconButton label="Close" size="sm" icon={<X size={16} />} onClick={onClose} />
         </div>
-        <div className={clsx('min-h-0 flex-1 overflow-y-auto', bodyClassName)}>{children}</div>
+        {/* The dialog has its own outline: its h2 title, then h3 sections, wherever it was opened from. */}
+        <div className={clsx('min-h-0 flex-1 overflow-y-auto', bodyClassName)}>
+          <HeadingScope level={3}>{children}</HeadingScope>
+        </div>
         {footer && <div className="shrink-0 border-t border-line p-3">{footer}</div>}
       </div>
     </div>,

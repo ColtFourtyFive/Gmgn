@@ -6,7 +6,7 @@ export { TokenFeed, TokenFeedContext, useLiveTrades, useTokenFeed } from './feed
 export { HolderStrip } from './HolderStrip';
 export { MobileTradeBar, TokenNotFound, TokenPageSkeleton } from './PageStates';
 export { PriceChart, type PriceChartProps } from './PriceChart';
-export { isNotFound, tokenKeys, useChartUnit, useMyPosition, useTokenDetail, useTokenOrders, useTokenStream } from './queries';
+export { isNotFound, tokenKeys, useChartUnit, useMyPosition, useTokenDetail, useTokenOrders, useTokenStream, useValueCurrency } from './queries';
 export { RugGauge, SecurityPanel } from './SecurityPanel';
 export { StatsStrip } from './StatsStrip';
 export { useTokenUi, type BottomTab, type MobileTab, type TradeMode, type TradeSide } from './store';

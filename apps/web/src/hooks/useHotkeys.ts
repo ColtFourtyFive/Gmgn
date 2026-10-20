@@ -42,6 +42,15 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
+const CONTROL =
+  'a[href],button,summary,[role="button"],[role="link"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="tab"],[role="checkbox"],[role="radio"],[role="switch"],[role="treeitem"],[tabindex]:not([tabindex="-1"])';
+
+/** Enter / Space on a focused control activate it: a page shortcut must not take them over. */
+function activatesControl(e: KeyboardEvent): boolean {
+  if (e.key !== 'Enter' && e.key !== ' ') return false;
+  return e.target instanceof Element && e.target.closest(CONTROL) !== null;
+}
+
 /** A Modal or Drawer is open: page shortcuts must not act behind it. */
 function modalOpen(): boolean {
   return document.querySelector('[aria-modal="true"]') !== null;
@@ -49,7 +58,8 @@ function modalOpen(): boolean {
 
 /**
  * Global keyboard shortcuts. Ignored while typing in inputs (unless
- * `allowInInputs`) and while a Modal/Drawer is open; pass
+ * `allowInInputs`), while a Modal/Drawer is open, and for Enter / Space on a
+ * focused link, button or other control (they activate it); pass
  * `enabled: display.hotkeys` for trading shortcuts so the user's settings
  * toggle applies. Handlers may change every render.
  */
@@ -62,7 +72,7 @@ export function useHotkeys(map: HotkeyMap, opts: { enabled?: boolean; allowInInp
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
-      if ((!allowInInputs && isTypingTarget(e.target)) || modalOpen()) return;
+      if ((!allowInInputs && isTypingTarget(e.target)) || modalOpen() || activatesControl(e)) return;
       for (const [combo, handler] of Object.entries(mapRef.current)) {
         if (matches(parse(combo), e)) {
           e.preventDefault();

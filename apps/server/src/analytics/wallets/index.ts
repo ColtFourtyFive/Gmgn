@@ -46,6 +46,7 @@ import {
 } from './signals';
 import {
   WalletTrack,
+  addToDistribution,
   computeStyle,
   dailySeries,
   dayStart,
@@ -246,6 +247,7 @@ export class WalletAnalytics {
         this.dirty.delete(a);
       }
     });
+    world.on('positionPruned', (w, pos) => this.onPositionPruned(w, pos));
     world.on('tokenMigrated', (t) => this.signalEngine.onMigrated(t));
     world.on('tokenFlag', (t, flag) => this.signalEngine.onFlag(t, flag));
     world.on('kolCall', (t, w) => this.signalEngine.onKolCall(t, w));
@@ -257,19 +259,23 @@ export class WalletAnalytics {
 
     hub.register('feed', {
       onSubscribe: (sub) => {
-        const [, chain, kind] = sub.ch.split(':');
-        if (!isChainId(chain) || !FEED_KINDS.includes(kind as FeedKind)) throw new Error('invalid feed channel (feed:<chain>:<smart|kol|follow|all>)');
+        const parts = sub.ch.split(':');
+        const [, chain, kind] = parts;
+        if (parts.length !== 3 || !isChainId(chain) || !FEED_KINDS.includes(kind as FeedKind)) throw new Error('invalid feed channel (feed:<chain>:<smart|kol|follow|all>)');
         if (kind === 'follow' && !sub.client.accountId) throw new Error('auth required');
         // Deliver pending batches to existing subscribers first so the snapshot and the
         // next batch never overlap (the new subscription is registered after this returns).
         this.flushRealtime();
-        hub.send(sub, 'feed', this.feed(chain, kind as FeedKind, 50, { accountId: sub.client.accountId }));
+        // Broadcast kinds carry no viewer-relative tags or remarks, in the snapshot as in the
+        // batches (clients add them locally); only the per-viewer follow feed is decorated.
+        hub.send(sub, 'feed', this.feed(chain, kind as FeedKind, 50, kind === 'follow' ? { accountId: sub.client.accountId } : ANON));
       },
     });
     hub.register('signals', {
       onSubscribe: (sub) => {
-        const [, chain] = sub.ch.split(':');
-        if (!isChainId(chain)) throw new Error('invalid signals channel (signals:<chain>)');
+        const parts = sub.ch.split(':');
+        const chain = parts[1];
+        if (parts.length !== 2 || !isChainId(chain)) throw new Error('invalid signals channel (signals:<chain>)');
         hub.send(sub, 'signals', this.signals(chain, { limit: 50 }));
       },
     });
@@ -325,6 +331,17 @@ export class WalletAnalytics {
     }
     this.perf.trades++;
     if (this.perf.profiling) this.perf.tradeMs += performance.now() - t0;
+  }
+
+  /**
+   * A simulated position dropped with its pruned token (its totals are already in w.pruned): keep its
+   * PnL bucket for the all-time distribution, and its lifetime cost as the ratio base of a period in
+   * which the token was only sold.
+   */
+  private onPositionPruned(w: WalletState, pos: PositionState): void {
+    if (w.pruned) w.pruned.distribution = addToDistribution(w.pruned.distribution, pos);
+    const rec = this.tracks.get(w.address)?.tokens.get(pos.token);
+    if (rec) rec.bu = pos.boughtUsd;
   }
 
   private creditHit = (e: PendingEntry): void => {
@@ -411,7 +428,8 @@ export class WalletAnalytics {
     const now = world.now;
     const tr = this.tracks.get(w.address);
     const out = new Set<WalletTag>();
-    const traded = w.positions.size > 0;
+    const pruned = w.pruned?.tokens ?? 0;
+    const traded = w.positions.size + pruned > 0;
 
     if (tr && tr.sandwiches >= SANDWICH_MIN && tr.sandwiches >= SANDWICH_MIN_SHARE * tr.sellsAll) out.add('sandwich');
 
@@ -430,7 +448,7 @@ export class WalletAnalytics {
       if (balUsd >= WHALE_MIN_BALANCE_USD || avgBuy >= WHALE_MIN_AVG_BUY_USD) out.add('whale');
     }
 
-    if (now - w.createdAt < FRESH_MAX_AGE_MS && w.positions.size < FRESH_MAX_TOKENS) out.add('fresh');
+    if (now - w.createdAt < FRESH_MAX_AGE_MS && w.positions.size + pruned < FRESH_MAX_TOKENS) out.add('fresh');
 
     // Smart money excludes bots, sandwichers and snipers (sniping profits come from speed, not selection).
     if (tr && !out.has('bot') && !out.has('sandwich') && !out.has('sniper')) {
@@ -467,7 +485,14 @@ export class WalletAnalytics {
         this.tracks.delete(a);
         continue;
       }
-      for (const tok of tr.tokens.keys()) if (!world.tokens.has(tok)) tr.tokens.delete(tok);
+      // A deleted token's record stays while a bucket still counts the token: its lifetime cost (rec.bu)
+      // is the ratio base of a period in which it was only sold (the position itself is gone).
+      let counted: Set<string> | null = null;
+      for (const tok of tr.tokens.keys()) {
+        if (world.tokens.has(tok)) continue;
+        counted ??= tr.bucketTokens();
+        if (!counted.has(tok)) tr.tokens.delete(tok);
+      }
     }
     this.entries.prune(now - 8 * DAY_MS, (tok) => world.tokens.has(tok));
     this.signalEngine.prune();
@@ -650,15 +675,28 @@ export class WalletAnalytics {
     };
   }
 
-  /** Recent trades of the wallet, newest first (ring of 100; 1000 for user wallets). */
-  activity(w: WalletState, opts: { limit?: number; before?: number; type?: string }, viewer: Viewer): FeedItem[] {
+  /**
+   * Recent trades of the wallet, newest first (ring of 100; 1000 for user wallets). A `beforeId` cursor
+   * (the last trade id seen) resumes right after that trade; without one (or once it has left the
+   * ring) `before` pages by time alone.
+   */
+  activity(w: WalletState, opts: { limit?: number; before?: number; beforeId?: string; type?: string }, viewer: Viewer): FeedItem[] {
     const tr = this.tracks.get(w.address);
     if (!tr) return [];
     const limit = Math.max(1, Math.min(tr.act.cap, Math.floor(opts.limit ?? 50)));
     const type = opts.type === 'buy' || opts.type === 'sell' ? opts.type : 'all';
-    const before = opts.before;
+    let before = opts.before;
+    let start = 0;
+    if (opts.beforeId !== undefined) {
+      let at = 0;
+      while (at < tr.act.size && tr.act.at(at)!.trade.id !== opts.beforeId) at++;
+      if (at < tr.act.size) {
+        start = at + 1;
+        before = undefined;
+      } else if (before === undefined) return [];
+    }
     const out: FeedItem[] = [];
-    for (let i = 0; i < tr.act.size && out.length < limit; i++) {
+    for (let i = start; i < tr.act.size && out.length < limit; i++) {
       const e = tr.act.at(i)!;
       if (before !== undefined && e.trade.timestamp >= before) continue;
       if (type !== 'all' && e.trade.side !== type) continue;
@@ -713,18 +751,13 @@ export class WalletAnalytics {
 
   /**
    * Ticker (every 1s, live only): advances a time-sliced rebuild of the stalest
-   * chain's leaderboard snapshot within LEADERBOARD_SLICE_MS, so a refresh never
-   * blocks the event loop for long; each chain refreshes about every 30s.
+   * chain's leaderboard snapshot (a missing one first) within LEADERBOARD_SLICE_MS,
+   * so a refresh never blocks the event loop for long; each chain refreshes about
+   * every 30s. The server builds every chain before it starts listening (app.ts).
    */
   leaderboardTick(): void {
     const world = this.ctx.world;
     const now = world.now;
-    // First live tick after warmup / restore: build every chain once, synchronously
-    // (~0.2-0.3s at boot), so the first leaderboard requests never block on a rebuild.
-    if (this.lb.size === 0 && !this.lbJob) {
-      this.refreshLeaderboards();
-      return;
-    }
     if (!this.lbJob) {
       let pick: ChainId | null = null;
       let oldest = Infinity;

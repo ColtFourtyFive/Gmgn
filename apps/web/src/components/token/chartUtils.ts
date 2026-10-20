@@ -75,6 +75,44 @@ export function formatAxis(value: number, unit: ChartUnit, currency: ChartCurren
   return formatPrice(value, 4);
 }
 
+/**
+ * Smallest difference `formatAxis` shows at the magnitude of `value`: labels
+ * keep two decimals of K/M/B/T (one from 100, two below), and four
+ * significant digits for prices below 1 (three for market caps).
+ */
+export function axisResolution(value: number, unit: ChartUnit, currency: ChartCurrency = 'usd'): number {
+  const abs = Math.abs(value);
+  if (!Number.isFinite(abs) || abs === 0) return 0;
+  const significant = (n: number) => 10 ** (Math.floor(Math.log10(abs)) - n + 1);
+  const compact = () => {
+    for (const size of [1e12, 1e9, 1e6, 1e3]) if (abs >= size) return size / 100;
+    return abs >= 100 ? 0.1 : 0.01;
+  };
+  if (unit === 'mcap') return abs >= 1 ? compact() : significant(3);
+  if (abs < 1) return significant(4);
+  if (currency === 'native') return 1e-4;
+  return abs >= 1000 ? compact() : abs >= 100 ? 0.01 : 1e-4;
+}
+
+/** Pixels per tick label on the price axis (lightweight-charts: 2.5 × the 11px axis font). */
+export const AXIS_TICK_PX = Math.ceil(11 * 2.5);
+
+/**
+ * Autoscale range that keeps the price axis readable: at least one label step
+ * (axisResolution) per tick slot of a `heightPx` tall scale. The scale spaces
+ * ticks by price per pixel, so a flat or very narrow range (a token that just
+ * launched, a quiet stretch) would otherwise put several ticks within one
+ * label step and print the same label over and over. Wider ranges are kept.
+ */
+export function readableRange(range: { minValue: number; maxValue: number }, unit: ChartUnit, currency: ChartCurrency, heightPx: number): { minValue: number; maxValue: number } {
+  const { minValue: lo, maxValue: hi } = range;
+  const res = axisResolution(Math.max(Math.abs(lo), Math.abs(hi)), unit, currency);
+  const need = (res * Math.max(heightPx, AXIS_TICK_PX)) / AXIS_TICK_PX;
+  if (!(need > 0) || hi - lo >= need) return range;
+  const mid = (lo + hi) / 2;
+  return { minValue: mid - need / 2, maxValue: mid + need / 2 };
+}
+
 /** Smallest price step the scale should resolve (USD prices can be 1e-9, native ones 1e-12). */
 export function minMoveFor(unit: ChartUnit, currency: ChartCurrency = 'usd'): number {
   if (unit === 'mcap') return 0.01;

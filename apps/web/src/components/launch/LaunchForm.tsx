@@ -7,7 +7,7 @@ import { CHAINS, formatPercent, type ChainId, type LaunchConfig } from '@trenchs
 import { Globe, Send } from 'lucide-react';
 import { FormSection, Note, PresetPicker } from '@/components/account/FormBits';
 import { StrategyEditor } from '@/components/trade/StrategyEditor';
-import { Field, Input, NumberInput, SegmentedControl, Toggle } from '@/components/ui';
+import { Field, fieldNoteId, Input, NumberInput, SegmentedControl, Toggle } from '@/components/ui';
 import { XMark } from '@/components/wallet';
 import { DEV_BUY_PRESETS, normalizeSymbol, type CreationBlock, type LaunchErrors, type LaunchForm as Form, type SocialKey } from './model';
 import { GlyphPicker, LaunchpadCards } from './Pickers';
@@ -82,6 +82,7 @@ export function LaunchFormFields({ id, chain, config, form, onChange: set, error
             rows={3}
             placeholder="What is the token about? Buyers read this first."
             aria-invalid={!!errors.description || undefined}
+            aria-describedby={fieldNoteId(`${ids}-desc`)}
             className="input h-auto resize-y py-1.5 leading-snug"
           />
         </Field>

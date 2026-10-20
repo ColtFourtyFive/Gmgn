@@ -108,13 +108,16 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
   const live = useWalletLive(chain, address, !!profile);
 
   const name = profile ? profile.remark || profile.label || shortAddress(profile.address) : shortAddress(address);
+  const notFound = !profile && q.isError && isNotFound(q.error);
   useEffect(() => {
     const prev = document.title;
-    document.title = `${name} · Wallet · Trenchscope`;
+    const title = notFound ? 'Wallet not found · Trenchscope' : `${name} · Wallet · Trenchscope`;
+    if (document.title !== title) document.title = title;
     return () => {
-      document.title = prev;
+      // Writing an unchanged title still mutates <title>, which the route announcer reads as a page change.
+      if (document.title !== prev) document.title = prev;
     };
-  }, [name]);
+  }, [name, notFound]);
 
   const calls = useWalletCalls(chain, address, !!profile);
   const callCount = calls.data?.calls.length ?? 0;
@@ -123,13 +126,14 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
   const activeTab = (tab === 'created' && profile && !hasCreated) || (tab === 'calls' && calls.data && callCount === 0) ? 'recent' : tab;
 
   if (!profile) {
-    if (q.isError && isNotFound(q.error))
+    if (notFound)
       return (
         <Page>
           <Panel>
             <EmptyState
               icon={<SearchX size={18} />}
               title="Wallet not found"
+              titleAs="h1"
               description={`No ${chain.toUpperCase()} wallet with the address ${shortAddress(address, 6, 6)} has traded on Trenchscope's simulated market.`}
               action={
                 <Button size="sm" variant="outline" onClick={() => navigate(routes.leaderboard(chain))}>
@@ -144,7 +148,7 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
       return (
         <Page>
           <Panel>
-            <ErrorState title="Couldn’t load this wallet" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+            <ErrorState title="Couldn’t load this wallet" titleAs="h1" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
           </Panel>
         </Page>
       );

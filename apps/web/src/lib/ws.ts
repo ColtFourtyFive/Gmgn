@@ -16,18 +16,33 @@ interface ChannelEntry {
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 
-class RealtimeClient {
+/** Heartbeat: ping this often while open (the server answers every ping with a pong). */
+export const PING_EVERY_MS = 10_000;
+/**
+ * A socket that delivers nothing at all (not even the pong) this long after a
+ * ping is treated as dead. Half-open connections (sleep, network change, a
+ * NAT/proxy that stopped forwarding) can stay OPEN for minutes before TCP
+ * notices, while the UI would keep showing frozen data as "Live".
+ */
+export const PONG_TIMEOUT_MS = 5_000;
+
+export class RealtimeClient {
   private socket: WebSocket | null = null;
   private channels = new Map<string, ChannelEntry>();
   private token: string | null = null;
   private retry = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private pongTimer: ReturnType<typeof setTimeout> | null = null;
   private stateListeners = new Set<(s: ConnectionState) => void>();
   state: ConnectionState = 'closed';
+  /** Increments on every successful (re)connect: data received before the current one is from an older stream. */
+  epoch = 0;
   /** Round-trip latency of the last ping (ms). */
   latency: number | null = null;
   private pingSentAt = 0;
+  /** When the current socket last delivered a frame (performance.now()). */
+  private lastFrameAt = 0;
 
   private url(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -51,19 +66,18 @@ class RealtimeClient {
     this.socket = ws;
     ws.onopen = () => {
       this.retry = 0;
+      this.lastFrameAt = performance.now();
+      this.epoch++;
       this.setState('open');
       if (this.token) this.raw({ op: 'auth', token: this.token });
       for (const [ch, entry] of this.channels) {
         if (ch === 'user' && !this.token) continue;
         this.raw({ op: 'sub', ch, params: entry.params ?? undefined });
       }
-      if (this.pingTimer) clearInterval(this.pingTimer);
-      this.pingTimer = setInterval(() => {
-        this.pingSentAt = performance.now();
-        this.raw({ op: 'ping' });
-      }, 15000);
+      this.startHeartbeat(ws);
     };
     ws.onmessage = (ev) => {
+      this.lastFrameAt = performance.now();
       let msg: WsServerMessage;
       try {
         msg = JSON.parse(ev.data as string) as WsServerMessage;
@@ -83,14 +97,46 @@ class RealtimeClient {
         this.raw({ op: 'sub', ch: 'user' });
       }
     };
-    ws.onclose = () => {
-      if (this.pingTimer) clearInterval(this.pingTimer);
-      this.pingTimer = null;
-      this.socket = null;
-      this.setState('closed');
-      this.scheduleReconnect();
-    };
+    ws.onclose = () => this.drop(ws);
     ws.onerror = () => ws.close();
+  }
+
+  private stopHeartbeat(): void {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.pongTimer) clearTimeout(this.pongTimer);
+    this.pingTimer = null;
+    this.pongTimer = null;
+  }
+
+  private startHeartbeat(ws: WebSocket): void {
+    this.stopHeartbeat();
+    this.pingTimer = setInterval(() => {
+      const sentAt = performance.now();
+      this.pingSentAt = sentAt;
+      this.raw({ op: 'ping' });
+      if (this.pongTimer) clearTimeout(this.pongTimer);
+      this.pongTimer = setTimeout(() => {
+        this.pongTimer = null;
+        // Any frame since the ping proves the path is alive; nothing at all means half-open.
+        if (this.socket === ws && this.lastFrameAt < sentAt) this.drop(ws);
+      }, PONG_TIMEOUT_MS);
+    }, PING_EVERY_MS);
+  }
+
+  /**
+   * Forget `ws` (closed, or silent past the heartbeat timeout) and reconnect.
+   * Does not wait for the close handshake: on a half-open socket it never
+   * completes, and `onclose` would only fire once the browser gives up.
+   */
+  private drop(ws: WebSocket): void {
+    if (this.socket !== ws) return;
+    this.stopHeartbeat();
+    this.socket = null;
+    ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+    this.latency = null;
+    this.setState('closed');
+    this.scheduleReconnect();
   }
 
   private scheduleReconnect(): void {

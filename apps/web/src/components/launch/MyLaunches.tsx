@@ -2,11 +2,11 @@
 // status, live curve progress, market cap and the hourly launch allowance.
 
 import { memo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CHAINS, type ChainId } from '@trenchscope/shared';
 import { LogIn, Rocket } from 'lucide-react';
 import { Age, Compact, CurveProgress, TokenLink, Usd } from '@/components/common';
 import { Badge, Button, DataTable, EmptyState, ErrorState, Panel, type Column } from '@/components/ui';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { routes } from '@/lib/chain';
 import { useSession } from '@/store/session';
 import { useLaunchesThisHour, useMyLaunches, type MyLaunch } from './queries';
@@ -70,7 +70,7 @@ const columns: Column<MyLaunch>[] = [
 ];
 
 export const MyLaunches = memo(function MyLaunches({ chain, launchesPerHour, className }: { chain: ChainId; launchesPerHour: number; className?: string }) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const signedIn = useSession((s) => !!s.token);
   const { rows, query } = useMyLaunches(chain);
   const thisHour = useLaunchesThisHour(launchesPerHour);
@@ -116,7 +116,7 @@ export const MyLaunches = memo(function MyLaunches({ chain, launchesPerHour, cla
           defaultSort={{ key: 'age', dir: 'desc' }}
           minWidth={720}
           maxHeight={480}
-          onRowClick={(r) => navigate(routes.token(r.chain, r.address))}
+          onRowClick={(r, e) => openLink(routes.token(r.chain, r.address), e)}
           empty={<EmptyState compact icon={<Rocket size={16} />} title="No launches yet" description="Tokens you launch on this chain show up here with their curve progress." />}
         />
       )}

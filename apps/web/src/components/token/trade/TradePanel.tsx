@@ -3,12 +3,13 @@
 // below the suggestion), then the form of the selected order type.
 
 import { useEffect, useRef, useState } from 'react';
-import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type PresetId, type TokenDetail, type TokenPositionRow, type UserSettings } from '@trenchscope/shared';
+import { CHAINS, PLATFORM_FEE_RATE, formatPercent, type Position, type PresetId, type TokenDetail, type UserSettings } from '@trenchscope/shared';
 import { FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import { Tabs } from '@/components/ui';
 import { useDeposit } from '@/components/layout/AccountControls';
 import { useHotkeys } from '@/hooks/useHotkeys';
+import { scrollBehavior } from '@/hooks/useMediaQuery';
 import { useDisplaySettings, useTradeSettings } from '@/hooks/useSettings';
 import type { DeepPartial } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
@@ -32,7 +33,7 @@ const MODE_ITEMS: { value: TradeMode; label: string; title: string }[] = [
 
 export interface TradePanelProps {
   token: TokenDetail;
-  position: TokenPositionRow | null;
+  position: Position | null;
   className?: string;
 }
 
@@ -79,7 +80,7 @@ export function TradePanel({ token, position, className }: TradePanelProps) {
   const mountTick = useRef(focusTick);
   useEffect(() => {
     if (focusTick === mountTick.current) return;
-    panelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    panelRef.current?.scrollIntoView({ block: 'nearest', behavior: scrollBehavior() });
     const t = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
     return () => clearTimeout(t);
   }, [focusTick]);

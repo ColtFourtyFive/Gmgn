@@ -1,6 +1,9 @@
-import { cloneElement, isValidElement, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { Floating, type Placement } from './Floating';
+
+/** A menu popover's label, carried by the <Menu> inside (the panel itself is a plain container). */
+const MenuLabelContext = createContext<string | undefined>(undefined);
 
 export interface PopoverProps {
   /** Trigger element; receives aria-expanded / aria-haspopup / aria-controls. */
@@ -27,6 +30,21 @@ export interface PopoverProps {
   role?: 'dialog' | 'menu' | 'listbox';
   'aria-label'?: string;
   disabled?: boolean;
+}
+
+const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary']);
+const POPUP_ROLES = new Set(['button', 'link', 'combobox', 'menuitem', 'tab', 'treeitem', 'gridcell', 'row']);
+
+/**
+ * Popup state (aria-expanded / -haspopup / -controls) is only valid on a
+ * control. Components (Button, IconButton, Link...) render one; a plain
+ * wrapper element (e.g. the span around an avatar with a hover preview) does
+ * not, so it gets no popup attributes.
+ */
+function interactiveTrigger(el: ReactElement): boolean {
+  if (typeof el.type !== 'string') return true;
+  const { role } = el.props as { role?: string };
+  return role ? POPUP_ROLES.has(role) : INTERACTIVE_TAGS.has(el.type);
 }
 
 /**
@@ -76,9 +94,11 @@ export function Popover({
   const cancel = () => clearTimeout(timer.current);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const triggerEl = isValidElement(trigger)
-    ? cloneElement(trigger as ReactElement<Record<string, unknown>>, { 'aria-expanded': open, 'aria-haspopup': role, 'aria-controls': open ? id : undefined })
-    : trigger;
+  // A disabled popover's trigger is a plain control (e.g. FollowButton before there is a follow to edit): no popup state.
+  const triggerEl =
+    isValidElement(trigger) && interactiveTrigger(trigger) && !disabled
+      ? cloneElement(trigger as ReactElement<Record<string, unknown>>, { 'aria-expanded': open, 'aria-haspopup': role, 'aria-controls': open ? id : undefined })
+      : trigger;
 
   return (
     <>
@@ -104,12 +124,12 @@ export function Popover({
           trapFocus={!hover}
           id={id}
           role={role === 'menu' ? undefined : role}
-          aria-label={ariaLabel}
+          aria-label={role === 'menu' ? undefined : ariaLabel}
           onMouseEnter={hover ? cancel : undefined}
           onMouseLeave={hover ? () => schedule(false, closeDelay) : undefined}
           className={clsx(!unstyled && 'panel animate-pop-in shadow-float', className)}
         >
-          {typeof children === 'function' ? children(close) : children}
+          <MenuLabelContext.Provider value={role === 'menu' ? ariaLabel : undefined}>{typeof children === 'function' ? children(close) : children}</MenuLabelContext.Provider>
         </Floating>
       )}
     </>
@@ -160,8 +180,9 @@ function onMenuKeyDown(e: KeyboardEvent<HTMLDivElement>) {
  * menus). The popover focuses the first item; arrows move between items.
  */
 export function Menu({ items, onDone, className }: { items: MenuItem[]; onDone?: () => void; className?: string }) {
+  const label = useContext(MenuLabelContext);
   return (
-    <div role="menu" onKeyDown={onMenuKeyDown} className={clsx('flex min-w-[180px] flex-col p-1', className)}>
+    <div role="menu" aria-label={label} onKeyDown={onMenuKeyDown} className={clsx('flex min-w-[180px] flex-col p-1', className)}>
       {items.map((it) => (
         <button
           key={it.key}
@@ -173,7 +194,8 @@ export function Menu({ items, onDone, className }: { items: MenuItem[]; onDone?:
             onDone?.();
           }}
           className={clsx(
-            'flex h-8 items-center gap-2 rounded px-2 text-left text-sm outline-none transition-colors disabled:opacity-40',
+            // Keeps the global 2px accent focus ring: the hover tint alone is ~1.2:1 against the menu.
+            'flex h-8 items-center gap-2 rounded px-2 text-left text-sm transition-colors disabled:opacity-40',
             it.danger ? 'text-down hover:bg-down/10 focus-visible:bg-down/10' : 'text-fg hover:bg-panel-3 focus-visible:bg-panel-3',
           )}
         >

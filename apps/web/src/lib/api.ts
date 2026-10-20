@@ -89,10 +89,22 @@ function qs(query?: Query): string {
   return s ? `?${s}` : '';
 }
 
+/**
+ * A 401 means the session is gone (expired or revoked: `unauthorized`) only
+ * when the request carried the session that is still current. /auth/* calls
+ * answer 401 for their own reasons (a wrong password is `invalid_credentials`),
+ * and an answer to a token that was already replaced says nothing about the
+ * new one; neither may sign the user out.
+ */
+export function isSessionExpiry(status: number, path: string, sentToken: string | null, currentToken: string | null, code?: string): boolean {
+  return status === 401 && sentToken !== null && sentToken === currentToken && !path.startsWith('/auth/') && code !== 'invalid_credentials';
+}
+
 export async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers['content-type'] = 'application/json';
-  if (authToken) headers.authorization = `Bearer ${authToken}`;
+  const sentToken = authToken;
+  if (sentToken) headers.authorization = `Bearer ${sentToken}`;
   const res = await fetch(`/api${path}${qs(opts.query)}`, {
     method,
     headers,
@@ -110,7 +122,7 @@ export async function request<T>(method: string, path: string, opts: { query?: Q
   }
   if (!res.ok) {
     const err = (data ?? {}) as { error?: string; code?: string };
-    if (res.status === 401) onUnauthorized?.();
+    if (isSessionExpiry(res.status, path, sentToken, authToken, err.code)) onUnauthorized?.();
     // The API always answers with a JSON body; a bare 5xx comes from a proxy that cannot reach it.
     if (res.status >= 500 && (!text || err.error === text)) {
       throw new ApiError(res.status, 'Server unreachable — retrying shortly', 'unreachable');
@@ -148,7 +160,7 @@ export const api = {
   earlyBuyers: (chain: ChainId, address: string) => get<EarlyBuyersResponse>(`/${chain}/tokens/${address}/early-buyers`),
   dev: (chain: ChainId, address: string) => get<DevInfo>(`/${chain}/tokens/${address}/dev`),
   wallet: (chain: ChainId, address: string) => get<WalletProfile>(`/${chain}/wallets/${address}`),
-  walletHoldings: (chain: ChainId, address: string, q: { includeClosed?: boolean; sort?: string } = {}) =>
+  walletHoldings: (chain: ChainId, address: string, q: { includeClosed?: boolean; sort?: string; limit?: number } = {}) =>
     get<TokenPositionRow[]>(`/${chain}/wallets/${address}/holdings`, { ...q, includeClosed: q.includeClosed ? 1 : undefined }),
   walletActivity: (chain: ChainId, address: string, q: { type?: string; limit?: number; before?: number } = {}) =>
     get<FeedItem[]>(`/${chain}/wallets/${address}/activity`, q),

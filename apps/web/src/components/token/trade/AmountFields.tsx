@@ -2,7 +2,7 @@
 // custom value, balance + Max) and percent / token amount for sells.
 
 import { forwardRef } from 'react';
-import { CHAINS, formatCompact, type ChainId, type TokenPositionRow } from '@trenchscope/shared';
+import { CHAINS, formatCompact, type ChainId, type Position } from '@trenchscope/shared';
 import { Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Compact, Native, Pct, Price, Usd } from '@/components/common';
@@ -81,7 +81,7 @@ export interface SellAmountProps {
   value: number | null;
   onChange: (v: number | null) => void;
   quickPercents: number[];
-  position: TokenPositionRow | null;
+  position: Position | null;
   /** Live token price (position value). */
   priceUsd: number;
   signedIn: boolean;

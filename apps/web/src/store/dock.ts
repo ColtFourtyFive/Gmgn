@@ -55,6 +55,13 @@ const isPhone = () => typeof window !== 'undefined' && typeof window.matchMedia 
 interface DockState extends Persisted {
   /** Phone bottom sheet (not persisted). */
   sheetOpen: boolean;
+  /**
+   * The user just opened or expanded the panel (button, hotkey, palette,
+   * footer): it takes keyboard focus. Not set when the panel is restored
+   * open on load. Cleared by the panel once handled.
+   */
+  focusRequested: boolean;
+  consumeFocusRequest(): boolean;
   /** Desktop floating panel. */
   setOpen(open: boolean): void;
   setSheetOpen(open: boolean): void;
@@ -74,12 +81,23 @@ export const useDock = create<DockState>((set, get) => {
   return {
     ...read(),
     sheetOpen: false,
+    focusRequested: false,
+    consumeFocusRequest() {
+      const requested = get().focusRequested;
+      if (requested) set({ focusRequested: false });
+      return requested;
+    },
     setOpen: (open) => update({ open }),
     setSheetOpen: (sheetOpen) => set({ sheetOpen }),
     toggle() {
       if (isPhone()) set((s) => ({ sheetOpen: !s.sheetOpen }));
-      else if (get().open && get().collapsed) update({ collapsed: false });
-      else update({ open: !get().open, collapsed: false });
+      else if (get().open && get().collapsed) {
+        set({ focusRequested: true });
+        update({ collapsed: false });
+      } else {
+        set({ focusRequested: !get().open });
+        update({ open: !get().open, collapsed: false });
+      }
     },
     setCollapsed: (collapsed) => update({ collapsed }),
     setTab: (tab) => update({ tab }),
@@ -96,6 +114,7 @@ export function openDock(tab?: DockTab): void {
   if (tab) s.setTab(tab);
   if (isPhone()) s.setSheetOpen(true);
   else {
+    useDock.setState({ focusRequested: true });
     s.setOpen(true);
     s.setCollapsed(false);
   }

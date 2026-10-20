@@ -6,7 +6,7 @@ import { formatDuration, formatPercent, shortAddress, type TokenDetail } from '@
 import { Info } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, CurveProgress, LaunchpadBadge, Native, SocialLinks, Usd } from '@/components/common';
-import { CopyButton, Panel } from '@/components/ui';
+import { CopyButton, Heading, Panel } from '@/components/ui';
 
 function Row({ label, children, title }: { label: string; children: ReactNode; title?: string }) {
   return (
@@ -22,7 +22,7 @@ function Row({ label, children, title }: { label: string; children: ReactNode; t
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col">
-      <h4 className="table-head mb-0.5 mt-2 first:mt-0">{title}</h4>
+      <Heading className="table-head mb-0.5 mt-2 first:mt-0">{title}</Heading>
       <dl>{children}</dl>
     </div>
   );

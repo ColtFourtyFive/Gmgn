@@ -3,39 +3,78 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { formatDuration, type FeedItem, type TokenDetail, type TokenPositionRow } from '@trenchscope/shared';
+import { formatDuration, type FeedItem, type Position, type PositionEvent, type TokenDetail, type Trade } from '@trenchscope/shared';
 import { LogIn, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, Native, Pct, Price, StatTile, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
-import { Button, DataTable, EmptyState, ErrorState, Skeleton, type Column } from '@/components/ui';
+import { useQuickTrade } from '@/components/trade/useQuickTrade';
+import { Button, DataTable, EmptyState, ErrorState, Heading, Skeleton, type Column } from '@/components/ui';
 import { PositionEventBadge } from '@/components/wallet';
 import { serverNow } from '@/hooks/useNow';
 import { useTradeSettings } from '@/hooks/useSettings';
-import { useSwap } from '@/hooks/useSwap';
 import { api } from '@/lib/api';
-import { requireAuth, useSession } from '@/store/session';
-import { tokenKeys } from '../queries';
+import { useSession } from '@/store/session';
+import { tokenKeys, useOwnWallet } from '../queries';
 import { useTokenUi } from '../store';
 
+/** A fill row: the trade and what it did to the position. */
+export type Fill = Pick<FeedItem, 'trade' | 'positionEvent' | 'isFirstBuy' | 'isClose'>;
+
+/** Share of supply below which a balance is dust (the server's DUST_RATE). */
+const DUST_RATE = 1e-7;
+
+/** What a trade did to the maker's position, read off the trade as the server does (makerHoldRate = share held after it). */
+export function positionEventOfTrade(t: Trade, totalSupply: number): PositionEvent {
+  const after = t.makerHoldRate * totalSupply;
+  const dust = totalSupply * DUST_RATE;
+  if (t.side === 'buy') return after - t.tokenAmount <= dust ? 'open' : 'add';
+  return after <= dust ? 'close' : 'reduce';
+}
+
+/**
+ * The account's fills on this token, newest first: the token's own trade
+ * history filtered to the viewer's wallet on the server (not a slice of the
+ * account-wide log, where a busy account's older fills fell off), plus the
+ * account's latest fills (those still list a fill the token's trade ring
+ * dropped on a busy token).
+ */
+export function mergeFills(own: Trade[], recent: FeedItem[], token: Pick<TokenDetail, 'address' | 'totalSupply'>): Fill[] {
+  const byId = new Map<string, Fill>();
+  for (const t of own) {
+    const event = positionEventOfTrade(t, token.totalSupply);
+    byId.set(t.id, { trade: t, positionEvent: event, isFirstBuy: false, isClose: event === 'close' });
+  }
+  // The account log's items carry the server's own event and first-buy flag.
+  for (const f of recent) if (f.trade.token === token.address) byId.set(f.trade.id, f);
+  return [...byId.values()].sort((a, b) => b.trade.timestamp - a.trade.timestamp);
+}
+
 function useTokenFills(token: TokenDetail) {
-  const signedIn = useSession((s) => !!s.token);
+  const wallet = useOwnWallet(token.chain);
   return useQuery({
     queryKey: tokenKeys.fills(token.chain, token.address),
-    queryFn: async () => (await api.portfolioActivity({ chain: token.chain, limit: 200 })).filter((f) => f.trade.token === token.address),
-    enabled: signedIn,
+    queryFn: async () => {
+      const [own, recent] = await Promise.all([
+        api.trades(token.chain, token.address, { wallet: wallet as string, limit: 500 }),
+        api.portfolioActivity({ chain: token.chain, limit: 200 }),
+      ]);
+      return mergeFills(own, recent, token);
+    },
+    enabled: !!wallet,
     staleTime: 5_000,
     retry: 1,
   });
 }
 
-export function PositionTab({ token, position, loading, error, onRetry, maxHeight }: { token: TokenDetail; position: TokenPositionRow | null; loading: boolean; error: unknown; onRetry: () => void; maxHeight: number | string }) {
+export function PositionTab({ token, position, loading, error, onRetry, maxHeight }: { token: TokenDetail; position: Position | null; loading: boolean; error: unknown; onRetry: () => void; maxHeight: number | string }) {
   const signedIn = useSession((s) => !!s.token);
   const fills = useTokenFills(token);
   const trade = useTradeSettings(token.chain);
-  const { swap, pending } = useSwap();
+  // Quick sells honor "Confirm trades" like every other one-click order.
+  const quick = useQuickTrade(token.chain, token.address, token.symbol);
 
-  const columns = useMemo<Column<FeedItem>[]>(
+  const columns = useMemo<Column<Fill>[]>(
     () => [
       { key: 'age', header: 'Age', width: 70, render: (f) => <Age ts={f.trade.timestamp} suffix=" ago" className="text-muted" /> },
       {
@@ -92,11 +131,6 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
   const total = (p?.realizedPnlUsd ?? 0) + unrealized;
   const totalRate = p && p.boughtUsd > 0 ? total / p.boughtUsd : null;
 
-  const sell = (pct: number) =>
-    requireAuth(() => {
-      void swap({ chain: token.chain, token: token.address, side: 'sell', amount: pct, amountKind: 'percent', presetId: trade.activeSellPreset }, { symbol: token.symbol });
-    });
-
   return (
     <div className="flex min-w-0 flex-col gap-3 p-2.5">
       {loading && !p ? (
@@ -132,7 +166,7 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
               <>
                 <span className="text-xs text-muted">Quick sell</span>
                 {trade.quickSellPercents.map((pct) => (
-                  <Button key={pct} size="xs" variant="sell" disabled={pending} onClick={() => sell(pct)}>
+                  <Button key={pct} size="xs" variant="sell" disabled={quick.pending} onClick={() => quick.submit({ side: 'sell', percent: pct })}>
                     {pct}%
                   </Button>
                 ))}
@@ -140,10 +174,11 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
             )}
             <SharePnlButton variant="button" getData={() => shareDataFromPosition(p, token, null, serverNow())} className="ml-auto" />
           </div>
+          {quick.dialog}
         </>
       )}
       <div className="min-w-0 overflow-hidden rounded border border-line">
-        <h4 className="table-head border-b border-line px-3 py-1.5">Your fills</h4>
+        <Heading className="table-head border-b border-line px-3 py-1.5">Your fills</Heading>
         {fills.isError ? (
           <ErrorState compact error={fills.error} onRetry={() => void fills.refetch()} />
         ) : (

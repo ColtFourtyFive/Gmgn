@@ -24,6 +24,7 @@ import {
   type StrategySpec,
   type SwapReceipt,
   type SwapRequest,
+  type Trade,
   type TradePreset,
 } from '@trenchscope/shared';
 import { HttpError, type AppContext } from '../context';
@@ -43,6 +44,8 @@ const LATENCY = { min: 120, max: 600, antiMevExtra: 150 };
 const MEV_MIN_IMPACT = 0.01;
 const MEV_MAX_CHANCE = 0.6;
 export const TX_EXPIRED = 'transaction expired: priority fee too low for current congestion';
+/** A sell too small for its proceeds to pay the platform and network fees (refused before it is sent). */
+export const PROCEEDS_BELOW_FEES = 'proceeds do not cover fees';
 
 export type TradeSource = Order['source'];
 
@@ -122,6 +125,25 @@ function failedReceipt(error: string, latencyMs: number, quote?: Quote): SwapRec
   };
 }
 
+/** A filled ledger outcome as a receipt (its exit orders, if any, are attached by the caller). */
+export function fillReceipt(outcome: SwapOutcome & { trade: Trade }, latencyMs: number, quote?: Quote): SwapReceipt {
+  return {
+    ok: true,
+    trade: outcome.trade,
+    nativeAmount: outcome.nativeAmount,
+    tokenAmount: outcome.tokenAmount,
+    usdAmount: outcome.usdAmount,
+    priceUsd: outcome.trade.priceUsd,
+    platformFeeNative: outcome.platformFeeNative,
+    networkFeeNative: outcome.networkFeeNative,
+    priceImpact: outcome.result?.priceImpact ?? quote?.priceImpact ?? 0,
+    mevLossNative: outcome.mevLossNative,
+    txHash: outcome.trade.txHash,
+    latencyMs,
+    orders: [],
+  };
+}
+
 /** Network cost of one swap under a preset: base fee + priority fee (+ the builder tip on the anti-MEV route). */
 export function networkFeeOf(chain: ChainId, preset: TradePreset): number {
   return CHAINS[chain].baseNetworkFee + preset.priorityFee + (preset.antiMev ? preset.tip : 0);
@@ -159,11 +181,21 @@ export function latencyFromEnv(): number | null {
   return Number.isFinite(ms) && ms >= 0 ? ms : null;
 }
 
+const reserveKey = (wallet: WalletState, token: TokenState) => `${wallet.address}|${token.address}`;
+
 export class Executor {
   /** `${accountId}|${clientId}` -> first receipt of that client request. */
   private readonly replays = new Map<string, { at: number; receipt: Promise<SwapReceipt> }>();
   /** accountId -> sim times of recent manual swaps (rate limit window). */
   private readonly recentSwaps = new Map<string, number[]>();
+  /**
+   * `${wallet}|${token}` -> tokens committed to sells still in flight. Percent
+   * sells size themselves from the holding net of these, so exit legs that
+   * trigger together (two "sell 50%" take-profits in one tick) act like
+   * sequential sells of the remaining holding instead of each selling half
+   * of the same pre-trigger bag.
+   */
+  private readonly reserved = new Map<string, { tokens: number; sells: number }>();
 
   constructor(
     private readonly ctx: AppContext,
@@ -270,11 +302,12 @@ export class Executor {
   private buyLegs({ token: t, wallet, amount }: Ticket): Legs | { error: string } {
     const venue = this.ctx.world.quote(t, 'buy', amount * (1 - t.buyTax));
     if (!venue || venue.amountOut <= 0) return { error: 'no liquidity' };
+    // A buy that completes the curve only spends (and needs) what the curve can absorb.
+    const used = venue.amountIn / (1 - t.buyTax);
     return {
-      amountIn: amount,
+      amountIn: venue.completesCurve ? used : amount,
       expectedOut: venue.amountOut,
-      // A buy that completes the curve only spends what the curve can absorb.
-      nativeLeg: venue.amountIn / (1 - t.buyTax),
+      nativeLeg: used,
       tokenLeg: venue.amountOut,
       balanceBefore: wallet.native,
       priceImpact: venue.priceImpact,
@@ -285,12 +318,18 @@ export class Executor {
   private sellLegs({ token: t, wallet, amount, amountKind }: Ticket, networkFee: number): Legs | { error: string } {
     const held = balanceOf(wallet, t);
     if (held <= 0) return { error: 'no token balance' };
-    const amountIn = amountKind === 'tokens' ? Math.min(amount, held) : amount >= 100 ? held : (held * amount) / 100;
+    // What sells still in flight will take is not available again. When they
+    // already cover the whole balance, size from all of it: whichever lands
+    // first wins, and the other sells what is left (the ledger scales its
+    // minOut to that), is voided by its guard, or fails when nothing is left.
+    const pending = this.reserved.get(reserveKey(wallet, t))?.tokens ?? 0;
+    const free = held - pending > held * 1e-9 ? held - pending : held;
+    const amountIn = amountKind === 'tokens' ? Math.min(amount, free) : amount >= 100 ? free : (free * amount) / 100;
     const venue = this.ctx.world.quote(t, 'sell', amountIn);
     if (!venue || venue.amountOut <= 0) return { error: 'no liquidity' };
     const nativeLeg = venue.amountOut * (1 - t.sellTax);
     const expectedOut = nativeLeg * (1 - PLATFORM_FEE_RATE) - networkFee;
-    if (expectedOut <= 0) return { error: 'proceeds do not cover fees' };
+    if (expectedOut <= 0) return { error: PROCEEDS_BELOW_FEES };
     return { amountIn, expectedOut, nativeLeg, tokenLeg: amountIn, balanceBefore: held, priceImpact: venue.priceImpact };
   }
 
@@ -329,22 +368,48 @@ export class Executor {
       }
     }
 
-    const latencyMs = this.fixedLatencyMs ?? landingLatencyMs(world.rng, token.chain, preset, world.chains[token.chain].congestion);
-    await sleep(latencyMs);
-    const aborted = opts.guard?.() ?? null;
-    if (aborted) return { receipt: failedReceipt(aborted, latencyMs, quote), aborted };
-    // an expired transaction never lands, so it costs nothing
-    if (expiresUnderCongestion(world.rng, token.chain, preset, world.chains[token.chain].congestion)) {
-      return { receipt: failedReceipt(TX_EXPIRED, latencyMs, quote), aborted: null };
-    }
+    const release = side === 'sell' ? this.reserve(wallet, token, quote.amountIn) : () => {};
+    try {
+      const latencyMs = this.fixedLatencyMs ?? landingLatencyMs(world.rng, token.chain, preset, world.chains[token.chain].congestion);
+      await sleep(latencyMs);
+      const aborted = opts.guard?.() ?? null;
+      if (aborted) return { receipt: failedReceipt(aborted, latencyMs, quote), aborted };
+      // an expired transaction never lands, so it costs nothing
+      if (expiresUnderCongestion(world.rng, token.chain, preset, world.chains[token.chain].congestion)) {
+        return { receipt: failedReceipt(TX_EXPIRED, latencyMs, quote), aborted: null };
+      }
 
-    const outcome = world.executeSwap(wallet, token, side, quote.amountIn, {
-      platformFeeRate: PLATFORM_FEE_RATE,
-      networkFee: quote.networkFeeNative,
-      minOut: quote.minOut,
-      mevLossRate: this.sandwichLoss(preset.antiMev, quote),
-    });
-    return { receipt: this.settle(ticket, outcome, latencyMs, quote), aborted: null };
+      // From here the ledger balance itself reflects what this sell takes.
+      release();
+      // A buy asks for what was requested: the curve caps it again, exactly, at what it can absorb now.
+      const outcome = world.executeSwap(wallet, token, side, side === 'buy' ? ticket.amount : quote.amountIn, {
+        platformFeeRate: PLATFORM_FEE_RATE,
+        networkFee: quote.networkFeeNative,
+        minOut: quote.minOut,
+        mevLossRate: this.sandwichLoss(preset.antiMev, quote),
+      });
+      return { receipt: this.settle(ticket, outcome, latencyMs, quote), aborted: null };
+    } finally {
+      release();
+    }
+  }
+
+  /** Hold `tokens` of the wallet's balance for an in-flight sell; the returned release is idempotent. */
+  private reserve(wallet: WalletState, token: TokenState, tokens: number): () => void {
+    const key = reserveKey(wallet, token);
+    let r = this.reserved.get(key);
+    if (!r) this.reserved.set(key, (r = { tokens: 0, sells: 0 }));
+    r.tokens += tokens;
+    r.sells++;
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      const cur = this.reserved.get(key);
+      if (!cur) return;
+      cur.tokens -= tokens;
+      if (--cur.sells <= 0) this.reserved.delete(key);
+    };
   }
 
   /** Ledger outcome -> receipt; a fill also gets the post-fill bookkeeping and fan-out. */
@@ -352,21 +417,7 @@ export class Executor {
     const { world, hub, accounts } = this.ctx;
     const { accountId, token } = ticket;
     if (!outcome.ok || !outcome.trade) return failedReceipt(outcome.error ?? 'swap failed', latencyMs, quote);
-    const receipt: SwapReceipt = {
-      ok: true,
-      trade: outcome.trade,
-      nativeAmount: outcome.nativeAmount,
-      tokenAmount: outcome.tokenAmount,
-      usdAmount: outcome.usdAmount,
-      priceUsd: outcome.trade.priceUsd,
-      platformFeeNative: outcome.platformFeeNative,
-      networkFeeNative: outcome.networkFeeNative,
-      priceImpact: outcome.result?.priceImpact ?? quote?.priceImpact ?? 0,
-      mevLossNative: outcome.mevLossNative,
-      txHash: outcome.trade.txHash,
-      latencyMs,
-      orders: [],
-    };
+    const receipt = fillReceipt({ ...outcome, trade: outcome.trade }, latencyMs, quote);
     receipt.orders = this.onFill({ ticket, receipt }).map((o) => ({ ...o }));
     hub.publishUser(accountId, 'fill', receipt);
     accounts.pushBalance(accountId, token.chain);
@@ -388,7 +439,11 @@ export class Executor {
 
   private takeRateLimitSlot(accountId: string, now: number): void {
     const recent = (this.recentSwaps.get(accountId) ?? []).filter((t) => now - t < 1000);
-    if (recent.length >= MAX_SWAPS_PER_SECOND) throw new HttpError(429, 'too many swaps; slow down', 'rate_limited');
+    if (recent.length >= MAX_SWAPS_PER_SECOND) {
+      // seconds until the oldest swap in the window ages out
+      const retry = Math.max(1, Math.ceil((recent[0] + 1000 - now) / 1000));
+      throw new HttpError(429, 'too many swaps; slow down', 'rate_limited', { 'retry-after': String(retry) });
+    }
     recent.push(now);
     this.recentSwaps.set(accountId, recent);
   }

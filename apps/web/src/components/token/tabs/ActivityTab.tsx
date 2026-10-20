@@ -10,8 +10,10 @@ import { Filter, Pause, Play, X } from 'lucide-react';
 import clsx from 'clsx';
 import { AddressLink, Age, Compact, Native, Price, Usd, WALLET_TAG_META } from '@/components/common';
 import { useViewerTags } from '@/components/discovery';
+import { useViewerRemarks } from '@/components/discovery/useViewerTags';
 import { CopyButton, DataTable, EmptyState, ErrorState, IconButton, SegmentedControl, Select, Tooltip, type Column } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
+import { isMiddleClick } from '@/hooks/useOpenLink';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { useConnectionState } from '@/lib/ws';
@@ -36,10 +38,21 @@ interface Row extends Trade {
   tags: Trade['walletTags'];
 }
 
+/**
+ * Flash class of a row that arrived live `FLASH_MS` ago or less: an opacity
+ * fade of a tinted overlay (.row-flash-* in index.css), never a background-color
+ * animation, which repainted the table every frame on busy tokens.
+ */
+export function rowFlashClass(side: Trade['side'], arrivedAt: number | undefined, now: number): string | undefined {
+  if (!arrivedAt || now - arrivedAt > FLASH_MS) return undefined;
+  return side === 'buy' ? 'row-flash-up' : 'row-flash-down';
+}
+
 export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeight: number | string }) {
   const { chain, address } = token;
   const signedIn = useSession((s) => !!s.token);
   const viewerTags = useViewerTags(chain);
+  const remarkOf = useViewerRemarks(chain);
   const maker = useTokenUi((s) => s.maker);
   const setMaker = useTokenUi((s) => s.setMaker);
   const [filter, setFilter] = useState<ActivityFilter>('all');
@@ -67,14 +80,16 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
   useOnReconnect(() => void history.refetch());
 
   // Row objects are cached by id so memoized table rows only re-render when their data changes.
+  // Live (broadcast) trades carry the public label: the viewer's remark is applied here, as REST rows already have it.
   const rowCache = useRef(new Map<string, { sig: string; row: Row }>());
   const rows = useMemo<Row[]>(() => {
     const cache = rowCache.current;
     const toRow = (t: Trade, tags: Row['tags']): Row => {
-      const sig = tags.join(',');
+      const walletLabel = remarkOf(t.wallet) ?? t.walletLabel;
+      const sig = `${tags.join(',')}|${walletLabel ?? ''}`;
       const hit = cache.get(t.id);
       if (hit && hit.sig === sig) return hit.row;
-      const row = { ...t, tags };
+      const row = { ...t, tags, walletLabel };
       cache.set(t.id, { sig, row });
       return row;
     };
@@ -95,7 +110,7 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
       for (const id of cache.keys()) if (!keep.has(id)) cache.delete(id);
     }
     return out;
-  }, [live, history.data, history.isPlaceholderData, viewerTags, maker, minUsd, activeFilter]);
+  }, [live, history.data, history.isPlaceholderData, viewerTags, remarkOf, maker, minUsd, activeFilter]);
 
   // Pause: freeze the rows while paused (manually or because the list is scrolled).
   // A filter change while paused re-freezes on the new result.
@@ -123,11 +138,7 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
 
   const columns = useMemo<Column<Row>[]>(() => buildColumns(token, unit, setMaker), [token.chain, token.symbol, unit, setMaker]); // eslint-disable-line react-hooks/exhaustive-deps
   const rowClassName = useCallback(
-    (r: Row) => {
-      const at = feed.arrivedAt.get(r.id);
-      if (!flashUpdates || !at || Date.now() - at > FLASH_MS) return undefined;
-      return r.side === 'buy' ? 'animate-flash-up' : 'animate-flash-down';
-    },
+    (r: Row) => (flashUpdates ? rowFlashClass(r.side, feed.arrivedAt.get(r.id), Date.now()) : undefined),
     [feed, flashUpdates],
   );
 
@@ -149,7 +160,7 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
     <div className="flex min-w-0 flex-col">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5">
         <SegmentedControl size="sm" value={activeFilter} onChange={setFilter} items={filterItems} aria-label="Trader type" className="max-w-full" />
-        <Select size="sm" value={minUsd} onChange={setMinUsd} options={MIN_USD_OPTIONS} className="w-[100px]" />
+        <Select size="sm" value={minUsd} onChange={setMinUsd} options={MIN_USD_OPTIONS} aria-label="Minimum trade size" className="w-[100px]" />
         <SegmentedControl
           size="sm"
           value={unit}
@@ -203,7 +214,8 @@ export function ActivityTab({ token, maxHeight }: { token: TokenDetail; maxHeigh
             compact
             maxHeight={maxHeight}
             minWidth={roomy ? 760 : 460}
-            onRowClick={(r) => setMaker(maker === r.wallet ? null : r.wallet)}
+            // A row filters by its maker; a middle click is not a filter gesture.
+            onRowClick={(r, e) => !isMiddleClick(e) && setMaker(maker === r.wallet ? null : r.wallet)}
             empty={
               <EmptyState
                 compact

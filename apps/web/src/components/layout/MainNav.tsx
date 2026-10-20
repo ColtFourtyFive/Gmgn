@@ -6,7 +6,8 @@ import clsx from 'clsx';
 import { Menu, Popover } from '@/components/ui';
 import { activeSection, NAV_ITEMS, type NavItem } from './nav';
 
-const ITEM = 'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2.5 text-sm font-medium transition-colors';
+// The nav clips its overflow (measure-and-fold), so the focus ring is drawn inside the item.
+const ITEM = 'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2.5 text-sm font-medium transition-colors focus-visible:outline-offset-[-2px]';
 const GAP = 2;
 
 function itemClass(active: boolean) {

@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
-import { type ChainId, type FollowedWallet } from '@trenchscope/shared';
+import { shortAddress, type ChainId, type FollowedWallet } from '@trenchscope/shared';
 import { Bell, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button, IconButton, Input, Popover, Spinner, Toggle } from '@/components/ui';
@@ -111,6 +111,9 @@ export interface FollowButtonProps {
 /**
  * Follow toggle. Not following: one click follows (sign-in prompt when signed
  * out). Following: opens the remark / group / notify editor with Unfollow.
+ * Both states render the same button element (only its label, icon and popup
+ * wiring change), and it is never natively disabled, so keyboard focus stays
+ * on it when the state flips (follow, or unfollow from the editor).
  */
 export function FollowButton({ chain, address, name, isFollowed, variant = 'button', size = 'sm', editAfterFollow, className }: FollowButtonProps) {
   const signedIn = useSession((s) => !!s.token);
@@ -118,55 +121,52 @@ export function FollowButton({ chain, address, name, isFollowed, variant = 'butt
   const { follow, busy } = useFollowActions();
   const [open, setOpen] = useState(false);
   const followed = record !== undefined ? record !== null : signedIn && !!isFollowed;
+  const editable = followed && !!record;
+  const who = name || shortAddress(address);
 
-  const onFollow = () =>
+  const onFollow = () => {
+    if (busy || followed) return;
     requireAuth(() => {
       void follow(chain, address, {}, { name }).then((f) => {
         if (f && editAfterFollow) setOpen(true);
       });
     });
+  };
 
-  if (!followed || !record) {
-    const label = `Follow ${name || 'wallet'}`;
-    if (variant === 'icon')
-      return (
-        <IconButton
-          label={followed ? 'Following' : label}
-          size={size === 'md' ? 'md' : size === 'sm' ? 'sm' : 'xs'}
-          icon={busy ? <Spinner size={12} label="" /> : <Star size={14} className={clsx(followed && 'fill-current text-accent')} />}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!followed) onFollow();
-          }}
-          disabled={busy}
-          className={className}
-        />
-      );
-    return (
-      <Button size={size} variant="outline" icon={<Star size={size === 'xs' ? 12 : 14} />} loading={busy} onClick={onFollow} className={className} aria-label={label}>
-        Follow
-      </Button>
-    );
-  }
-
+  const iconSize = size === 'md' ? 'md' : size === 'sm' ? 'sm' : 'xs';
   const trigger =
     variant === 'icon' ? (
       <IconButton
-        label={`Following ${name || 'wallet'} — edit`}
-        size={size === 'md' ? 'md' : size === 'sm' ? 'sm' : 'xs'}
-        icon={<Star size={14} className="fill-current text-accent" />}
+        label={editable ? `Following ${who} — edit` : followed ? `Following ${who}` : `Follow ${who}`}
+        size={iconSize}
+        icon={busy ? <Spinner size={12} label="" /> : <Star size={14} className={clsx(followed && 'fill-current text-accent')} />}
+        aria-disabled={busy || undefined}
+        aria-busy={busy || undefined}
+        onClick={
+          editable
+            ? undefined
+            : (e) => {
+                e.stopPropagation();
+                onFollow();
+              }
+        }
         className={className}
       />
-    ) : (
+    ) : editable ? (
       <Button size={size} variant="soft" icon={<Star size={size === 'xs' ? 12 : 14} className="fill-current text-accent" />} className={className}>
         Following
         {record.notify && <Bell size={11} className="text-muted" aria-label="notifications on" />}
       </Button>
+    ) : (
+      <Button size={size} variant="outline" icon={<Star size={size === 'xs' ? 12 : 14} />} loading={busy} onClick={onFollow} className={className} aria-label={`Follow ${who}`}>
+        Follow
+      </Button>
     );
 
+  // Always a Popover (disabled until there is a follow to edit), so the trigger is the same element in both states.
   return (
-    <Popover trigger={trigger} open={open} onOpenChange={setOpen} placement="bottom-end" aria-label="Edit followed wallet">
-      {(close) => <FollowEditor chain={chain} follow={record} name={name} onDone={close} />}
+    <Popover trigger={trigger} open={open && editable} onOpenChange={setOpen} disabled={!editable} placement="bottom-end" aria-label="Edit followed wallet">
+      {(close) => (record ? <FollowEditor chain={chain} follow={record} name={name} onDone={close} /> : null)}
     </Popover>
   );
 }

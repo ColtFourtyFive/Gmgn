@@ -11,7 +11,7 @@ import { Tooltip } from '@/components/ui';
 export interface SafetyBandMeta {
   label: string;
   /** CSS color token (index.css). */
-  token: 'up' | 'warn' | 'down' | 'faint';
+  token: 'up' | 'warn' | 'down' | 'muted';
   icon: LucideIcon;
   hint: string;
 }
@@ -20,7 +20,7 @@ export const SAFETY_BAND: Record<SafetyBand, SafetyBandMeta> = {
   safe: { label: 'Safe', token: 'up', icon: ShieldCheck, hint: 'Score 70 or higher: no major contract or holder red flags.' },
   caution: { label: 'Caution', token: 'warn', icon: ShieldQuestion, hint: 'Score 40–69: some risks, check the reasons before buying.' },
   danger: { label: 'Danger', token: 'down', icon: ShieldAlert, hint: 'Score below 40, or a hard red flag (honeypot, active mint or freeze authority).' },
-  unknown: { label: 'Unknown', token: 'faint', icon: ShieldQuestion, hint: 'Fewer than half of the checks have data yet, so the score is not reliable.' },
+  unknown: { label: 'Unknown', token: 'muted', icon: ShieldQuestion, hint: 'Fewer than half of the checks have data yet, so the score is not reliable.' },
 };
 
 /** PRD §8.6.1 coverage wording: sufficient at 80%, low at 50%, insufficient below. */
@@ -47,7 +47,7 @@ export function SafetyReasons({ reasons, max, className }: { reasons: SafetyReas
           <span className="min-w-0 flex-1 truncate text-muted" title={r.label}>
             {r.label}
           </span>
-          <span className={clsx('num shrink-0 font-medium', r.level === 'bad' ? 'text-down' : 'text-warn')} aria-label={`${r.impact} points`}>
+          <span className={clsx('num shrink-0 font-medium', r.level === 'bad' ? 'text-down' : 'text-warn')} role="img" aria-label={`${r.impact} points`}>
             {impactLabel(r.impact)}
           </span>
         </li>
@@ -90,6 +90,7 @@ export const SafetyChip = memo(function SafetyChip({ safety, compact, className 
       <span
         className={clsx('chip num !px-1', className)}
         style={{ color: color(safety.band), backgroundColor: `rgb(var(--${meta.token}) / 0.14)` }}
+        role="img"
         aria-label={`Safety score ${safety.score}, ${meta.label}`}
         tabIndex={0}
       >

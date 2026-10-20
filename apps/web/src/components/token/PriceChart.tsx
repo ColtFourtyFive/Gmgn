@@ -1,7 +1,7 @@
 // Candlestick chart (lightweight-charts 4.2): REST history per resolution,
 // live `candle` updates from the page feed, Price/MCap unit, USD/native
-// currency (remembered in localStorage; native divides by the chain's native
-// USD price when the bars are drawn, see chartScale), trade markers by wallet
+// currency (settings.display.currency, see useValueCurrency; native divides
+// by the chain's native USD price when the bars are drawn, see chartScale), trade markers by wallet
 // class, migration marker and price lines for the viewer's average buy price
 // and open orders.
 
@@ -11,6 +11,7 @@ import {
   CrosshairMode,
   LineStyle,
   createChart,
+  type AutoscaleInfo,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
@@ -26,14 +27,13 @@ import { withSubscript, WALLET_TAG_META } from '@/components/common';
 import { Checkbox, EmptyState, ErrorState, IconButton, Popover, SegmentedControl, Select, Skeleton } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { useUi } from '@/store/ui';
 import { useViewerTags } from '@/components/discovery';
 import { useTokenFeed } from './feed';
-import { buildMarkers, chartScale, cssColor, formatAxis, minMoveFor, safeLocale, toBar, toChartTime, type Bar, type ChartCurrency } from './chartUtils';
+import { buildMarkers, chartScale, cssColor, formatAxis, minMoveFor, readableRange, safeLocale, toBar, toChartTime, type Bar } from './chartUtils';
 import { DEFAULT_MARKER_CLASSES, MARKER_CLASSES, type MarkerClass } from './model';
-import { tokenKeys, useChartUnit, useOnReconnect } from './queries';
+import { tokenKeys, useChartUnit, useOnReconnect, useValueCurrency } from './queries';
 import type { ChartUnit } from './store';
 import { useMarkerTrades } from './useMarkerTrades';
 import { useSession } from '@/store/session';
@@ -89,8 +89,7 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
   const { chain, address } = token;
   const supply = token.totalSupply;
   const [unit, setUnit] = useChartUnit();
-  const [storedCurrency, setCurrency] = useLocalStorage<ChartCurrency>('ts.token.currency', useDisplaySettings().currency);
-  const currency: ChartCurrency = storedCurrency === 'native' ? 'native' : 'usd';
+  const [currency, setCurrency] = useValueCurrency();
   const nativeSymbol = CHAINS[chain].nativeSymbol;
   const theme = useUi((s) => s.theme);
   const feed = useTokenFeed();
@@ -246,7 +245,14 @@ export const PriceChart = memo(function PriceChart({ token, resolution, onResolu
 
   // Unit / currency: axis format + rescale every bar.
   useEffect(() => {
-    candleRef.current?.applyOptions({ priceFormat: { type: 'custom', minMove: minMoveFor(unit, currency), formatter: (p: number) => formatAxis(p, unit, currency) } });
+    candleRef.current?.applyOptions({
+      priceFormat: { type: 'custom', minMove: minMoveFor(unit, currency), formatter: (p: number) => formatAxis(p, unit, currency) },
+      // A flat or narrow range gets room for distinct tick labels.
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+        const info = original();
+        return info && { ...info, priceRange: readableRange(info.priceRange, unit, currency, containerRef.current?.clientHeight ?? 0) };
+      },
+    });
     if (loadedRef.current) writeAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unit, currency]);

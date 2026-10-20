@@ -635,7 +635,9 @@ const BOT_TIERS: Tiers = [[0.7, 12, 'bad'], [0.5, 6, 'warn']];
 const FRESH_TIERS: Tiers = [[0.5, 8, 'warn']];
 /** Holder-based checks, unknown while nobody holds the token. */
 const HOLDER_CHECKS = 7;
+/** Reasons listed; past this the smallest are summed into one 'other' reason. */
 const MAX_REASONS = 6;
+const round1 = (v: number) => Math.round(v * 10) / 10;
 
 export interface SafetyInputs {
   chain: ChainId;
@@ -666,7 +668,8 @@ export interface SafetyInputs {
  * band danger), rugRatio >= 0.5 59, >= 0.3 79, EVM honeypot or verification unknown 79, EVM pool
  * LP < 95% burned 79. A reason's impact is its points x section weight (scaled down if a section
  * passes 100), plus the points a binding cap removed, so impacts add up to 100 - score (before
- * rounding, unless the score floors at 0).
+ * rounding, unless the score floors at 0). At most 6 are listed, largest first: past that the 5
+ * largest and one 'other' reason carrying the rest.
  * Coverage = known / applicable checks: SOL mint + freeze or EVM honeypot + source + owner, tax,
  * LP once migrated, the 7 holder checks (known once anyone holds), wash trading and the rug ratio.
  * Band: a hard gate -> danger; coverage < 0.5 -> unknown; else >= 70 safe, >= 40 caution, danger.
@@ -757,12 +760,21 @@ export function safetyScore({ chain, security: s, holderCount }: SafetyInputs): 
   const coverage = applicable > 0 ? Math.round((known / applicable) * 100) / 100 : 0;
   const gated = caps.some((c) => c.cap <= 25);
   const band: SafetyBand = gated ? 'danger' : coverage < 0.5 ? 'unknown' : score >= 70 ? 'safe' : score >= 40 ? 'caution' : 'danger';
-  const list = [...reasons.values()]
-    .map((r) => ({ ...r, impact: Math.round(r.impact * 10) / 10 }))
-    .filter((r) => r.impact > 0)
-    .sort((a, b) => b.impact - a.impact || a.key.localeCompare(b.key))
-    .slice(0, MAX_REASONS);
-  return { score, band, coverage, reasons: list };
+  const byImpact = (a: SafetyReason, b: SafetyReason) => b.impact - a.impact || a.key.localeCompare(b.key);
+  const ranked = [...reasons.values()]
+    .map((r) => ({ reason: { ...r, impact: round1(r.impact) }, raw: r.impact }))
+    .filter((r) => r.reason.impact > 0)
+    .sort((a, b) => byImpact(a.reason, b.reason));
+  if (ranked.length <= MAX_REASONS) return { score, band, coverage, reasons: ranked.map((r) => r.reason) };
+  // The smallest fold into one 'other' reason, so the list still explains the whole gap to 100.
+  const rest = ranked.slice(MAX_REASONS - 1);
+  const other: SafetyReason = {
+    key: 'other',
+    label: `${rest.length} more checks`,
+    impact: round1(rest.reduce((a, r) => a + r.raw, 0)),
+    level: rest.some((r) => r.reason.level === 'bad') ? 'bad' : 'warn',
+  };
+  return { score, band, coverage, reasons: [...ranked.slice(0, MAX_REASONS - 1).map((r) => r.reason), other].sort(byImpact) };
 }
 
 export { devGroupBalance };

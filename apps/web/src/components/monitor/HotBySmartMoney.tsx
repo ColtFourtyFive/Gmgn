@@ -1,5 +1,8 @@
 // "Hot by smart money": tokens bought by at least two distinct smart wallets
 // within the last 30 minutes, aggregated client-side from the smart feed.
+// The feed's REST snapshot only reaches back a few minutes on a busy chain
+// (its newest 200 smart trades); live pushes extend it while the page stays
+// open, so the panel names the window it actually covers (hotWindowMs).
 
 import { memo, useMemo } from 'react';
 import { shortAddress, type ChainId, type FeedItem, type TokenRef } from '@trenchscope/shared';
@@ -13,6 +16,10 @@ import { useLiveFeed } from './useLiveFeed';
 export const HOT_WINDOW_MS = 30 * 60_000;
 export const HOT_MIN_WALLETS = 2;
 const HOT_MAX = 6;
+/** REST snapshot size of the smart feed (the API's maximum). */
+const HOT_FEED_LIMIT = 200;
+/** Smart trades kept so live pushes can fill the 30-minute window (a busy chain makes ~45 a minute). */
+const HOT_FEED_CAP = 2000;
 
 export interface HotToken {
   token: TokenRef;
@@ -45,11 +52,30 @@ export function aggregateHot(items: FeedItem[], refs: Map<string, TokenRef>, now
     .slice(0, HOT_MAX);
 }
 
-function WalletStack({ wallets }: { wallets: string[] }) {
+/**
+ * How far back `items` (newest first) is complete, capped at HOT_WINDOW_MS.
+ * Fewer items than the REST snapshot size means the server sent every smart
+ * trade it holds (the whole window); otherwise the oldest item bounds it.
+ */
+export function hotWindowMs(items: FeedItem[], snapshotSize: number, now: number): number {
+  if (items.length < snapshotSize) return HOT_WINDOW_MS;
+  return Math.max(0, Math.min(HOT_WINDOW_MS, now - items[items.length - 1].trade.timestamp));
+}
+
+/** Window label: "30m", or the shorter span the feed covers ("last 4m"). */
+export function hotWindowLabel(ms: number): { short: string; long: string } {
+  if (ms >= HOT_WINDOW_MS - 30_000) return { short: '30m', long: 'the last 30 minutes' };
+  const m = Math.max(1, Math.floor(ms / 60_000));
+  return { short: `last ${m}m`, long: `the last ${m} minute${m === 1 ? '' : 's'}` };
+}
+
+/** Avatars of the smart wallets that bought (an image whose name lists them). */
+export function WalletStack({ wallets }: { wallets: string[] }) {
   const shown = wallets.slice(0, 4);
+  const list = wallets.map((w) => shortAddress(w)).join(', ');
   return (
-    <Tooltip content={wallets.map((w) => shortAddress(w)).join(', ')}>
-      <span className="flex items-center -space-x-1.5" tabIndex={0} aria-label={`${wallets.length} smart wallets`}>
+    <Tooltip content={list}>
+      <span className="flex items-center -space-x-1.5" tabIndex={0} role="img" aria-label={`${wallets.length} smart wallets: ${list}`}>
         {shown.map((w) => (
           <WalletAvatar key={w} seed={w} size={16} className="ring-2 ring-panel" />
         ))}
@@ -65,7 +91,7 @@ export interface HotBySmartMoneyProps {
 }
 
 export const HotBySmartMoney = memo(function HotBySmartMoney({ chain, buyAmount, className }: HotBySmartMoneyProps) {
-  const feed = useLiveFeed({ chain, kind: 'smart', limit: 200 });
+  const feed = useLiveFeed({ chain, kind: 'smart', limit: HOT_FEED_LIMIT, cap: HOT_FEED_CAP });
   const now = useNow();
   const bucket = Math.floor(now / 10_000);
   const hot = useMemo(
@@ -73,11 +99,12 @@ export const HotBySmartMoney = memo(function HotBySmartMoney({ chain, buyAmount,
     // Re-aggregate on new trades and every 10s as buys age out.
     [feed.items, feed.tokens, bucket],
   );
+  const span = hotWindowLabel(hotWindowMs(feed.items, HOT_FEED_LIMIT, bucket * 10_000 + 10_000));
 
   return (
     <Panel
       title="Hot by smart money"
-      subtitle="2+ smart wallets · 30m"
+      subtitle={`2+ smart wallets · ${span.short}`}
       icon={<Flame size={14} className="text-dev" />}
       padded={false}
       className={className}
@@ -94,7 +121,7 @@ export const HotBySmartMoney = memo(function HotBySmartMoney({ chain, buyAmount,
           ))}
         </ul>
       ) : hot.length === 0 ? (
-        <EmptyState compact icon={<Flame size={16} />} title="Nothing hot yet" description="No token was bought by two or more smart wallets in the last 30 minutes." />
+        <EmptyState compact icon={<Flame size={16} />} title="Nothing hot yet" description={`No token was bought by two or more smart wallets in ${span.long}.`} />
       ) : (
         <ol className="flex flex-col">
           {hot.map((h, i) => (

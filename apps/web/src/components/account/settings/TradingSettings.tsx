@@ -103,7 +103,7 @@ export function TradingSettings({ chain, onChain, value, onChange, errors, dirty
                 <div className="flex items-center gap-2">
                   <span className="num text-md font-semibold text-fg">{id}</span>
                   {id === active ? <Badge tone="accent">Active</Badge> : (
-                    <button type="button" onClick={() => setActive(id)} className="text-xs text-muted hover:text-accent">
+                    <button type="button" onClick={() => setActive(id)} className="touch-target text-xs text-muted hover:text-accent">
                       Set active
                     </button>
                   )}

@@ -18,6 +18,7 @@ import {
   type LaunchpadConfig,
   type LaunchpadCurve,
   type LaunchResponse,
+  type Order,
   type Socials,
   type SwapReceipt,
 } from '@trenchscope/shared';
@@ -25,7 +26,7 @@ import { HttpError, type AppContext } from '../context';
 import { DEFAULT_LAUNCH_GLYPH, LAUNCH_GLYPHS, RESERVED_TICKERS, seedString } from '../sim/names';
 import type { TokenState, WalletState } from '../sim/world';
 import { HOUR_MS, badRequest, balanceOf } from './common';
-import { networkFeeOf, type Executor, type Ticket } from './execution';
+import { fillReceipt, networkFeeOf, type Executor, type Fill, type Ticket } from './execution';
 import { LAUNCH_LIMITS, type LaunchInput } from './schemas';
 
 /** Flat launch fee: 0.02 SOL, and about the same USD value on the other chains at their reference prices. */
@@ -60,6 +61,8 @@ export class Launches {
   constructor(
     private readonly ctx: AppContext,
     private readonly executor: Executor,
+    /** Creates a buy's strategy exits measured from the price at call time (the facade's createExits). */
+    private readonly createExits: (fill: Fill) => Order[],
   ) {}
 
   install(): void {
@@ -90,6 +93,8 @@ export class Launches {
    * Deploy the token, then fill the creation-block buys: the dev buy from the
    * account's wallet, then each bundle wallet (funded from it with exactly its
    * buy plus fees). The balance covers fee + every buy before anything happens.
+   * The dev buy's exits are created once the whole block has filled: the
+   * launcher's own bundle buys are not a market move to take profit on.
    */
   launch(accountId: string, input: LaunchInput): LaunchResponse {
     const { world, accounts, analytics, market } = this.ctx;
@@ -127,14 +132,18 @@ export class Launches {
       hype: 0,
     });
 
-    const devBuy: Ticket = { accountId, wallet, token, side: 'buy', amount: input.devBuyNative, amountKind: 'native', preset, strategy: input.strategy ?? null, source: 'manual' };
+    const devBuy: Ticket = { accountId, wallet, token, side: 'buy', amount: input.devBuyNative, amountKind: 'native', preset, strategy: null, source: 'manual' };
     const receipts: SwapReceipt[] = [];
-    if (input.devBuyNative > 0) receipts.push(this.executor.fillAtLaunch(devBuy));
+    const devReceipt = input.devBuyNative > 0 ? this.executor.fillAtLaunch(devBuy) : null;
+    if (devReceipt) receipts.push(devReceipt);
     for (let i = 0; i < input.bundleWallets; i++) {
       const bundler = world.createWallet(chain, 'user', { accountId });
       world.transferNative(wallet, bundler, bundleCost);
       token.bundlers.add(bundler.address);
-      receipts.push(this.executor.fillAtLaunch({ ...devBuy, wallet: bundler, amount: input.bundleBuyNative!, strategy: null }));
+      receipts.push(this.executor.fillAtLaunch({ ...devBuy, wallet: bundler, amount: input.bundleBuyNative! }));
+    }
+    if (devReceipt?.ok && input.strategy) {
+      devReceipt.orders = this.createExits({ ticket: { ...devBuy, strategy: input.strategy }, receipt: devReceipt }).map((o) => ({ ...o }));
     }
     market.adopt(token);
     launched.push(world.now);
@@ -144,12 +153,13 @@ export class Launches {
 
   /**
    * Bundle wallets exit with their launcher: when the account sells a token it
-   * launched, each of its bundle wallets sells the same share of its bag and
-   * the proceeds sweep back to the account's wallet.
+   * launched, each of its bundle wallets sells the same share of its bag (a
+   * `fill` on the user channel each, like their launch buys) and the proceeds
+   * sweep back to the account's wallet.
    */
   followSell({ accountId, wallet, token }: Ticket, receipt: SwapReceipt): void {
     if (token.creator !== wallet.address || token.bundlers.size === 0) return;
-    const { world, accounts } = this.ctx;
+    const { world, accounts, hub } = this.ctx;
     const share = receipt.tokenAmount / (balanceOf(wallet, token) + receipt.tokenAmount);
     for (const address of token.bundlers) {
       const bundler = world.getWallet(address);
@@ -160,7 +170,10 @@ export class Launches {
         platformFeeRate: PLATFORM_FEE_RATE,
         networkFee: CHAINS[token.chain].baseNetworkFee,
       });
-      if (out.ok) accounts.recordTradeVolume(accountId, out.usdAmount, out.platformFeeNative * world.nativeUsd(token.chain));
+      if (out.ok && out.trade) {
+        accounts.recordTradeVolume(accountId, out.usdAmount, out.platformFeeNative * world.nativeUsd(token.chain));
+        hub.publishUser(accountId, 'fill', fillReceipt({ ...out, trade: out.trade }, receipt.latencyMs));
+      }
       // a sweep between the account's own wallets, not a funding link
       wallet.native += bundler.native;
       bundler.native = 0;

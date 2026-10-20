@@ -5,11 +5,12 @@
 import { memo, type ReactNode } from 'react';
 import { STAT_WINDOWS, type StatWindow, type TokenDetail } from '@trenchscope/shared';
 import clsx from 'clsx';
-import { Compact, FlashValue, Pct, Price, Usd } from '@/components/common';
+import { Compact, FlashValue, Native, Pct, Price, Usd } from '@/components/common';
 import { BuySellBar } from '@/components/discovery';
 import { Tooltip } from '@/components/ui';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { nativeSymbol } from '@/lib/chain';
+import { useValueCurrency } from './queries';
 
 function Kpi({ label, children, sub, hint, className }: { label: string; children: ReactNode; sub?: ReactNode; hint?: string; className?: string }) {
   const head = <span className={clsx('text-2xs uppercase tracking-wide text-faint', hint && 'cursor-help')}>{label}</span>;
@@ -39,22 +40,26 @@ function Metric({ label, children }: { label: string; children: ReactNode }) {
 
 export const StatsStrip = memo(function StatsStrip({ token: t, className }: { token: TokenDetail; className?: string }) {
   const [win, setWin] = useLocalStorage<StatWindow>('ts.token.window', '5m');
+  const [currency] = useValueCurrency();
   const w = t.stats[win] ?? t.stats['5m'];
   const belowAth = t.athMarketCapUsd > 0 ? t.marketCapUsd / t.athMarketCapUsd - 1 : null;
   const net = w.buyVolumeUsd - w.sellVolumeUsd;
   const sym = nativeSymbol(t.chain);
+  const usdPrice = <Price value={t.priceUsd} />;
+  const nativePrice = <Price value={t.priceNative} symbol={sym} />;
+  /** A USD amount in the chosen currency (native at the chain's current native price). */
+  const money = (usd: number, props: { className?: string; colored?: boolean; signed?: boolean } = {}) =>
+    currency === 'native' && t.nativeUsd > 0 ? <Native value={usd / t.nativeUsd} chain={t.chain} digits={2} {...props} /> : <Usd value={usd} {...props} />;
 
   return (
     <section className={clsx('panel flex min-w-0 flex-col', className)} aria-label="Market stats">
       <div className="grid grid-cols-3 gap-x-3 gap-y-2 p-2.5 sm:grid-cols-6 sm:p-3">
-        <Kpi label="Price" sub={<Price value={t.priceNative} symbol={sym} />}>
-          <FlashValue value={t.priceUsd}>
-            <Price value={t.priceUsd} />
-          </FlashValue>
+        <Kpi label="Price" sub={currency === 'native' ? usdPrice : nativePrice}>
+          <FlashValue value={t.priceUsd}>{currency === 'native' ? nativePrice : usdPrice}</FlashValue>
         </Kpi>
         <Kpi label="Market cap" sub={<Pct value={t.stats['24h'].priceChange} arrow />}>
           <FlashValue value={t.marketCapUsd}>
-            <Usd value={t.marketCapUsd} />
+            {money(t.marketCapUsd)}
           </FlashValue>
         </Kpi>
         <Kpi
@@ -62,10 +67,10 @@ export const StatsStrip = memo(function StatsStrip({ token: t, className }: { to
           hint="All-time-high market cap and how far the token trades below it."
           sub={belowAth !== null && belowAth < -0.0005 ? <Pct value={belowAth} digits={1} /> : <span className="text-up">At ATH</span>}
         >
-          <Usd value={t.athMarketCapUsd} />
+          {money(t.athMarketCapUsd)}
         </Kpi>
         <Kpi label="Liquidity" sub={t.pool ? `${t.pool.dex}` : 'Curve'}>
-          <Usd value={t.liquidityUsd} />
+          {money(t.liquidityUsd)}
         </Kpi>
         <Kpi label="Holders" sub={<>{t.smartDegenCount} smart · {t.kolCount} KOL</>}>
           <FlashValue value={t.holderCount}>
@@ -73,7 +78,7 @@ export const StatsStrip = memo(function StatsStrip({ token: t, className }: { to
           </FlashValue>
         </Kpi>
         <Kpi label="24h volume" sub={<Compact value={t.stats['24h'].swaps} suffix=" swaps" />}>
-          <Usd value={t.stats['24h'].volumeUsd} />
+          {money(t.stats['24h'].volumeUsd)}
         </Kpi>
       </div>
       <div className="border-t border-line">
@@ -112,20 +117,20 @@ export const StatsStrip = memo(function StatsStrip({ token: t, className }: { to
           <div className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1">
             <span className="flex items-center justify-between text-2xs text-faint">
               <span>
-                Buy vol <Usd value={w.buyVolumeUsd} className="text-up" />
+                Buy vol {money(w.buyVolumeUsd, { className: 'text-up' })}
               </span>
               <span>
-                Sell vol <Usd value={w.sellVolumeUsd} className="text-down" />
+                Sell vol {money(w.sellVolumeUsd, { className: 'text-down' })}
               </span>
             </span>
             <BuySellBar buys={w.buyVolumeUsd} sells={w.sellVolumeUsd} />
           </div>
           <Metric label={`Net (${win})`}>
-            <Usd value={net} colored signed />
+            {money(net, { colored: true, signed: true })}
           </Metric>
           <div className="grid grid-cols-2 gap-x-3">
             <Metric label="Volume">
-              <Usd value={w.volumeUsd} />
+              {money(w.volumeUsd)}
             </Metric>
             <Metric label="Makers">
               <Compact value={w.makers} digits={1} />

@@ -23,10 +23,13 @@ import {
   type WsServerMessage,
 } from '@trenchscope/shared';
 import { Accounts } from '../src/accounts';
+import { MAX_CONCURRENT_HASHES, MAX_QUEUED_HASHES, PasswordHashBusy, passwordHashLoad, verifyPassword } from '../src/accounts/credentials';
 import { LOGIN_ATTEMPT_WINDOW_MS, MAX_LOGIN_ATTEMPTS, MAX_SESSIONS_PER_ACCOUNT } from '../src/accounts/service';
 import { buildApp, defaultConfig, type BuiltApp } from '../src/app';
+import type { Trading } from '../src/trading';
 
 let built: BuiltApp;
+const DAY_MS = 86_400_000;
 
 beforeEach(async () => {
   built = await buildApp(defaultConfig({ warmupMinutes: 0, snapshotEveryMs: 0 }), { start: false, persist: false });
@@ -155,6 +158,17 @@ describe('auth', () => {
     expect(accounts().rewards(referrer.account.id).invitees.map((i) => i.username)).toEqual(['Carol']);
   });
 
+  it('ignores a referral code when a guest that already traded registers', async () => {
+    const referrer = await register('Alice');
+    const g = await guest();
+    accounts().recordTradeVolume(g.account.id, 3_663, 29);
+    const reg = await register('Latebinder', 'hunter22', { token: g.token, referralCode: referrer.account.referralCode });
+    expect(reg.account).toMatchObject({ id: g.account.id, isGuest: false, referredBy: null });
+    accounts().recordTradeVolume(g.account.id, 185, 1.5);
+    expect(accounts().rewards(referrer.account.id)).toMatchObject({ invitedCount: 0, inviteeVolumeUsd: 0, rebatesEarnedUsd: 0, invitees: [] });
+    expect(accounts().rewards(g.account.id)).toMatchObject({ ownVolumeUsd: 3_848, cashbackRate: 0, cashbackUsd: 0 });
+  });
+
   it('keeps only the newest sessions per account', async () => {
     const first = await register('Erin');
     const tokens = [first.token];
@@ -168,20 +182,54 @@ describe('auth', () => {
     expect(tokens.slice(2).every((t) => accounts().resolveToken(t) === first.account.id)).toBe(true);
   });
 
-  it('throttles repeated sign-in attempts per account', async () => {
+  it('throttles repeated sign-in attempts per username and client address', async () => {
     await register('Frank');
-    const login = (password: string) => call<AuthResponse & { error: string; code: string }>('POST', '/api/auth/login', { body: { username: 'frank', password } });
+    const login = async (password: string, username = 'frank', remoteAddress = '203.0.113.7') => {
+      const res = await built.app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress, payload: { username, password } });
+      return { status: res.statusCode, body: res.json() as { error: string; code: string }, headers: res.headers };
+    };
     for (let i = 0; i < MAX_LOGIN_ATTEMPTS; i++) expect((await login(`guess-${i}`)).status).toBe(401);
     const locked = await login('hunter22');
     expect(locked.status).toBe(429);
     expect(locked.body).toMatchObject({ code: 'rate_limited', error: expect.stringMatching(/600s/) });
     expect(locked.headers['retry-after']).toBe('600');
+    expect((await login('hunter22', 'FRANK')).status).toBe(429);
+    // The guesser locked out only its own address: the owner still signs in from elsewhere.
+    expect((await login('hunter22', 'frank', '198.51.100.20')).status).toBe(200);
+    // Unknown usernames throttle the same way, so 429 vs 401 does not reveal which accounts exist.
+    for (let i = 0; i < MAX_LOGIN_ATTEMPTS; i++) expect((await login(`guess-${i}`, 'nobody_zz')).status).toBe(401);
+    expect((await login('hunter22', 'nobody_zz')).status).toBe(429);
 
     built.ctx.world.now += LOGIN_ATTEMPT_WINDOW_MS;
     expect((await login('hunter22')).status).toBe(200);
     // A successful sign-in clears the counter.
     for (let i = 0; i < MAX_LOGIN_ATTEMPTS - 1; i++) await login('wrong-again');
     expect((await login('hunter22')).status).toBe(200);
+  });
+
+  it('runs at most MAX_CONCURRENT_HASHES password hashes at once and refuses past a bounded queue', async () => {
+    const total = MAX_CONCURRENT_HASHES + MAX_QUEUED_HASHES + 5;
+    const pending = Array.from({ length: total }, (_, i) => verifyPassword(`pw${i}`, null));
+    expect(passwordHashLoad()).toEqual({ running: MAX_CONCURRENT_HASHES, queued: MAX_QUEUED_HASHES });
+    const results = await Promise.allSettled(pending);
+    const refused = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(refused).toHaveLength(5);
+    expect(refused.every((r) => r.reason instanceof PasswordHashBusy)).toBe(true);
+    // Slots are handed back as hashes finish.
+    expect(passwordHashLoad()).toEqual({ running: 0, queued: 0 });
+    await expect(verifyPassword('again', null)).resolves.toBe(false);
+
+    // Over HTTP a refused hash is a 503 with retry-after, never an unbounded queue.
+    const flood = await Promise.all(
+      Array.from({ length: total }, (_, i) =>
+        built.app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress: `10.9.0.${i}`, payload: { username: `nobody_${i}`, password: 'x'.repeat(64) } }),
+      ),
+    );
+    expect(flood.filter((r) => r.statusCode === 401)).toHaveLength(MAX_CONCURRENT_HASHES + MAX_QUEUED_HASHES);
+    const busy = flood.filter((r) => r.statusCode === 503);
+    expect(busy).toHaveLength(5);
+    expect(busy[0].headers['retry-after']).toBe('1');
+    expect(busy[0].json()).toMatchObject({ code: 'busy' });
   });
 
   it('requires a valid session on protected endpoints', async () => {
@@ -613,6 +661,53 @@ describe('rewards & referrals', () => {
     accounts().recordTradeVolume(alice.account.id, 5_000_000, 40_000);
     a = (await call<RewardsSummary>('GET', '/api/rewards', { token: alice.token })).body;
     expect(a).toMatchObject({ tier: 'Diamond', rebateRate: 0.4, nextTier: null, cashbackUsd: 0, points: 500_000 });
+  });
+});
+
+describe('guest retention', () => {
+  it('purges guests idle for 30 days with their paper wallets, keeping active, registered and still-referenced ones', async () => {
+    const { world } = built.ctx;
+    const housekeeping = () => (accounts() as unknown as { housekeeping(): void }).housekeeping();
+    const pepe = makeToken();
+    const idle = await guest();
+    const idleWallet = accounts().walletFor(idle.account.id, 'sol');
+    expect(world.executeSwap(idleWallet, pepe, 'buy', 1).ok).toBe(true);
+    expect(pepe.holders.has(idleWallet.address)).toBe(true);
+    (built.ctx.trading as Trading).portfolio.record(idle.account.id); // an equity series, sampled by a ticker
+    const active = await guest();
+    const automated = await guest();
+    const target = world.createWallet('sol', 'smart', { native: 10 });
+    const task = await call('POST', '/api/copytrade', { token: automated.token, body: { chain: 'sol', target: target.address, buyMode: 'fixed', buyAmount: 0.1, maxPerToken: 1 } });
+    expect(task.status).toBe(200);
+    const referrer = await guest();
+    await guest(referrer.account.referralCode);
+    const followed = await guest();
+    const fan = await register('fan');
+    await call('POST', '/api/follows', { token: fan.token, body: { chain: 'sol', address: followed.account.wallets.sol.address } });
+    const registered = await register('sleepy');
+
+    world.now += 20 * DAY_MS;
+    expect((await call('GET', '/api/me', { token: active.token })).status).toBe(200); // activity resets the clock
+    housekeeping();
+    expect(accounts().getAccount(idle.account.id)).not.toBeNull(); // 20 days idle: kept
+
+    world.now += 11 * DAY_MS;
+    housekeeping();
+    expect(accounts().getAccount(idle.account.id)).toBeNull();
+    expect(accounts().resolveToken(idle.token)).toBeNull();
+    expect((await call('GET', '/api/me', { token: idle.token })).status).toBe(401);
+    for (const chain of CHAIN_IDS) {
+      const address = idle.account.wallets[chain].address;
+      expect(world.getWallet(address)).toBeUndefined();
+      expect(accounts().accountIdForWallet(address)).toBeNull();
+    }
+    expect(pepe.holders.has(idleWallet.address)).toBe(false);
+    for (const kept of [active, automated, referrer, followed, registered]) expect(accounts().getAccount(kept.account.id)).not.toBeNull();
+    // every ticker (equity sampling, housekeeping, ...) keeps running without the purged account
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    built.ctx.engine.step(60_000);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 });
 

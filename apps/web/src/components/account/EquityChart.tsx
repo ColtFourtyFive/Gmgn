@@ -44,6 +44,32 @@ function toSeries(points: EquityPoint[]): { time: UTCTimestamp; value: number }[
   return out;
 }
 
+const TICKS = 6;
+
+/**
+ * Price-axis format for an equity curve. Compact labels ("$38.9K") hold only
+ * ~3 significant digits, so the few-dollar swings of a quiet account would
+ * label every tick the same: use them only when ticks are far enough apart,
+ * otherwise whole dollars or cents ("$38,875", "$38,875.40"). `minMove` keeps
+ * the scale's ticks on multiples the labels can show.
+ */
+export function equityPriceFormat(values: number[]): { minMove: number; formatter: (p: number) => string } {
+  const finite = values.filter(Number.isFinite);
+  const hi = finite.length ? Math.max(...finite) : 0;
+  const lo = finite.length ? Math.min(...finite) : 0;
+  const step = (hi - lo) / TICKS;
+  const magnitude = Math.max(Math.abs(hi), Math.abs(lo));
+  // Smallest difference compact formatting shows at this magnitude ($38.88K: $10).
+  const compactRes = magnitude >= 1000 ? 10 ** (Math.floor(Math.log10(magnitude) / 3) * 3 - 2) : 0.01;
+  if (step >= compactRes * 2) return { minMove: 0.01, formatter: (p) => formatUsd(p) };
+  const digits = step >= 1 ? 0 : 2;
+  const nf = new Intl.NumberFormat('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return { minMove: digits ? 0.01 : 1, formatter: (p) => `${p < 0 ? '-' : ''}$${nf.format(Math.abs(p))}` };
+}
+
+/** Samples less than this far apart in total get seconds on the time axis (else every label reads the same minute). */
+const SECONDS_VISIBLE_BELOW_S = 15 * 60;
+
 export interface EquityChartProps {
   points: EquityPoint[];
   height?: number;
@@ -72,7 +98,7 @@ export function EquityChart({ points, height = 220, className }: EquityChartProp
       crosshair: { mode: CrosshairMode.Magnet },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.1 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true },
-      localization: { locale: safeLocale(), priceFormatter: (p: number) => formatUsd(p) },
+      localization: { locale: safeLocale() },
     });
     const series = chart.addAreaSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerRadius: 3 });
     chartRef.current = chart;
@@ -103,13 +129,16 @@ export function EquityChart({ points, height = 220, className }: EquityChartProp
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
+    series.applyOptions({ priceFormat: { type: 'custom', ...equityPriceFormat(data.map((d) => d.value)) } });
+    const spanS = data.length > 1 ? data[data.length - 1].time - data[0].time : 0;
+    chartRef.current?.applyOptions({ timeScale: { secondsVisible: spanS < SECONDS_VISIBLE_BELOW_S } });
     series.setData(data);
     chartRef.current?.timeScale().fitContent();
   }, [data]);
 
   return (
     <div className={clsx('relative w-full', className)} style={{ height }}>
-      <div ref={ref} className="absolute inset-0" aria-label="Equity curve" role="img" />
+      <div ref={ref} className="absolute inset-0" aria-label="Equity curve" role="figure" />
       {data.length < 2 && (
         <div className="absolute inset-0 flex items-center justify-center bg-panel/80">
           <EmptyState compact icon={<LineChart size={16} />} title="No history yet" description="Your equity curve fills in as the portfolio is sampled (every 5 minutes and after each trade)." />

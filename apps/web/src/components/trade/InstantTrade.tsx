@@ -18,7 +18,7 @@ import clsx from 'clsx';
 import { accountKeys } from '@/components/account/queries';
 import { Compact, Native, Pct, Price, TokenAvatar, TokenLink, Usd } from '@/components/common';
 import { isNotFound, tokenKeys } from '@/components/token/queries';
-import { Button, EmptyState, ErrorState, Skeleton, Spinner } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Heading, Skeleton, Spinner } from '@/components/ui';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
@@ -215,7 +215,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
           <PositionLine position={position} loading={positions.isPending} symbol={t.symbol} />
           <section aria-label="Quick buy" className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="table-head">Buy</h4>
+              <Heading className="table-head">Buy</Heading>
               <PresetChip preset={settings.buyPresets[settings.activeBuyPreset]} side="buy" />
             </div>
             <div className="grid grid-cols-4 gap-1.5">
@@ -226,7 +226,7 @@ function TokenTrade({ chain, address, onPage }: { chain: ChainId; address: strin
           </section>
           <section aria-label="Quick sell" className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2">
-              <h4 className="table-head">Sell</h4>
+              <Heading className="table-head">Sell</Heading>
               <PresetChip preset={settings.sellPresets[settings.activeSellPreset]} side="sell" />
             </div>
             <div className="grid grid-cols-4 gap-1.5">

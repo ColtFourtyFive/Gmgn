@@ -59,7 +59,24 @@ type OrderSpec = Pick<
   | 'groupId'
   | 'source'
   | 'expiresAt'
->;
+> & {
+  /** Starting peak of an immediately armed trailing stop (defaults to refPriceUsd). */
+  peakPriceUsd?: number;
+};
+
+/**
+ * Entry references for the exit legs of a filled buy (PRD TE-52). Both are
+ * bounded by the post-fill spot price so neither the buyer's own price impact
+ * nor taxes and fees can trip a leg without a market move.
+ */
+export interface EntryRefs {
+  /** Fee-inclusive cost per token, never below the post-fill spot (take-profit, trailing activation). */
+  takeProfitUsd: number;
+  /** Fee- and tax-exclusive average fill price, never above the post-fill spot (stop-loss). */
+  stopLossUsd: number;
+  /** Spot price right after the fill (trailing-stop peak). */
+  spotUsd: number;
+}
 
 export interface OrderFilter {
   status?: 'open' | 'history';
@@ -157,15 +174,18 @@ export class OrderBook {
   /**
    * Exit orders for a filled buy, sharing one groupId. Sizes are a percent of
    * the holding at trigger time. Best effort: capped by the open-order limit.
+   * Take-profits (and a trailing leg's activation) measure from `entry.takeProfitUsd`,
+   * stop-losses from `entry.stopLossUsd`; an immediately armed trailing stop
+   * starts its peak at `entry.spotUsd` (see entryRefs).
    */
-  createStrategy(accountId: string, token: TokenState, entryPriceUsd: number, spec: StrategySpec, source: TradeSource): Order[] {
+  createStrategy(accountId: string, token: TokenState, entry: EntryRefs, spec: StrategySpec, source: TradeSource): Order[] {
     const { world, accounts } = this.ctx;
     const base = {
       triggerType: 'change' as const,
       amountKind: 'percent' as const,
       presetId: accounts.getSettings(accountId).trade[token.chain].activeSellPreset,
       direction: null,
-      refPriceUsd: entryPriceUsd,
+      refPriceUsd: entry.takeProfitUsd,
       activateAtChangePct: null,
       devSellThreshold: null,
       groupId: world.nextId('grp'),
@@ -174,11 +194,11 @@ export class OrderBook {
     };
     const specs: OrderSpec[] = [
       ...spec.takeProfits.map((tp) => ({ ...base, kind: 'take_profit' as const, triggerValue: tp.changePct, amount: tp.sellPercent })),
-      ...spec.stopLosses.map((sl) => ({ ...base, kind: 'stop_loss' as const, triggerValue: sl.lossPct, amount: sl.sellPercent })),
+      ...spec.stopLosses.map((sl) => ({ ...base, kind: 'stop_loss' as const, triggerValue: sl.lossPct, amount: sl.sellPercent, refPriceUsd: entry.stopLossUsd })),
     ];
     if (spec.trailing) {
       const { drawdownPct, sellPercent, activateAtChangePct } = spec.trailing;
-      specs.push({ ...base, kind: 'trailing_stop', triggerValue: drawdownPct, amount: sellPercent, activateAtChangePct: activateAtChangePct || null });
+      specs.push({ ...base, kind: 'trailing_stop', triggerValue: drawdownPct, amount: sellPercent, activateAtChangePct: activateAtChangePct || null, peakPriceUsd: entry.spotUsd });
     }
     if (spec.devSellPercent > 0) {
       specs.push({ ...base, kind: 'dev_sell', triggerType: 'event', triggerValue: 0, amount: spec.devSellPercent, devSellThreshold: DEFAULT_DEV_SELL_THRESHOLD });
@@ -267,7 +287,10 @@ export class OrderBook {
     const before = balanceOf(wallet, token) + trade.tokenAmount;
     const soldShare = before > 0 ? trade.tokenAmount / before : 0;
     for (const order of orders) {
-      if (order.kind === 'dev_sell' && !this.executing.has(order.id) && soldShare >= (order.devSellThreshold ?? DEFAULT_DEV_SELL_THRESHOLD)) this.fire(order);
+      if (order.kind !== 'dev_sell' || this.executing.has(order.id)) continue;
+      // A launcher's own sells (main or bundle wallet) never trip their own dev-sell exit.
+      if (wallet.accountId === order.accountId) continue;
+      if (soldShare >= (order.devSellThreshold ?? DEFAULT_DEV_SELL_THRESHOLD)) this.fire(order);
     }
   }
 
@@ -324,9 +347,10 @@ export class OrderBook {
 
   private add(accountId: string, token: TokenState, spec: OrderSpec): Order {
     const now = this.ctx.world.now;
+    const { peakPriceUsd, ...fields } = spec;
     const armed = spec.kind !== 'trailing_stop' || !spec.activateAtChangePct;
     const order: Order = {
-      ...spec,
+      ...fields,
       id: this.ctx.world.nextId('ord'),
       accountId,
       chain: token.chain,
@@ -334,7 +358,7 @@ export class OrderBook {
       tokenSymbol: token.symbol,
       side: orderSide(spec.kind),
       armed,
-      peakPriceUsd: spec.kind === 'trailing_stop' && armed ? spec.refPriceUsd : null,
+      peakPriceUsd: spec.kind === 'trailing_stop' && armed ? (peakPriceUsd ?? spec.refPriceUsd) : null,
       status: 'open',
       createdAt: now,
       updatedAt: now,
@@ -381,7 +405,13 @@ export class OrderBook {
     }
   }
 
-  private openCount(accountId: string): number {
+  /** Forget a deleted account's orders (it has none open). */
+  forgetAccount(accountId: string): void {
+    for (const order of this.byAccount.get(accountId) ?? []) if (order.status !== 'open') this.orders.delete(order.id);
+    if (!this.openCount(accountId)) this.byAccount.delete(accountId);
+  }
+
+  openCount(accountId: string): number {
     return (this.byAccount.get(accountId) ?? []).reduce((n, o) => n + (o.status === 'open' ? 1 : 0), 0);
   }
 

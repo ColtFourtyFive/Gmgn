@@ -4,15 +4,16 @@
 // refetch they trigger.
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { shortAddress, type ChainId, type FeedItem, type TokenRef, type Trade } from '@trenchscope/shared';
 import { Activity } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, Native, Price, TokenLink, Usd } from '@/components/common';
 import { Badge, CopyButton, DataTable, EmptyState, ErrorState, SegmentedControl, type Column } from '@/components/ui';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { routes } from '@/lib/chain';
-import { useChannel } from '@/lib/ws';
+import { retainKeys } from '@/lib/retain';
+import { realtime, useChannel } from '@/lib/ws';
 import { type ActivityType, useWalletActivity } from './queries';
 import { Multiple } from './Multiple';
 import { PositionEventBadge } from './PositionEvent';
@@ -54,7 +55,10 @@ export function useWalletLive(chain: ChainId, address: string, enabled = true): 
   const qc = useQueryClient();
   const [trades, setTrades] = useState<Trade[]>([]);
   const liveIds = useRef(new Set<string>());
-  const snapshot = useRef(true);
+  /** Connection epoch whose subscription snapshot was handled (null before the first). */
+  const snapshotEpoch = useRef<number | null>(null);
+  /** Trade ids in the last subscription snapshot. */
+  const snapshotIds = useRef(new Set<string>());
   const lastRefresh = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -73,11 +77,16 @@ export function useWalletLive(chain: ChainId, address: string, enabled = true): 
 
   useChannel(enabled ? `wallet:${chain}:${address}` : null, null, (type, data) => {
     if (type !== 'trades' || !Array.isArray(data)) return;
-    const batch = data as Trade[];
-    // The first message is the subscription snapshot (already covered by REST).
-    if (snapshot.current) {
-      snapshot.current = false;
-      return;
+    let batch = data as Trade[];
+    // The first message after every (re)subscription is the server's snapshot of
+    // recent trades. On mount the REST history covers it; after a reconnect only
+    // the trades missed while offline are new.
+    if (snapshotEpoch.current !== realtime.epoch) {
+      const first = snapshotEpoch.current === null;
+      const known = snapshotIds.current;
+      snapshotEpoch.current = realtime.epoch;
+      snapshotIds.current = new Set(batch.map((t) => t.id));
+      batch = first ? [] : batch.filter((t) => !known.has(t.id) && !liveIds.current.has(t.id));
     }
     if (batch.length === 0) return;
     for (const t of batch) liveIds.current.add(t.id);
@@ -88,6 +97,9 @@ export function useWalletLive(chain: ChainId, address: string, enabled = true): 
     });
     refresh();
   });
+
+  // Only ids still listed (capped at LIVE_CAP) can need the highlight.
+  useEffect(() => retainKeys(liveIds.current, new Set(trades.map((t) => t.id))), [trades]);
 
   return { trades, liveIds: liveIds.current };
 }
@@ -168,7 +180,7 @@ export interface ActivityTabProps {
 
 /** Buy/sell history with a type filter; live trades prepend in realtime. */
 export const ActivityTab = memo(function ActivityTab({ chain, address, live }: ActivityTabProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const [type, setType] = useState<ActivityType>('all');
   const q = useWalletActivity(chain, address, type);
 
@@ -211,7 +223,7 @@ export const ActivityTab = memo(function ActivityTab({ chain, address, live }: A
           loading={q.isLoading}
           minWidth={760}
           maxHeight={640}
-          onRowClick={(it) => navigate(routes.token(chain, it.trade.token))}
+          onRowClick={(it, e) => openLink(routes.token(chain, it.trade.token), e)}
           empty={<EmptyState compact icon={<Activity size={16} />} title="No activity" description={type === 'all' ? 'No trades by this wallet yet.' : `No ${type}s in the recent history.`} />}
         />
       )}

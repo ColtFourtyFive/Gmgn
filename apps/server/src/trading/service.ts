@@ -3,14 +3,15 @@
 // token launches and the portfolio view. Sub-services share one executor and
 // one job tracker; post-fill bookkeeping that spans them lives here.
 
-import type { Order } from '@trenchscope/shared';
+import type { Order, SwapReceipt } from '@trenchscope/shared';
 import type { AppContext, TradingApi } from '../context';
+import type { TokenState } from '../sim/world';
 import { Alerts, type StoredAlert } from './alerts';
 import { balanceOf, Jobs } from './common';
 import { CopyTrader, type StoredCopyTask } from './copytrade';
 import { Executor, latencyFromEnv, type Fill } from './execution';
 import { Launches } from './launch';
-import { OrderBook } from './orders';
+import { OrderBook, type EntryRefs } from './orders';
 import { Portfolio, type EquityPoint } from './portfolio';
 import { Sniper, type StoredSniperTask } from './sniper';
 
@@ -53,7 +54,7 @@ export class Trading implements TradingApi {
     this.copyTrade = new CopyTrader(ctx, this.executor, this.jobs);
     this.sniper = new Sniper(ctx, this.executor, this.jobs);
     this.alerts = new Alerts(ctx);
-    this.launches = new Launches(ctx, this.executor);
+    this.launches = new Launches(ctx, this.executor, (fill) => this.createExits(fill));
     this.portfolio = new Portfolio(ctx, this.launches);
   }
 
@@ -77,16 +78,52 @@ export class Trading implements TradingApi {
   /** Runs right after a fill hits the ledger; returns the exit orders created for it. */
   private onFill({ ticket, receipt }: Fill): Order[] {
     const { accountId, token, wallet } = ticket;
-    const created =
-      ticket.side === 'buy' && ticket.strategy
-        ? this.orders.createStrategy(accountId, token, receipt.priceUsd, ticket.strategy, ticket.source === 'manual' ? 'strategy' : ticket.source)
-        : [];
+    const created = this.createExits({ ticket, receipt });
     if (ticket.side === 'sell') {
       if (balanceOf(wallet, token) <= 0) this.orders.closePosition(accountId, token.address);
       this.launches.followSell(ticket, receipt);
     }
     this.portfolio.record(accountId);
     return created;
+  }
+
+  /** The exit orders of a buy's strategy, measured from the price now (see entryRefs). */
+  private createExits({ ticket, receipt }: Fill): Order[] {
+    const { accountId, token, strategy, source } = ticket;
+    if (ticket.side !== 'buy' || !strategy) return [];
+    return this.orders.createStrategy(accountId, token, this.entryRefs(token, receipt), strategy, source === 'manual' ? 'strategy' : source);
+  }
+
+  /**
+   * Exit-leg references for a buy fill, read right after it hit the ledger
+   * (PRD TE-52). receipt.priceUsd is the average fill price including the buy
+   * tax and venue fee, while the spot after the fill includes the buyer's own
+   * price impact: measuring every leg from it fired take-profits on large buys
+   * and stop-losses on taxed tokens with no market move at all.
+   */
+  private entryRefs(token: TokenState, receipt: SwapReceipt): EntryRefs {
+    const spotUsd = this.world.priceUsd(token);
+    const nativeUsd = this.world.nativeUsd(token.chain);
+    const tokens = receipt.tokenAmount;
+    if (!(tokens > 0)) return { takeProfitUsd: spotUsd, stopLossUsd: spotUsd, spotUsd };
+    const costUsd = ((receipt.nativeAmount + receipt.platformFeeNative + receipt.networkFeeNative) * nativeUsd) / tokens;
+    const venueFeeRate = token.pool?.feeRate ?? token.curve?.feeRate ?? 0;
+    const venuePriceUsd = receipt.priceUsd * (1 - token.buyTax) * (1 - venueFeeRate);
+    return { takeProfitUsd: Math.max(spotUsd, costUsd), stopLossUsd: Math.min(spotUsd, venuePriceUsd), spotUsd };
+  }
+
+  hasAutomation(accountId: string): boolean {
+    return (
+      this.orders.openCount(accountId) > 0 ||
+      this.copyTrade.list(accountId).length > 0 ||
+      this.sniper.list(accountId).length > 0 ||
+      this.alerts.list(accountId).length > 0
+    );
+  }
+
+  forgetAccount(accountId: string): void {
+    this.orders.forgetAccount(accountId);
+    this.portfolio.forget(accountId);
   }
 
   serialize(): TradingSnapshot {

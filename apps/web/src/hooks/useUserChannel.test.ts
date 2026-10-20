@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import type { AppNotification, SwapReceipt, Trade } from '@trenchscope/shared';
+import { playCue } from '@/lib/sounds';
 import { useToasts } from '@/store/toasts';
 import { useUi } from '@/store/ui';
 import { handleUserEvent, trackManualSwap } from './useUserChannel';
+
+vi.mock('@/lib/sounds', () => ({ playCue: vi.fn() }));
 
 const qc = new QueryClient();
 let seq = 0;
@@ -22,6 +25,7 @@ const toasts = () => useToasts.getState().toasts.map((t) => `${t.kind}:${t.title
 beforeEach(() => {
   vi.useFakeTimers();
   useToasts.getState().clear();
+  vi.mocked(playCue).mockClear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -88,5 +92,13 @@ describe('user channel fill toasts', () => {
     settle(null);
     vi.advanceTimersByTime(600);
     expect(toasts()).toEqual(['success:Bought PEPE']);
+  });
+
+  it('plays a sound cue with fill and alert toasts (gated by the Sounds setting inside playCue)', () => {
+    handleUserEvent(qc, 'fill', receipt('tokH'));
+    vi.advanceTimersByTime(600);
+    handleUserEvent(qc, 'notification', notification('alert', 'tokH', 'Price alert · $PEPE'));
+    handleUserEvent(qc, 'notification', { ...notification('sniper', 'tokI', 'Snipe failed · $PEPE'), level: 'error' });
+    expect(vi.mocked(playCue).mock.calls).toEqual([['fill'], ['alert'], ['error']]);
   });
 });

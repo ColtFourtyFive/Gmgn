@@ -3,7 +3,6 @@
 // viewer's blacklist merged in).
 
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   CHAINS,
   formatPercent,
@@ -42,6 +41,7 @@ import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { Button, DataTable, EmptyState, ErrorState, SegmentedControl, Select, Tooltip, type Column, type SortState } from '@/components/ui';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useIsMobile } from '@/hooks/useMediaQuery';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes, useChain } from '@/lib/chain';
@@ -272,7 +272,7 @@ function trendingColumns({ win, thresholds, buyAmount, devTags, mobile }: Column
 }
 
 function Trending({ chain }: { chain: ChainId }) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const display = useDisplaySettings();
   const devTags = useViewerTags(chain);
   const mobile = useIsMobile();
@@ -353,11 +353,7 @@ function Trending({ chain }: { chain: ChainId }) {
             sort={sort}
             onSortChange={setSort}
             manualSort
-            onRowClick={(t, e) => {
-              const href = routes.token(t.chain, t.address);
-              if ('metaKey' in e && (e.metaKey || e.ctrlKey)) window.open(href, '_blank', 'noopener');
-              else navigate(href);
-            }}
+            onRowClick={(t, e) => openLink(routes.token(t.chain, t.address), e)}
             loading={snap.loading}
             skeletonRows={14}
             compact={display.compactRows}

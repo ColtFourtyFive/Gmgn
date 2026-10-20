@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Check, LogIn, Rocket } from 'lucide-react';
 import { SimBanner } from '@/components/common';
-import { Button, Skeleton, SkeletonText } from '@/components/ui';
+import { Button, ErrorState, Skeleton, SkeletonText } from '@/components/ui';
 import { useSession } from '@/store/session';
 
 export interface AccountGateProps {
@@ -24,12 +24,23 @@ export function useSignedIn(): boolean {
 /**
  * Renders `children` for signed-in users. Signed-out visitors get a friendly
  * explanation and a "Start paper trading" button (opens the auth modal);
- * while a stored token is being verified a skeleton avoids flashing the gate.
+ * while a stored token is being verified a skeleton avoids flashing the gate,
+ * and once an attempt failed (API down or erroring) the error with a Retry
+ * (the session store keeps retrying in the background too).
  */
 export function AccountGate({ icon, title, description, features, children }: AccountGateProps) {
   const signedIn = useSignedIn();
   const verifying = useSession((s) => !!s.token && !s.ready);
+  const restoreError = useSession((s) => s.restoreError);
+  const restoring = useSession((s) => s.restoring);
   if (signedIn) return <>{children}</>;
+  if (verifying && restoreError != null) {
+    return (
+      <div className="panel">
+        <ErrorState title="Couldn’t load your account" error={restoreError} onRetry={() => useSession.getState().retryRestore()} retrying={restoring} />
+      </div>
+    );
+  }
   if (verifying) return <GateSkeleton />;
   return (
     <div className="flex justify-center py-6 md:py-12">

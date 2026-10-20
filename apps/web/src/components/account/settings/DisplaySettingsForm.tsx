@@ -4,6 +4,7 @@ import { Monitor, ShieldAlert } from 'lucide-react';
 import { RiskChip } from '@/components/common';
 import { NumberInput, Panel, SegmentedControl, Toggle } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
+import { useUi } from '@/store/ui';
 import { path, type SettingsErrors } from './model';
 
 type Thresholds = DisplaySettings['riskThresholds'];
@@ -37,6 +38,8 @@ export interface DisplaySettingsFormProps {
 /** Units, theme, live-update behaviour, trade confirmations and risk-chip thresholds. */
 export function DisplaySettingsForm({ value, onChange, errors }: DisplaySettingsFormProps) {
   const { theme, setTheme } = useTheme();
+  const tradingHotkeys = useUi((s) => s.tradingHotkeys);
+  const setTradingHotkeys = useUi((s) => s.setTradingHotkeys);
   const set = <K extends keyof DisplaySettings>(key: K, v: DisplaySettings[K]) => onChange({ ...value, [key]: v });
   const setRisk = (key: keyof Thresholds, v: number) => set('riskThresholds', { ...value.riskThresholds, [key]: v });
 
@@ -55,7 +58,7 @@ export function DisplaySettingsForm({ value, onChange, errors }: DisplaySettings
               ]}
             />
           </Row>
-          <Row label="Values in" description="Show amounts in USD or in the chain’s native token.">
+          <Row label="Values in" description="Show the token page’s chart and market stats in USD or in the chain’s native token.">
             <SegmentedControl
               value={value.currency}
               onChange={(v) => set('currency', v)}
@@ -81,8 +84,20 @@ export function DisplaySettingsForm({ value, onChange, errors }: DisplaySettings
             <Toggle checked={value.flashUpdates} onChange={(v) => set('flashUpdates', v)} label="Flash live updates" description="Briefly highlight numbers green or red when they change." />
             <Toggle checked={value.compactRows} onChange={(v) => set('compactRows', v)} label="Compact rows" description="Denser tables to fit more tokens on screen." />
             <Toggle checked={value.confirmTrades} onChange={(v) => set('confirmTrades', v)} label="Confirm trades" description="Ask before submitting buys and sells." />
-            <Toggle checked={value.sounds} onChange={(v) => set('sounds', v)} label="Sounds" description="Play a sound on fills and alerts." />
-            <Toggle checked={value.hotkeys} onChange={(v) => set('hotkeys', v)} label="Keyboard shortcuts" description="Trading hotkeys on token pages (B/S, number keys…)." />
+            <Toggle checked={value.sounds} onChange={(v) => set('sounds', v)} label="Sounds" description="Play a short sound on fills and alerts." />
+            <Toggle
+              checked={value.hotkeys}
+              onChange={(v) => set('hotkeys', v)}
+              label="Keyboard shortcuts"
+              description="Single-key shortcuts: / search, I instant-trade dock, B/S open the trade panel on token pages, 1–3 · J/K · H/L on Trenches, P pauses Monitor."
+            />
+            {/* Device-local opt-in, applied at once (not part of the saved draft). */}
+            <Toggle
+              checked={tradingHotkeys}
+              onChange={setTradingHotkeys}
+              label="Trading hotkeys"
+              description="Let B on Trenches buy the selected token (needs keyboard shortcuts). Off by default; saved on this device right away."
+            />
           </div>
         </div>
       </Panel>

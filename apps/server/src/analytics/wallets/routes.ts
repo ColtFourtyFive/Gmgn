@@ -24,6 +24,7 @@ const ActivityQuery = z.object({
   type: z.enum(['all', 'buy', 'sell']).optional(),
   limit: Limit,
   before: z.coerce.number().optional(),
+  beforeId: z.string().min(1).max(100).optional(),
 });
 const LimitQuery = z.object({ limit: Limit });
 const LeaderboardQuery = z.object({
@@ -85,7 +86,7 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
   app.get('/api/:chain/wallets/:address/activity', async (req) => {
     const w = wallet(req);
     const q = parse(ActivityQuery, req.query);
-    return ctx.analytics.walletActivity(w, { type: q.type, limit: q.limit, before: q.before }, viewerOf(ctx, req));
+    return ctx.analytics.walletActivity(w, { type: q.type, limit: q.limit, before: q.before, beforeId: q.beforeId }, viewerOf(ctx, req));
   });
 
   app.get('/api/:chain/wallets/:address/created-tokens', async (req) => {

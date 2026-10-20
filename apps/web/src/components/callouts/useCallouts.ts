@@ -8,6 +8,8 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import type { CalloutFilter, ChainId, LeaderboardRow, Signal, WalletProfile, WalletTag } from '@trenchscope/shared';
 import { walletKeys } from '@/components/wallet';
 import { api } from '@/lib/api';
+import { useStickyError } from '@/hooks/useStickyError';
+import { retainKeys } from '@/lib/retain';
 import { realtime, useChannel, useConnectionState } from '@/lib/ws';
 import { aggregateCallers, callerOf, type CallerStats } from './callerStats';
 
@@ -90,14 +92,18 @@ export function useCallouts(chain: ChainId, filter: CalloutFilter, accept: (s: S
   acceptRef.current = accept;
   const keyRef = useRef(key);
   keyRef.current = key;
+  const listed = useRef<{ key: string; ids: Set<string> } | null>(null);
 
   useChannel(`signals:${chain}`, null, (type, data) => {
     if (type !== 'signals' || !Array.isArray(data)) return;
     setWsSeen(true);
     const calls = (data as Signal[]).filter((s) => s.kind === 'kol_call' && callerOf(s) && acceptRef.current(s));
     if (calls.length === 0) return;
-    for (const s of calls) freshIds.current.add(s.id);
     const k = keyRef.current;
+    // Every (re)subscription starts with a snapshot of recent signals: only calls
+    // the loaded list does not hold yet are new (nothing is, before it loads).
+    const shown = listed.current?.key === k ? listed.current.ids : null;
+    if (shown) for (const s of calls) if (!shown.has(s.id)) freshIds.current.add(s.id);
     setPushed((prev) => ({ key: k, calls: [...calls, ...(prev.key === k ? prev.calls : [])].slice(0, CALLOUTS_LIMIT) }));
   });
 
@@ -118,12 +124,20 @@ export function useCallouts(chain: ChainId, filter: CalloutFilter, accept: (s: S
     return [...map.values()].sort(byNewest).slice(0, CALLOUTS_LIMIT);
   }, [q.data, pushed, key]);
 
+  // Only ids still listed can need the slide-in.
+  useEffect(() => {
+    const ids = new Set(calls.map((s) => s.id));
+    retainKeys(freshIds.current, ids);
+    listed.current = q.data ? { key, ids } : null;
+  }, [calls, q.data, key]);
+
   const conn = useConnectionState();
+  const failed = useStickyError(q); // not reset to "loading" by each 15s retry
   return {
     calls,
     freshIds: freshIds.current,
-    loading: !q.data && !q.isError,
-    error: q.isError && !q.data ? q.error : null,
+    loading: !q.data && failed === null,
+    error: failed !== null && !q.data ? failed : null,
     live: wsSeen && conn === 'open',
     retry: () => {
       realtime.connect();
@@ -136,6 +150,10 @@ export function useCallouts(chain: ChainId, filter: CalloutFilter, accept: (s: S
 export interface CallerRanking {
   callers: CallerStats[];
   loading: boolean;
+  /** The calls behind the ranking failed to load: show an error, never "no repeat callers". */
+  error: unknown;
+  retry: () => void;
+  retrying: boolean;
 }
 
 /**
@@ -149,5 +167,14 @@ export function useCallerRanking(chain: ChainId, filter: CalloutFilter, feed: Li
   const all = useCalloutsQuery(chain, 'all', full);
   const calls = full ? all.data : feed.calls;
   const callers = useMemo(() => (calls ? aggregateCallers(calls) : []), [calls]);
-  return { callers, loading: full ? !all.data && !all.isError : feed.loading };
+  if (full)
+    return {
+      callers,
+      loading: !all.data && !all.isError,
+      error: all.isError && !all.data ? all.error : null,
+      retry: () => void all.refetch(),
+      retrying: all.isFetching,
+    };
+  // A failed feed can still hold a few pushed calls: a partial ranking next to the error would mislead.
+  return { callers, loading: feed.loading, error: feed.error, retry: feed.retry, retrying: feed.retrying };
 }

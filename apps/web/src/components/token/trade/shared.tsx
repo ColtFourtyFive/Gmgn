@@ -1,7 +1,7 @@
 // Shared props and small pieces of the trade panel forms.
 
 import type { ReactNode, RefObject } from 'react';
-import type { ChainTradeSettings, PresetId, TokenDetail, TokenPositionRow, TradePreset } from '@trenchscope/shared';
+import type { ChainTradeSettings, Position, PresetId, TokenDetail, TradePreset } from '@trenchscope/shared';
 import { CircleCheck, CircleX, TrendingUp } from 'lucide-react';
 import { Compact, Native, Price } from '@/components/common';
 import { Button } from '@/components/ui';
@@ -16,7 +16,7 @@ export interface TradeFormProps {
   presetId: PresetId;
   preset: TradePreset;
   trade: ChainTradeSettings;
-  position: TokenPositionRow | null;
+  position: Position | null;
   signedIn: boolean;
   /** Native wallet balance (null signed out). */
   balance: number | null;

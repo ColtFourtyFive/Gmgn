@@ -121,7 +121,8 @@ export function SocialLinks({ socials, size = 13, className }: SocialLinksProps)
   ].filter((it): it is typeof it & { href: string } => it.href !== null);
   if (items.length === 0) return null;
   return (
-    <span className={clsx('inline-flex items-center gap-0.5', className)}>
+    // Touch: 24px hit areas (touch-target), spaced so they do not overlap.
+    <span className={clsx('inline-flex items-center gap-0.5 [@media(pointer:coarse)]:gap-1', className)}>
       {items.map((it) => (
         <a
           key={it.label}
@@ -131,7 +132,7 @@ export function SocialLinks({ socials, size = 13, className }: SocialLinksProps)
           aria-label={it.label}
           title={it.label}
           onClick={stop}
-          className="inline-flex h-5 w-5 items-center justify-center rounded text-faint transition-colors hover:bg-panel-3 hover:text-fg"
+          className="touch-target inline-flex h-5 w-5 items-center justify-center rounded text-faint transition-colors hover:bg-panel-3 hover:text-fg"
         >
           {it.icon}
         </a>

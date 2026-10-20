@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useStickyError } from '@/hooks/useStickyError';
 import { realtime, useChannel, useConnectionState } from '@/lib/ws';
 
 export interface LiveSnapshotOptions<T> {
@@ -44,10 +45,10 @@ export function useLiveSnapshot<T>({ channel, type, params, fetch, queryKey, pol
   const key = `${channel}|${JSON.stringify(params ?? null)}`;
   const keyRef = useRef(key);
   keyRef.current = key;
-  const [ws, setWs] = useState<{ key: string; data: T } | null>(null);
+  const [ws, setWs] = useState<{ key: string; epoch: number; data: T } | null>(null);
 
   useChannel(channel, params, (t, data) => {
-    if (t === type) setWs({ key: keyRef.current, data: data as T });
+    if (t === type) setWs({ key: keyRef.current, epoch: realtime.epoch, data: data as T });
   });
 
   const conn = useConnectionState();
@@ -58,7 +59,9 @@ export function useLiveSnapshot<T>({ channel, type, params, fetch, queryKey, pol
     return () => clearTimeout(id);
   }, [key, stallMs]);
 
-  const wsCurrent = ws !== null && ws.key === key && conn === 'open';
+  // A snapshot from before a reconnect is old news (the socket may have gone
+  // silent long before it was dropped): REST covers until the next push.
+  const wsCurrent = ws !== null && ws.key === key && conn === 'open' && ws.epoch === realtime.epoch;
   const useRest = conn !== 'open' || (stalled && !wsCurrent);
   const q = useQuery({
     queryKey,
@@ -72,7 +75,9 @@ export function useLiveSnapshot<T>({ channel, type, params, fetch, queryKey, pol
   const restData = q.data ?? null;
   const data = wsCurrent ? ws.data : (restData ?? ws?.data ?? null);
   const stale = !wsCurrent && !restData && ws !== null;
-  const error = useRest && q.isError && !wsCurrent ? q.error : null;
+  // Stays set while the fallback retries, so the error state is not remounted every poll.
+  const failed = useStickyError(q);
+  const error = useRest && failed !== null && !wsCurrent ? failed : null;
 
   return {
     data,

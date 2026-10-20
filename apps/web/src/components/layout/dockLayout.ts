@@ -131,3 +131,30 @@ export function parseDockRects(raw: unknown): Record<string, DockRect> {
   }
   return out;
 }
+
+/** Screen box (DOMRect-compatible). */
+export interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Share (0..1) of `el`'s area that `cover` hides. */
+export function coveredShare(cover: Box, el: Box): number {
+  const area = Math.max(0, el.right - el.left) * Math.max(0, el.bottom - el.top);
+  if (area === 0) return 0;
+  const w = Math.min(cover.right, el.right) - Math.max(cover.left, el.left);
+  const h = Math.min(cover.bottom, el.bottom) - Math.max(cover.top, el.top);
+  return w > 0 && h > 0 ? (w * h) / area : 0;
+}
+
+/**
+ * Vertical scroll (added to scrollTop) that brings `el` clear of `cover`:
+ * an element in the cover's lower half moves up above its top edge, one in
+ * the upper half moves down below its bottom edge.
+ */
+export function clearanceScroll(cover: Box, el: Box, gap = DOCK_GAP): number {
+  const below = (el.top + el.bottom) / 2 >= (cover.top + cover.bottom) / 2;
+  return below ? el.bottom - cover.top + gap : -(cover.bottom - el.top + gap);
+}

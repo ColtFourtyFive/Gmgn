@@ -1,11 +1,12 @@
 import { memo, useState, type MouseEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { formatDuration, formatPercent, getLaunchpad, type DisplaySettings, type TokenSummary, type TrenchesColumn, type WalletTag } from '@trenchscope/shared';
 import { Check } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, FlashValue, SocialLinks, TokenAvatar, Usd } from '@/components/common';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { CopyButton, HoverCard } from '@/components/ui';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { routes } from '@/lib/chain';
 import { contextPoint, TokenContextMenu, type ContextPoint } from './HideActions';
 import { HolderCount, RiskChips, TagCount, TokenFlags } from './TokenBadges';
@@ -45,7 +46,7 @@ function Metric({ label, children, title }: { label: string; children: ReactNode
  * opens the actions menu (new tab, copy, hide token / dev).
  */
 export const TokenCard = memo(function TokenCard({ token: t, column, thresholds, buyAmount, selected, animate, compact, devTags }: TokenCardProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const [entering, setEntering] = useState(!!animate);
   const [menuAt, setMenuAt] = useState<ContextPoint | null>(null);
   const curve = t.status !== 'migrated';
@@ -58,8 +59,7 @@ export const TokenCard = memo(function TokenCard({ token: t, column, thresholds,
     if (!e.currentTarget.contains(e.target as Node)) return;
     const hit = (e.target as HTMLElement).closest(INTERACTIVE);
     if (hit && e.currentTarget.contains(hit)) return;
-    if (e.metaKey || e.ctrlKey) window.open(href, '_blank', 'noopener');
-    else navigate(href);
+    openLink(href, e);
   };
 
   return (
@@ -68,6 +68,9 @@ export const TokenCard = memo(function TokenCard({ token: t, column, thresholds,
         data-token={t.address}
         aria-current={selected || undefined}
         onClick={onClick}
+        // Middle click opens the token in a new tab, like Ctrl/Cmd-click.
+        onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+        onAuxClick={(e) => e.button === 1 && onClick(e)}
         onContextMenu={(e) => {
           if (!e.currentTarget.contains(e.target as Node)) return;
           e.preventDefault();

@@ -119,7 +119,7 @@ export async function registerAccountRoutes(app: FastifyInstance, ctx: AppContex
 
   app.post('/api/auth/login', async (req) => {
     const body = parse(loginBody, req.body);
-    return accounts.login(body.username, body.password);
+    return accounts.login(body.username, body.password, req.ip);
   });
 
   app.post('/api/auth/logout', async (req) => {

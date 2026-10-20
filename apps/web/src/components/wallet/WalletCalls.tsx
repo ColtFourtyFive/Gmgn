@@ -4,13 +4,13 @@
 // on phones (no sideways scrolling).
 
 import { memo, useMemo, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { formatInt, type Signal } from '@trenchscope/shared';
 import { MessageSquareQuote } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Pct, StatTile, TokenLink, Usd } from '@/components/common';
 import { Badge, DataTable, EmptyState, ErrorState, Skeleton, type Column } from '@/components/ui';
 import { useBreakpoint } from '@/hooks/useMediaQuery';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { routes } from '@/lib/chain';
 import { Multiple } from './Multiple';
 import { useWalletCalls } from './queries';
@@ -111,7 +111,7 @@ function CallList({ calls, loading }: { calls: Signal[]; loading: boolean }) {
 
 /** The wallet's calls, newest first, with hit rates. */
 export const CallsTab = memo(function CallsTab({ chain, address }: WalletTableProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const stacked = !useBreakpoint('sm');
   const q = useWalletCalls(chain, address);
   const d = q.data;
@@ -139,7 +139,7 @@ export const CallsTab = memo(function CallsTab({ chain, address }: WalletTablePr
           defaultSort={{ key: 'called', dir: 'desc' }}
           minWidth={620}
           maxHeight={560}
-          onRowClick={(s) => navigate(routes.token(s.chain, s.token.address))}
+          onRowClick={(s, e) => openLink(routes.token(s.chain, s.token.address), e)}
           empty={EMPTY}
         />
       )}

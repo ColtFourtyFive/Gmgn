@@ -51,7 +51,13 @@ export function NotificationsBell() {
         <div className="flex max-h-[min(70vh,520px)] flex-col">
           <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
             <h2 className="text-sm font-semibold">Notifications</h2>
-            <button type="button" disabled={unread === 0} onClick={() => markRead()} className="text-xs font-medium text-accent hover:underline disabled:text-faint disabled:no-underline">
+            {/* aria-disabled, not disabled: it is usually focused when pressed, and a disabled button would drop focus to <body>. */}
+            <button
+              type="button"
+              aria-disabled={unread === 0}
+              onClick={() => unread > 0 && markRead()}
+              className="text-xs font-medium text-accent hover:underline aria-disabled:cursor-default aria-disabled:text-faint aria-disabled:no-underline"
+            >
               Mark all read
             </button>
           </div>

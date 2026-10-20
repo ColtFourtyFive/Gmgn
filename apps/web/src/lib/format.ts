@@ -26,7 +26,18 @@ export function formatNativeFor(chain: ChainId, value: number | null | undefined
 }
 
 /** Human readable message from anything thrown (ApiError, Error, string). */
+/**
+ * A lazy page chunk (or its CSS) failed to load: a network blip, or a deploy
+ * removed the old hashed files. React caches the failed import, so only a
+ * reload recovers. Chrome, Firefox, Safari and Vite word it differently.
+ */
+export function isChunkLoadError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  return /dynamically imported module|importing a module script failed|loading (css )?chunk|unable to preload css/i.test(message);
+}
+
 export function errorMessage(err: unknown, fallback = 'Something went wrong'): string {
+  if (isChunkLoadError(err)) return 'This part of the app didn’t load — the connection dropped or a new version is out. Reload the page.';
   if (err instanceof ApiError) {
     if (err.status === 0 || err.status >= 502) return 'Server unreachable — is the API running?';
     return err.message || fallback;

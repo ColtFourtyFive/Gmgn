@@ -137,7 +137,18 @@ function Callouts({ chain }: { chain: ChainId }) {
     </section>
   );
 
-  const top = <TopCallersPanel chain={chain} callers={ranking.callers} directory={directory} loading={ranking.loading} className={wide ? 'max-h-full' : 'min-h-0 flex-1'} />;
+  const top = (
+    <TopCallersPanel
+      chain={chain}
+      callers={ranking.callers}
+      directory={directory}
+      loading={ranking.loading}
+      error={ranking.error}
+      onRetry={ranking.retry}
+      retrying={ranking.retrying}
+      className={wide ? 'max-h-full' : 'min-h-0 flex-1'}
+    />
+  );
 
   return (
     <Page fullHeight className="max-w-[1800px]">

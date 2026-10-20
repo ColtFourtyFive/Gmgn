@@ -1,11 +1,10 @@
 import { useMemo, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { TokenPositionRow } from '@trenchscope/shared';
 import { Boxes, Wallet } from 'lucide-react';
 import { AddressLink, Age, ChainIcon, Compact, FlashValue, Pct, Price, TokenLink, Usd } from '@/components/common';
 import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { DataTable, EmptyState, Popover, Skeleton, type Column } from '@/components/ui';
-import { serverNow, useIsMobile } from '@/hooks';
+import { serverNow, useIsMobile, useOpenLink } from '@/hooks';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { routes } from '@/lib/chain';
 import type { PortfolioRow } from './bundles';
@@ -77,7 +76,7 @@ export interface PositionsTableProps {
 
 /** Open positions: desktop table with quick-sell buttons, stacked cards on phones; launches show their bundle wallets. */
 export function PositionsTable({ rows, loading, showChain, empty }: PositionsTableProps) {
-  const navigate = useNavigate();
+  const openLink = useOpenLink();
   const mobile = useIsMobile();
   const { compactRows } = useDisplaySettings();
   const emptyState = empty ?? <EmptyState icon={<Wallet size={18} />} title="No open positions" description="Buy a token from Trenches or Trending and it shows up here." />;
@@ -231,7 +230,7 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
       rows={rows}
       rowKey={keyOf}
       defaultSort={{ key: 'value', dir: 'desc' }}
-      onRowClick={(r) => navigate(routes.token(r.chain, r.token))}
+      onRowClick={(r, e) => openLink(routes.token(r.chain, r.token), e)}
       loading={loading}
       skeletonRows={4}
       empty={emptyState}

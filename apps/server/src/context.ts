@@ -49,10 +49,17 @@ export interface AppConfig {
   snapshotEveryMs: number;
   /** Serve the built web app from this directory if it exists. */
   webDist: string | null;
-  /** Trust X-Forwarded-For (deployments behind a reverse proxy). */
-  trustProxy: boolean;
+  /**
+   * Trust X-Forwarded-For from this many reverse proxies in front of the server (true = 1; false / 0 =
+   * off): the client address is the entry the outermost trusted proxy appended.
+   */
+  trustProxy: boolean | number;
   /** Max guest/register calls per client IP per 10 minutes (0 disables). */
   accountCreationsPerIpPer10Min: number;
+  /** Max login calls per client IP per 10 minutes, whatever the username (0 disables). */
+  loginAttemptsPerIpPer10Min: number;
+  /** Max concurrent WebSocket connections per client IP (0 disables). */
+  wsConnectionsPerIp: number;
 }
 
 /** Viewer context for viewer-relative fields (following / you tags, remarks). */
@@ -93,7 +100,7 @@ export interface AnalyticsApi {
   devInfo(t: TokenState): DevInfo;
   /** Viewer-aware copy of a trade's tags (adds following / you). */
   viewTrade(trade: Trade, viewer: Viewer): Trade;
-  trades(t: TokenState, opts: { filter?: string; wallet?: string; minUsd?: number; limit?: number; before?: number }, viewer: Viewer): Trade[];
+  trades(t: TokenState, opts: { filter?: string; wallet?: string; minUsd?: number; limit?: number; before?: number; beforeId?: string }, viewer: Viewer): Trade[];
   holders(t: TokenState, opts: { tag?: string; limit?: number }, viewer: Viewer): Position[];
   topTraders(t: TokenState, opts: { tag?: string; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): Position[];
   trenches(q: TrenchesQuery): TrenchesSnapshot;
@@ -101,7 +108,7 @@ export interface AnalyticsApi {
   newPairs(chain: ChainId, filters: TokenFilters | undefined, limit?: number): TokenSummary[];
   walletProfile(w: WalletState, viewer: Viewer): WalletProfile;
   walletHoldings(w: WalletState, opts: { includeClosed?: boolean; sort?: string; limit?: number }, viewer: Viewer): TokenPositionRow[];
-  walletActivity(w: WalletState, opts: { limit?: number; before?: number; type?: string }, viewer: Viewer): FeedItem[];
+  walletActivity(w: WalletState, opts: { limit?: number; before?: number; beforeId?: string; type?: string }, viewer: Viewer): FeedItem[];
   /** Tokens the wallet created that still exist, newest first. */
   createdTokens(w: WalletState, limit?: number): DevToken[];
   /** The wallet's kol_call signals with hit rates. */
@@ -112,7 +119,8 @@ export interface AnalyticsApi {
   /** Global call-out feed: kol_call signals newest first. */
   callouts(chain: ChainId, filter: CalloutFilter, limit?: number): Signal[];
   narratives(chain: ChainId): Narrative[];
-  search(q: string, chain?: ChainId): SearchResult;
+  /** Wallet hits carry the viewer's 'you' / 'following' tags and remark label. */
+  search(q: string, chain: ChainId | undefined, viewer: Viewer): SearchResult;
   /** Platform tags of a wallet (smart, kol, ...). */
   walletTags(w: WalletState): WalletTag[];
   serialize(): unknown;
@@ -122,6 +130,10 @@ export interface AnalyticsApi {
 export interface TradingApi {
   serialize(): unknown;
   restore(data: unknown): void;
+  /** Whether anything still runs for the account: open orders, copy-trade / sniper tasks, alerts. */
+  hasAutomation(accountId: string): boolean;
+  /** Drop the stored order history and equity series of a deleted account. */
+  forgetAccount(accountId: string): void;
 }
 
 export interface MarketApi {

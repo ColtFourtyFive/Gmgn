@@ -7,13 +7,13 @@ import { useActiveChain } from '@/hooks/useActiveChain';
 import { useTheme } from '@/hooks/useTheme';
 import { useDock } from '@/store/dock';
 import { useSession } from '@/store/session';
-import { toast } from '@/store/toasts';
 import { startTour } from '@/store/tour';
 import { useUi } from '@/store/ui';
 import { useDeposit } from './AccountControls';
 import { ChainPicker } from './ChainSwitcher';
 import { Omnibox } from './Omnibox';
 import { ACCOUNT_ITEMS, activeSection, MOBILE_TABS, NAV_ITEMS } from './nav';
+import { requestSignOut } from './SignOutDialog';
 
 /** Phone bottom tab bar: four primary sections + "More" (opens the nav drawer). */
 export function MobileTabBar({ className }: { className?: string }) {
@@ -135,10 +135,7 @@ export function MobileNavDrawer() {
               type="button"
               onClick={() => {
                 close();
-                void useSession
-                  .getState()
-                  .logout()
-                  .then(() => toast.info('Signed out'));
+                requestSignOut();
               }}
               className="flex h-9 items-center gap-2 rounded px-2 text-sm text-down hover:bg-down/10"
             >

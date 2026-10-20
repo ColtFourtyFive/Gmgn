@@ -97,7 +97,8 @@ export const PnlCalendar = memo(function PnlCalendar({ days }: { days: WalletPer
                 aria-label={`${date.toLocaleDateString('en-US', DAY_FMT)}: ${formatUsd(d.pnlUsd)}`}
                 className={clsx(
                   'num flex aspect-square w-full items-center justify-center rounded-[4px] text-2xs',
-                  d.pnlUsd === 0 ? 'bg-panel-3 text-faint' : strength > 0.55 ? (tone === 'up' ? 'text-up-fg' : 'text-down-fg') : 'text-fg',
+                  // Translucent red tints read best with white text (down-fg is tuned for solid bg-down).
+                  d.pnlUsd === 0 ? 'bg-panel-3 text-muted' : strength > 0.55 ? (tone === 'up' ? 'text-up-fg' : 'text-white') : 'text-fg',
                   d.day === last && 'ring-1 ring-accent',
                 )}
                 style={d.pnlUsd === 0 ? undefined : { backgroundColor: `rgb(var(--${tone}) / ${alpha.toFixed(2)})` }}
@@ -147,10 +148,9 @@ export const PnlCard = memo(function PnlCard({ stats: s, period, className }: Pn
         <Stat label="Total cost" hint="USD spent buying in the period">
           <Usd value={s.totalCostUsd} />
         </Stat>
-        <div className="col-span-2">
-          <WinLossBar wins={s.wins} losses={s.losses} />
-        </div>
       </dl>
+      {/* Outside the <dl>: a definition list may only hold term / description groups. */}
+      <WinLossBar wins={s.wins} losses={s.losses} />
       <div className="border-t border-line pt-3">
         <PnlCalendar days={s.dailyPnl} />
       </div>
@@ -213,7 +213,11 @@ export interface DistributionCardProps {
   className?: string;
 }
 
-/** Tokens per realized-ROI bucket as horizontal bars. Counts tokens, not dollars. */
+/**
+ * Tokens per return bucket as horizontal bars. Counts tokens, not dollars.
+ * The server buckets each token by realized + current unrealized PnL over its
+ * cost (WalletPeriodStats.distribution), so open positions count at their mark.
+ */
 export const DistributionCard = memo(function DistributionCard({ stats: s, period, className }: DistributionCardProps) {
   const d = s.distribution;
   const total = distributionTotal(d);
@@ -256,7 +260,7 @@ export const DistributionCard = memo(function DistributionCard({ stats: s, perio
       </ul>
       {total === 0 && <p className="text-center text-xs text-muted">No tokens traded in this period.</p>}
       <p className="mt-auto text-2xs leading-snug text-faint">
-        Tokens grouped by realized return. Open positions sit in 0–200% until sold, so this is not a win count.
+        Tokens grouped by total return (realized + unrealized) on cost: open positions count at their current value, so this is not a win count.
       </p>
     </Panel>
   );

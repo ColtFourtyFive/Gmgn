@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Flame, TrendingUp } from 'lucide-react';
 import { LogoMark } from '@/components/layout/Logo';
+import { usePageTitle } from '@/components/layout/Page';
 import { useActiveChain } from '@/hooks/useActiveChain';
 import { routes } from '@/lib/chain';
 
 /** 404 for unknown routes. */
 export default function NotFoundPage() {
   const chain = useActiveChain();
+  usePageTitle('Page not found');
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-4 p-6 text-center">
       <LogoMark size={48} />

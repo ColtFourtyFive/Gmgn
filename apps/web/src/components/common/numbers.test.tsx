@@ -9,7 +9,16 @@ describe('Price', () => {
     const { container } = render(<Price value={0.000001234} />);
     const sub = container.querySelector('sub');
     expect(sub?.textContent).toBe('5');
-    expect(container.textContent).toBe('$0.051234');
+    expect(sub?.closest('[aria-hidden="true"]')?.textContent).toBe('$0.051234');
+  });
+
+  it('gives assistive tech the plain decimal, not the concatenated digits', () => {
+    // What a screen reader reads: the text outside aria-hidden subtrees.
+    const spoken = (node: Node): string =>
+      node instanceof Element && node.getAttribute('aria-hidden') === 'true' ? '' : node.nodeType === Node.TEXT_NODE ? (node.textContent ?? '') : Array.from(node.childNodes, spoken).join('');
+    expect(spoken(render(<Price value={0.0000004485} />).container)).toBe('$0.0000004485');
+    expect(spoken(render(<Price value={0.00002205} symbol="SOL" />).container)).toBe('0.00002205 SOL');
+    expect(spoken(render(<Price value={3.5} />).container)).toBe('$3.5');
   });
 
   it('renders regular prices without subscript', () => {

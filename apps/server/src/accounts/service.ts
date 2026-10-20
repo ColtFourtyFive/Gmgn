@@ -31,6 +31,7 @@ import {
 import { HttpError, type AccountsApi, type AppContext } from '../context';
 import type { WalletState } from '../sim/world';
 import {
+  PasswordHashBusy,
   REFERRAL_ALPHABET,
   REFERRAL_CODE_LENGTH,
   digestToken,
@@ -50,9 +51,11 @@ export const FAUCET_COOLDOWN_MS = 60_000;
 export const FOLLOW_NOTIFY_THROTTLE_MS = 15_000;
 /** Oldest sessions are revoked beyond this many per account, so repeated logins cannot grow memory without bound. */
 export const MAX_SESSIONS_PER_ACCOUNT = 20;
-/** Sign-in attempts allowed per account per window before answering 429 (online password guessing). */
+/** Sign-in attempts allowed per (username, client address) per window before answering 429 (online password guessing). */
 export const MAX_LOGIN_ATTEMPTS = 10;
 export const LOGIN_ATTEMPT_WINDOW_MS = 10 * 60_000;
+/** PRD §14 Q9: guest accounts are kept this long after their last activity, then purged. */
+export const GUEST_RETENTION_MS = 30 * 24 * 3_600_000;
 const HOUSEKEEPING_EVERY_MS = 60_000;
 /** Usernames with this prefix are reserved for generated guest accounts. */
 export const GUEST_PREFIX = 'guest_';
@@ -71,6 +74,8 @@ interface AccountRecord {
   password: PasswordHash | null;
   isGuest: boolean;
   createdAt: number;
+  /** Sim time of the last sign-in, authenticated request or fill (guest retention). */
+  lastActiveAt: number;
   referralCode: string;
   referredBy: string | null;
   settings: UserSettings;
@@ -126,6 +131,11 @@ const emptyBlacklist = (): Blacklist => ({ tokens: [], creators: [], keywords: [
 const notFound = (what: string) => new HttpError(404, `${what} not found`, 'not_found');
 const isAmount = (v: number) => Number.isFinite(v) && v >= 0;
 
+/** A password hash refused because the hashing queue is full: 503, the client retries shortly. */
+function hashBusy(err: unknown): unknown {
+  return err instanceof PasswordHashBusy ? new HttpError(503, 'sign-in is busy, try again in a moment', 'busy', { 'retry-after': '1' }) : err;
+}
+
 function addToSetMap(map: Map<string, Set<string>>, key: string, value: string): void {
   let set = map.get(key);
   if (!set) map.set(key, (set = new Set()));
@@ -158,7 +168,7 @@ export class Accounts implements AccountsApi {
   private readonly sessions = new Map<string, string>();
   /** account id -> its session digests, oldest first */
   private readonly sessionsByAccount = new Map<string, string[]>();
-  /** account id -> sign-in attempts in the current window (not persisted) */
+  /** `${lowercase username}|${client address}` -> sign-in attempts in the current window (not persisted) */
   private readonly loginAttempts = new Map<string, { count: number; since: number }>();
   /** paper wallet address -> owning account id */
   private readonly walletOwners = new Map<string, string>();
@@ -176,13 +186,15 @@ export class Accounts implements AccountsApi {
     hub.register('user', {
       requiresAuth: true,
       onSubscribe: (sub) => {
+        // publishUser reaches the exact name only: a `user:<x>` subscription would never hear again
+        if (sub.ch !== 'user') throw new Error('invalid channel (user)');
         const accountId = sub.client.accountId;
         if (!accountId || !this.records.has(accountId)) throw new Error('account not found');
         for (const chain of CHAIN_IDS) hub.send(sub, 'balance', this.userWallet(accountId, chain));
       },
     });
     world.on('trade', (trade) => this.onTrade(trade));
-    engine.addTicker('accounts-housekeeping', () => this.pruneThrottles(), { everyMs: HOUSEKEEPING_EVERY_MS });
+    engine.addTicker('accounts-housekeeping', () => this.housekeeping(), { everyMs: HOUSEKEEPING_EVERY_MS });
   }
 
   // ---------------------------------------------------------------------------
@@ -203,7 +215,9 @@ export class Accounts implements AccountsApi {
     this.assertUsernameAvailable(input.username);
     const referrer = input.referralCode ? this.findByReferralCode(input.referralCode) : null;
     if (input.referralCode && !referrer) throw new HttpError(400, 'unknown referral code', 'invalid_referral_code');
-    const password = await hashPassword(input.password);
+    const password = await hashPassword(input.password).catch((err) => {
+      throw hashBusy(err);
+    });
     // Re-check: a concurrent request may have taken the name while we were hashing.
     this.assertUsernameAvailable(input.username);
 
@@ -215,19 +229,29 @@ export class Accounts implements AccountsApi {
     guest.password = password;
     guest.isGuest = false;
     this.byUsername.set(guest.username.toLowerCase(), guest.id);
-    if (referrer && !guest.referredBy && referrer.id !== guest.id) this.linkReferral(guest, referrer);
+    // A code binds only before the account's first trade (its earlier volume would never reach the referrer).
+    if (referrer && !guest.referredBy && referrer.id !== guest.id && guest.rewards.volumeUsd === 0) this.linkReferral(guest, referrer);
     return this.startSession(guest);
   }
 
-  async login(username: string, password: string): Promise<AuthResponse> {
-    const id = this.byUsername.get(username.toLowerCase());
-    const record = id ? this.records.get(id) : undefined;
+  /**
+   * Sign in. Attempts are counted per (username, client address), whether or not the username
+   * exists: a guesser only locks out its own address (never the owner signing in from elsewhere),
+   * and 429 vs 401 does not reveal which usernames exist.
+   */
+  async login(username: string, password: string, client = ''): Promise<AuthResponse> {
+    const name = username.toLowerCase();
+    const attemptKey = `${name}|${client}`;
     // Counted before the (async) hash so concurrent guesses cannot all slip past the limit.
-    if (record) this.countLoginAttempt(record.id);
+    this.countLoginAttempt(attemptKey);
+    const id = this.byUsername.get(name);
+    const record = id ? this.records.get(id) : undefined;
     // Always run the hash so unknown usernames are not distinguishable by timing.
-    const valid = await verifyPassword(password, record?.password ?? null);
+    const valid = await verifyPassword(password, record?.password ?? null).catch((err) => {
+      throw hashBusy(err);
+    });
     if (!valid || !record) throw new HttpError(401, 'invalid username or password', 'invalid_credentials');
-    this.loginAttempts.delete(record.id);
+    this.loginAttempts.delete(attemptKey);
     return this.startSession(record);
   }
 
@@ -242,10 +266,15 @@ export class Accounts implements AccountsApi {
   }
 
   resolveToken(token: string): string | null {
-    return this.sessions.get(digestToken(token)) ?? null;
+    const id = this.sessions.get(digestToken(token));
+    if (!id) return null;
+    const record = this.records.get(id);
+    if (record) record.lastActiveAt = this.ctx.world.now;
+    return id;
   }
 
   private startSession(record: AccountRecord): AuthResponse {
+    record.lastActiveAt = this.ctx.world.now;
     const token = newSessionToken();
     this.addSession(digestToken(token), record.id);
     return { token, account: this.toAccount(record) };
@@ -262,10 +291,10 @@ export class Accounts implements AccountsApi {
     }
   }
 
-  private countLoginAttempt(accountId: string): void {
+  private countLoginAttempt(key: string): void {
     const now = this.ctx.world.now;
-    let entry = this.loginAttempts.get(accountId);
-    if (!entry || now - entry.since >= LOGIN_ATTEMPT_WINDOW_MS) this.loginAttempts.set(accountId, (entry = { count: 0, since: now }));
+    let entry = this.loginAttempts.get(key);
+    if (!entry || now - entry.since >= LOGIN_ATTEMPT_WINDOW_MS) this.loginAttempts.set(key, (entry = { count: 0, since: now }));
     if (entry.count >= MAX_LOGIN_ATTEMPTS) {
       const seconds = Math.ceil((entry.since + LOGIN_ATTEMPT_WINDOW_MS - now) / 1000);
       throw new HttpError(429, `too many sign-in attempts, try again in ${seconds}s`, 'rate_limited', { 'retry-after': String(seconds) });
@@ -293,6 +322,7 @@ export class Accounts implements AccountsApi {
       password,
       isGuest: password === null,
       createdAt: world.now,
+      lastActiveAt: world.now,
       referralCode: this.uniqueReferralCode(),
       referredBy: null,
       settings: defaultSettings(),
@@ -528,10 +558,54 @@ export class Accounts implements AccountsApi {
     });
   }
 
+  private housekeeping(): void {
+    this.pruneThrottles();
+    this.purgeIdleGuests();
+  }
+
+  /**
+   * Delete guest accounts idle for GUEST_RETENTION_MS (PRD §14 Q9) with their paper wallets, unless
+   * something still runs for or refers to them: automation (orders, tasks, alerts), invitees, a token
+   * they launched, a follower of one of their wallets.
+   */
+  private purgeIdleGuests(): void {
+    const { world, trading } = this.ctx;
+    const now = world.now;
+    const wallets = new Set<string>();
+    for (const r of this.records.values()) {
+      if (!r.isGuest || now - r.lastActiveAt < GUEST_RETENTION_MS) continue;
+      if (this.invitees.has(r.id) || trading.hasAutomation(r.id)) continue;
+      const own = CHAIN_IDS.map((chain) => world.getWallet(r.wallets[chain]));
+      if (own.some((w) => w && (w.createdTokens.some((a) => world.tokens.has(a)) || this.followers.has(walletKey(w.chain, w.address))))) continue;
+      this.deleteRecord(r);
+      for (const w of own) {
+        if (!w) continue;
+        // a removed wallet must not stay listed as a holder
+        for (const pos of w.positions.values()) if (pos.balance > 0) world.tokens.get(pos.token)?.holders.delete(w.address);
+        wallets.add(w.address);
+      }
+    }
+    if (wallets.size === 0) return;
+    world.removeWallets(wallets);
+    this.ctx.hub.revalidateAuth();
+  }
+
+  private deleteRecord(r: AccountRecord): void {
+    for (const digest of this.sessionsByAccount.get(r.id) ?? []) this.sessions.delete(digest);
+    this.sessionsByAccount.delete(r.id);
+    this.records.delete(r.id);
+    this.byUsername.delete(r.username.toLowerCase());
+    this.byReferralCode.delete(r.referralCode);
+    for (const chain of CHAIN_IDS) this.walletOwners.delete(r.wallets[chain]);
+    for (const key of r.follows.keys()) removeFromSetMap(this.followers, key, r.id);
+    if (r.referredBy) removeFromSetMap(this.invitees, r.referredBy, r.id);
+    this.ctx.trading.forgetAccount(r.id);
+  }
+
   private pruneThrottles(): void {
     const now = this.ctx.world.now;
     for (const [key, at] of this.followNotifiedAt) if (now - at >= FOLLOW_NOTIFY_THROTTLE_MS) this.followNotifiedAt.delete(key);
-    for (const [id, entry] of this.loginAttempts) if (now - entry.since >= LOGIN_ATTEMPT_WINDOW_MS) this.loginAttempts.delete(id);
+    for (const [key, entry] of this.loginAttempts) if (now - entry.since >= LOGIN_ATTEMPT_WINDOW_MS) this.loginAttempts.delete(key);
   }
 
   // ---------------------------------------------------------------------------
@@ -741,6 +815,7 @@ export class Accounts implements AccountsApi {
     own.volumeUsd += volumeUsd;
     own.feesPaidUsd += platformFeeUsd;
     own.points += volumeUsd / USD_PER_POINT;
+    record.lastActiveAt = this.ctx.world.now;
 
     const referrer = record.referredBy ? this.records.get(record.referredBy) : undefined;
     if (!referrer) return;
@@ -815,6 +890,8 @@ export class Accounts implements AccountsApi {
       this.index({
         ...stored,
         settings: normalizeSettings(stored.settings),
+        // absent in snapshots saved before guest retention: count from the restore
+        lastActiveAt: stored.lastActiveAt ?? this.ctx.world.now,
         rewards: { ...emptyRewards(), ...stored.rewards },
         // absent in snapshots saved before watchlist groups and the blacklist existed
         watchlistGroups: stored.watchlistGroups ?? [],

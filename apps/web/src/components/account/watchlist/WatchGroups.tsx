@@ -5,7 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { WATCHLIST_LIMITS, type WatchlistGroup } from '@trenchscope/shared';
 import { Check, Plus, Star, StarOff } from 'lucide-react';
 import clsx from 'clsx';
-import { Button, Checkbox, IconButton, Input, Popover, type IconButtonProps } from '@/components/ui';
+import { Button, Checkbox, IconButton, Input, Popover, useRovingKeys, type IconButtonProps } from '@/components/ui';
 import { useSession } from '@/store/session';
 import { GROUP_COLORS, groupNameError, useWatchItem, useWatchlist, useWatchlistActions, type WatchRef } from '../watchlist';
 
@@ -20,16 +20,25 @@ export function GroupDot({ color, className }: { color?: string; className?: str
   );
 }
 
-/** Swatch row; `null` = no colour. */
+const SWATCHES = [null, ...GROUP_COLORS];
+/** Roving-key values: '' stands for "no colour". */
+const SWATCH_ITEMS = SWATCHES.map((c) => ({ value: c ?? '' }));
+
+/** Swatch row; `null` = no colour. A radio group: one Tab stop, arrow keys pick. */
 export function ColorSwatches({ value, onChange }: { value: string | null; onChange: (color: string | null) => void }) {
+  const { refs, onKeyDown, tabStop } = useRovingKeys(SWATCH_ITEMS, value ?? '', (v) => onChange(v || null));
   return (
-    <div role="radiogroup" aria-label="Group colour" className="flex flex-wrap gap-1.5">
-      {[null, ...GROUP_COLORS].map((c) => (
+    <div role="radiogroup" aria-label="Group colour" onKeyDown={onKeyDown} className="flex flex-wrap gap-1.5">
+      {SWATCHES.map((c, i) => (
         <button
           key={c ?? 'none'}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
           type="button"
           role="radio"
           aria-checked={value === c}
+          tabIndex={i === tabStop ? 0 : -1}
           aria-label={c ?? 'No colour'}
           title={c ?? 'No colour'}
           onClick={() => onChange(c)}

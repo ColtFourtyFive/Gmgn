@@ -156,6 +156,11 @@ export class Portfolio {
     return [...this.equity];
   }
 
+  /** Drop a deleted account's equity series. */
+  forget(accountId: string): void {
+    this.equity.delete(accountId);
+  }
+
   restore(stored: [string, EquityPoint[]][]): void {
     this.equity.clear();
     for (const [accountId, points] of stored) this.equity.set(accountId, points);

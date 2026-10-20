@@ -1,6 +1,6 @@
 // Shell-level UI state: theme, preferred chain for global routes, unread
-// notification count, mobile overlays (nav drawer, search sheet) and the
-// command palette.
+// notification count, mobile overlays (nav drawer, search sheet), the
+// command palette and the trading-hotkeys opt-in.
 
 import { create } from 'zustand';
 import type { ChainId } from '@trenchscope/shared';
@@ -9,6 +9,7 @@ import { lastChain, rememberChain } from '@/lib/chain';
 export type Theme = 'dark' | 'light';
 
 const THEME_KEY = 'ts.theme';
+const TRADING_HOTKEYS_KEY = 'ts.tradingHotkeys';
 const THEME_COLOR: Record<Theme, string> = { dark: '#0a0c10', light: '#f4f5f8' };
 
 function readTheme(): Theme {
@@ -26,6 +27,14 @@ export function applyTheme(theme: Theme): void {
   if (typeof document === 'undefined') return;
   document.documentElement.dataset.theme = theme;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme]);
+}
+
+function readTradingHotkeys(): boolean {
+  try {
+    return localStorage.getItem(TRADING_HOTKEYS_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 interface UiState {
@@ -46,6 +55,13 @@ interface UiState {
   /** Command palette (Ctrl/Cmd+K). */
   paletteOpen: boolean;
   setPaletteOpen(open: boolean): void;
+  /**
+   * Keys that place trades (B buys the selected Trenches card) are opt-in
+   * (PRD §11.6): off until turned on, per device. Navigation shortcuts
+   * follow settings.display.hotkeys.
+   */
+  tradingHotkeys: boolean;
+  setTradingHotkeys(on: boolean): void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -78,4 +94,15 @@ export const useUi = create<UiState>((set) => ({
 
   paletteOpen: false,
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+
+  tradingHotkeys: readTradingHotkeys(),
+  setTradingHotkeys(on) {
+    try {
+      if (on) localStorage.setItem(TRADING_HOTKEYS_KEY, '1');
+      else localStorage.removeItem(TRADING_HOTKEYS_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    set({ tradingHotkeys: on });
+  },
 }));

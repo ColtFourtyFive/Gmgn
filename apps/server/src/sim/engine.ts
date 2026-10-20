@@ -20,6 +20,13 @@ export interface EngineOptions {
   tickMs?: number;
 }
 
+/**
+ * Behind wall time (after a hold, or a stalled event loop) the live loop catches up in tick-sized
+ * steps, at most this many per interval, instead of one jump: prices move, candles fill and order
+ * triggers see the path in between, and a long gap is spread over a few intervals.
+ */
+export const CATCH_UP_STEPS_PER_TICK = 4;
+
 export class Engine {
   readonly world: World;
   readonly tickMs: number;
@@ -34,6 +41,8 @@ export class Engine {
   tickCount = 0;
   /** Wall time spent in the last tick (ms), for diagnostics. */
   lastTickCostMs = 0;
+  /** Outstanding hold() calls: while any is held, live ticks are skipped. */
+  private holds = 0;
 
   constructor(world: World, opts: EngineOptions = {}) {
     this.world = world;
@@ -83,19 +92,38 @@ export class Engine {
     this.lastWall = Date.now();
     this.world.now = Math.max(this.world.now, this.lastWall);
     this.timer = setInterval(() => {
+      if (this.holds > 0) return;
       const wall = Date.now();
       const dt = Math.max(1, wall - this.lastWall);
       this.lastWall = wall;
       const before = this.world.tradeTotal;
       const t0 = performance.now();
-      // keep sim clock locked to wall clock
-      this.step(Math.max(dt, wall - this.world.now));
+      // keep sim clock locked to wall clock (catching up in tick-sized steps when well behind it)
+      const behind = Math.max(dt, wall - this.world.now);
+      if (behind <= 2 * this.tickMs) this.step(behind);
+      else for (let i = 0, left = behind; i < CATCH_UP_STEPS_PER_TICK && left > 0; i++, left -= this.tickMs) this.step(Math.min(this.tickMs, left));
       this.lastTickCostMs = performance.now() - t0;
       this.tpsWindow.push({ t: wall, n: this.world.tradeTotal - before });
       while (this.tpsWindow.length && this.tpsWindow[0].t < wall - 10000) this.tpsWindow.shift();
       this.tps = this.tpsWindow.reduce((a, b) => a + b.n, 0) / 10;
     }, this.tickMs);
     this.timer.unref?.();
+  }
+
+  /**
+   * Freeze the sim (e.g. while a snapshot is written a slice at a time) until
+   * the returned release is called. The clock stands still meanwhile; after the
+   * release the live loop catches up to wall time in tick-sized steps, as after
+   * any stall of the event loop.
+   */
+  hold(): () => void {
+    this.holds++;
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      this.holds--;
+    };
   }
 
   stop(): void {

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { SwapReceipt, SwapRequest } from '@trenchscope/shared';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/format';
+import { playCue } from '@/lib/sounds';
 import { toast } from '@/store/toasts';
 import { invalidateTradingQueries, toastFill, trackManualSwap } from './useUserChannel';
 
@@ -51,7 +52,10 @@ export function useSwap(): {
         settle(receipt);
         invalidateTradingQueries(qc);
         if (!receipt.ok) fail(receipt.error ?? 'Trade rejected');
-        else if (!opts.silent) toastFill(receipt, opts.symbol);
+        else {
+          if (!opts.silent) toastFill(receipt, opts.symbol);
+          playCue('fill');
+        }
         return receipt;
       } catch (err) {
         settle(null);

@@ -46,12 +46,15 @@ export function TopBar() {
           />
         </div>
       )}
-      <ChainSwitcher compact={!desktop} />
+      <div data-tour="chain" className="flex shrink-0 items-center">
+        <ChainSwitcher compact={!desktop} />
+      </div>
       <BalancePill chain={chain} compact={!desktop} />
       <div className="flex shrink-0 items-center gap-1">
         {desktop && (
           <IconButton
             data-tour="dock"
+            data-dock-toggle
             label="Instant trade & positions (I)"
             icon={<Zap size={16} />}
             active={dockOpen}

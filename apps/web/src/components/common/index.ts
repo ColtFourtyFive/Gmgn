@@ -17,6 +17,7 @@ export {
 } from './indicators';
 export { AddressLink, SocialLinks, TokenLink, type AddressLinkProps, type SocialLinksProps, type TokenLinkData, type TokenLinkProps } from './links';
 export { Compact, Native, Pct, Price, Usd, withSubscript, type CompactProps, type NativeProps, type PctProps, type PriceProps, type UsdProps } from './numbers';
+export { PauseStatus, type PauseStatusProps } from './PauseStatus';
 export { SecurityChecksList, type SecurityChecksListProps } from './SecurityChecksList';
 export { SIM_NOTICE, SimBanner } from './SimBanner';
 export { TokenAvatar, type TokenAvatarProps } from './TokenAvatar';

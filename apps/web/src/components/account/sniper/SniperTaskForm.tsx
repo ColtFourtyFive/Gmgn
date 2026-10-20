@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CHAINS, formatNative, type ChainId, type PresetId, type SniperKind, type SniperTask, type StrategySpec } from '@trenchscope/shared';
 import { Crosshair } from 'lucide-react';
 import { DEFAULT_STRATEGY, StrategyEditor } from '@/components/trade/StrategyEditor';
-import { Button, Drawer, Field, Input, NumberInput, SegmentedControl, Toggle } from '@/components/ui';
+import { Button, Drawer, Field, focusFirstError, Input, NumberInput, SegmentedControl, Toggle } from '@/components/ui';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { nativeSymbol } from '@/lib/chain';
@@ -146,7 +146,7 @@ function SniperTaskDrawer({ onClose, chain, task, initial }: SniperTaskFormProps
     setSubmitted(true);
     setErrors({});
     if (Object.keys(validate(form)).length) {
-      requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${FORM_ID} [aria-invalid="true"]`)?.focus());
+      requestAnimationFrame(() => focusFirstError(FORM_ID));
       return;
     }
     const strategy = form.useStrategy ? (form.kind === 'migration' ? { ...form.strategy, migrationSellPercent: 0 } : form.strategy) : null;

@@ -122,6 +122,15 @@ export class Roster {
     return w;
   }
 
+  /** Drop wallets housekeeping removed from the world from the role lists (which would keep them alive). */
+  forget(addresses: Set<string>): void {
+    if (addresses.size === 0) return;
+    for (const [key, list] of this.lists) {
+      const kept = list.filter((w) => !addresses.has(w.address));
+      if (kept.length !== list.length) this.lists.set(key, kept);
+    }
+  }
+
   /** Rebuild indexes from world wallets (after a snapshot restore). */
   rebuild(): void {
     this.clear();

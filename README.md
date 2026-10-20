@@ -53,10 +53,12 @@ pnpm start          # http://localhost:8787
 | `SIM_SEED` | `trenchscope` | Seed of the deterministic simulator |
 | `WARMUP_MINUTES` | `90` | History fast-forwarded on a fresh start |
 | `DATA_DIR` | `.data` | Where snapshots are written |
-| `SNAPSHOT_EVERY_MS` | `900000` | Periodic snapshot cadence (`0` = only on shutdown) |
+| `SNAPSHOT_EVERY_MS` | `900000` | Periodic snapshot cadence; snapshots are also written on shutdown and restored at boot (`0` = persistence off: nothing is restored or saved, not even on shutdown) |
 | `TRADE_LATENCY_MS` | random 120–600 ms | Fixed simulated confirmation latency |
 | `ACCOUNT_CREATIONS_PER_IP` | `30` | Guest/register calls per IP per 10 minutes |
-| `TRUST_PROXY` | off | Trust `X-Forwarded-For` behind a reverse proxy |
+| `LOGIN_ATTEMPTS_PER_IP` | `60` | Login calls per IP per 10 minutes, any username (`0` = unlimited) |
+| `WS_CONNECTIONS_PER_IP` | `20` | Concurrent WebSocket connections per client IP (`0` = unlimited; local loopback clients exempt) |
+| `TRUST_PROXY` | off | Trust `X-Forwarded-For` behind a reverse proxy: `1`/`true` = one proxy in front, `N` = a chain of N; the client IP is the entry the outermost trusted proxy appended, so entries a client sends itself are ignored |
 | `WEB_DIST` | `apps/web/dist` if built | Static web build to serve |
 
 ## Repository layout
@@ -78,5 +80,5 @@ pnpm typecheck                      # all packages
 pnpm test                           # server + web unit/integration tests
 (cd apps/server && npx tsx scripts/sim-report.ts 120)                 # simulator realism report
 (cd apps/server && node --expose-gc --import tsx scripts/soak.ts 360)  # memory / snapshot soak
-pnpm e2e                            # Playwright end-to-end tests (needs a built web app)
+pnpm e2e                            # builds the web app, then runs the Playwright end-to-end suite (desktop + mobile)
 ```

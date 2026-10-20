@@ -7,7 +7,7 @@ import { Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { Note } from '@/components/account/FormBits';
 import { Native, Usd } from '@/components/common';
-import { Button } from '@/components/ui';
+import { Button, Heading } from '@/components/ui';
 import type { LaunchCost } from './model';
 
 function Row({ label, children, strong, className }: { label: ReactNode; children: ReactNode; strong?: boolean; className?: string }) {
@@ -37,7 +37,7 @@ export const CostSummary = memo(function CostSummary({ chain, cost, buys, bundle
   const short = balance !== null && balance + 1e-12 < cost.total;
   return (
     <section className="panel flex flex-col gap-2 p-3 text-sm" aria-label="Launch cost">
-      <h3 className="table-head">Cost</h3>
+      <Heading className="table-head">Cost</Heading>
       <dl className="flex flex-col">
         <Row label="Launch fee">
           <Native value={cost.launchFee} chain={chain} />

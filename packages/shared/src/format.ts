@@ -29,17 +29,21 @@ export function formatCompact(value: number | null | undefined, digits = 2): str
     [1e6, 'M'],
     [1e3, 'K'],
   ];
-  for (const [size, suffix] of units) {
-    if (abs >= size) {
-      let scaled = abs / size;
-      // Avoid "1000K": promote when rounding would overflow the unit.
-      if (Number(scaled.toFixed(digits)) >= 1000 && suffix !== 'T') continue;
-      return `${sign}${trimZeros(scaled.toFixed(digits))}${suffix}`;
-    }
+  // Largest unit that fits; -1 when abs is below 1K.
+  let unit = units.findIndex(([size]) => abs >= size);
+  if (unit === -1) {
+    if (abs === 0) return '0';
+    if (abs < 1) return `${sign}${formatSmall(abs, digits + 1)}`;
+    const plain = abs.toFixed(abs >= 100 ? Math.min(digits, 1) : digits);
+    if (Number(plain) < 1000) return `${sign}${trimZeros(plain)}`;
+    unit = units.length - 1; // 999.96 rounds to "1000": show it as "1K".
+  } else if (unit > 0 && Number((abs / units[unit][0]).toFixed(digits)) >= 1000) {
+    // Avoid "1000K": rounding overflowed the unit, so promote to the next larger
+    // one (units run largest first; T has nothing above it).
+    unit -= 1;
   }
-  if (abs === 0) return '0';
-  if (abs < 1) return `${sign}${formatSmall(abs, digits + 1)}`;
-  return `${sign}${trimZeros(abs.toFixed(abs >= 100 ? Math.min(digits, 1) : digits))}`;
+  const [size, suffix] = units[unit];
+  return `${sign}${trimZeros((abs / size).toFixed(digits))}${suffix}`;
 }
 
 /**
@@ -57,9 +61,19 @@ export function formatSmall(value: number, significant = 4): string {
   const sig = Math.max(1, significant);
   if (leadingZeros >= 4) {
     // digits after the zeros
-    const mantissa = Math.round(abs * Math.pow(10, -exponent + sig - 1));
-    const digits = trimZeros(String(mantissa).padStart(sig, '0')) || '0';
-    return `${sign}0.0${toSubscript(leadingZeros)}${digits}`;
+    let mantissa = Math.round(abs * Math.pow(10, -exponent + sig - 1));
+    let zeros = leadingZeros;
+    // Rounding can carry into an extra digit (0.0000099999 -> 10000 at 4 sig):
+    // the value is then the next power of ten up, with one leading zero fewer.
+    if (mantissa >= Math.pow(10, sig)) {
+      mantissa = Math.round(mantissa / 10);
+      zeros -= 1;
+    }
+    if (zeros >= 4) {
+      // The mantissa is an integer string, so trimZeros (which needs a ".") would keep its zeros.
+      const digits = String(mantissa).padStart(sig, '0').replace(/0+$/, '') || '0';
+      return `${sign}0.0${toSubscript(zeros)}${digits}`;
+    }
   }
   return `${sign}${trimZeros(abs.toFixed(leadingZeros + sig))}`;
 }
@@ -104,7 +118,9 @@ export function formatPercent(
   else if (abs >= 100) body = abs.toFixed(Math.min(digits, 1));
   else body = abs.toFixed(digits);
   body = trimZeros(body);
-  const prefix = pct > 0 && sign ? '+' : pct < 0 ? '-' : '';
+  // Sign follows the rounded body: a change that rounds to zero reads "0%", not "+0%" / "-0%".
+  const shown = body === '0' ? 0 : pct;
+  const prefix = shown > 0 && sign ? '+' : shown < 0 ? '-' : '';
   return `${prefix}${body}%`;
 }
 

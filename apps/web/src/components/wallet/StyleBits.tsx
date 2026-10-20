@@ -151,7 +151,7 @@ export function StyleBadges({ badges, detailed, max, className }: StyleBadgesPro
           </Tooltip>
         );
       })}
-      {max && badges.length > max && <span className="chip bg-panel-3 text-faint">+{badges.length - max}</span>}
+      {max && badges.length > max && <span className="chip bg-panel-3 text-muted">+{badges.length - max}</span>}
     </span>
   );
 }

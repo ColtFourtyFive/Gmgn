@@ -14,7 +14,7 @@ const initial = useSession.getState();
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
-  useSession.setState({ ...initial, token: null, account: null, settings: null, ready: false, authPrompt: false, authTab: null });
+  useSession.setState({ ...initial, token: null, account: null, settings: null, ready: false, restoreError: null, restoring: false, authPrompt: false, authTab: null });
 });
 
 afterEach(() => {
@@ -93,6 +93,26 @@ describe('session init', () => {
     expect(me).toHaveBeenCalledTimes(1);
     expect(useSession.getState()).toMatchObject({ token: null, ready: true });
   });
+
+  it('exposes a failed restore and retries at once on request', async () => {
+    // Its own token: retry loops left over by the tests above only go on for theirs.
+    localStorage.setItem('ts.token', 'tok-503');
+    const me = vi.spyOn(api, 'me').mockRejectedValueOnce(new ApiError(503, 'Service unavailable')).mockRejectedValueOnce(new ApiError(503, 'Service unavailable')).mockResolvedValue(account);
+    vi.spyOn(api, 'settings').mockResolvedValue(settings);
+    await useSession.getState().init();
+    expect(useSession.getState()).toMatchObject({ ready: false, restoring: false });
+    expect(useSession.getState().restoreError).toBeInstanceOf(ApiError);
+
+    // Retry now instead of after the 1s backoff (still failing), then again later (succeeds).
+    useSession.getState().retryRestore();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(me).toHaveBeenCalledTimes(2);
+    expect(useSession.getState().restoreError).toBeInstanceOf(ApiError);
+    useSession.getState().retryRestore();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(me).toHaveBeenCalledTimes(3);
+    expect(useSession.getState()).toMatchObject({ ready: true, account, restoreError: null, restoring: false });
+  });
 });
 
 describe('guest quick start', () => {
@@ -116,6 +136,31 @@ describe('guest quick start', () => {
     await useSession.getState().guest();
     expect(update).not.toHaveBeenCalled();
     expect(useSession.getState()).toMatchObject({ token: 'g1', account, ready: true });
+  });
+});
+
+describe('register and login themes', () => {
+  const res: AuthResponse = { token: 'r1', account: { ...account, isGuest: false } };
+  const darkSettings = (): UserSettings => ({ ...settings, display: { ...settings.display, theme: 'dark' } });
+
+  it('a new registration keeps the theme on screen (no flip to the server default)', async () => {
+    useUi.getState().setTheme('light');
+    vi.spyOn(api, 'register').mockResolvedValue(res);
+    vi.spyOn(api, 'settings').mockResolvedValue(darkSettings());
+    const update = vi.spyOn(api, 'updateSettings').mockImplementation(async (patch) => ({ ...settings, display: { ...settings.display, ...patch.display } }) as UserSettings);
+    await useSession.getState().register('alice', 'secret1');
+    expect(update).toHaveBeenCalledWith({ display: { theme: 'light' } });
+    expect(useSession.getState().settings?.display.theme).toBe('light');
+  });
+
+  it('logging in adopts the account’s saved theme', async () => {
+    useUi.getState().setTheme('light');
+    vi.spyOn(api, 'login').mockResolvedValue(res);
+    vi.spyOn(api, 'settings').mockResolvedValue(darkSettings());
+    const update = vi.spyOn(api, 'updateSettings');
+    await useSession.getState().login('alice', 'secret1');
+    expect(update).not.toHaveBeenCalled();
+    expect(useSession.getState().settings?.display.theme).toBe('dark');
   });
 });
 

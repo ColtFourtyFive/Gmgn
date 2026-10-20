@@ -287,6 +287,27 @@ describe('launch execution', () => {
     expect(accounts().rewards(user.id).ownVolumeUsd).toBeCloseTo((dev.usdAmount + bundles[0].usdAmount + bundles[1].usdAmount), 6);
   });
 
+  it("measures the dev buy's exits from after the bundles: the launcher's own buys never take profit", async () => {
+    const user = await signIn();
+    const strategy = { takeProfits: [{ changePct: 100, sellPercent: 50 }, { changePct: 300, sellPercent: 100 }], stopLosses: [{ lossPct: 50, sellPercent: 100 }], trailing: null, devSellPercent: 0, migrationSellPercent: 0 };
+    const { res, token } = await launch(user, { devBuyNative: 2, bundleWallets: 4, bundleBuyNative: 5, strategy });
+    const [dev] = res.receipts;
+    // 4 x 5 SOL of bundles behind a 2 SOL dev buy more than double the price over the dev's cost
+    expect(world().priceUsd(token) / dev.priceUsd).toBeGreaterThan(2);
+    const [tp1, tp2, sl] = dev.orders;
+    expect(tp1).toMatchObject({ kind: 'take_profit', source: 'strategy', status: 'open' });
+    expect(tp1.refPriceUsd).toBeCloseTo(world().priceUsd(token), 15);
+    expect(tp2.refPriceUsd).toBe(tp1.refPriceUsd);
+    expect(sl.refPriceUsd!).toBeLessThan(dev.priceUsd);
+    const bags = () => [user.wallet(), ...bundlersOf(token)].map((w) => balanceOf(w, token));
+    const before = bags();
+    trading().orders.evaluate();
+    await trading().idle();
+    expect(bags()).toEqual(before);
+    expect((await call<Order[]>('GET', '/api/orders?status=open', { auth: user.auth })).body).toHaveLength(3);
+    expect(token.trades.every((t) => t.side === 'buy')).toBe(true);
+  });
+
   it('validates the whole cost against the balance before deploying anything', async () => {
     const user = await signIn();
     user.wallet().native = 1;
@@ -420,12 +441,25 @@ describe('bundle wallets', () => {
 
     const swap = async (percent: number) =>
       (await call<SwapReceipt>('POST', '/api/trade/swap', { auth: user.auth, body: { chain: 'sol', token: token.address, side: 'sell', amount: percent, amountKind: 'percent' } })).body;
+    const pushed = vi.spyOn(built.ctx.hub, 'publishUser');
     const half = await swap(50);
     expect(half.ok).toBe(true);
     bundlers.forEach((b, i) => {
       expect(balanceOf(b, token) / bags[i]).toBeCloseTo(0.5, 9);
       expect(b.native).toBe(0);
     });
+    // every swap made for the account is a fill on its user channel, the bundles' sells included
+    const fills = pushed.mock.calls.filter(([id, type]) => id === user.id && type === 'fill').map(([, , r]) => r as SwapReceipt);
+    expect(fills.map((r) => [r.ok, r.trade!.side, r.trade!.wallet])).toEqual(
+      expect.arrayContaining([[true, 'sell', wallet.address], ...bundlers.map((b) => [true, 'sell', b.address])]),
+    );
+    expect(fills).toHaveLength(3);
+    for (const [i, b] of bundlers.entries()) {
+      const fill = fills.find((r) => r.trade!.wallet === b.address)!;
+      expect(fill.tokenAmount).toBeCloseTo(bags[i] / 2, 6);
+      expect(fill.txHash).toBe(fill.trade!.txHash);
+    }
+    pushed.mockRestore();
     const ownNet = half.nativeAmount - half.platformFeeNative - half.networkFeeNative;
     expect(wallet.native - before).toBeGreaterThan(ownNet * 1.5);
 
@@ -433,6 +467,25 @@ describe('bundle wallets', () => {
     await trading().idle();
     for (const b of bundlers) expect(balanceOf(b, token)).toBe(0);
     expect(balanceOf(wallet, token)).toBe(0);
+  });
+
+  it("never trip the launcher's own dev-sell exit when the launcher sells", async () => {
+    const user = await signIn();
+    const strategy = { takeProfits: [], stopLosses: [], trailing: null, devSellPercent: 100, migrationSellPercent: 0 };
+    const { res, token } = await launch(user, { devBuyNative: 2, bundleWallets: 1, bundleBuyNative: 0.5, strategy });
+    const [exit] = res.receipts[0].orders;
+    expect(exit).toMatchObject({ kind: 'dev_sell', amount: 100, status: 'open' });
+    const wallet = user.wallet();
+    const bag = balanceOf(wallet, token);
+
+    // The launcher (and its bundle wallet, following) sells a quarter by hand: a dev sell
+    // past the 20% threshold, but their own, so the exit order must not dump the rest.
+    const sold = await call<SwapReceipt>('POST', '/api/trade/swap', { auth: user.auth, body: { chain: 'sol', token: token.address, side: 'sell', amount: 25, amountKind: 'percent' } });
+    expect(sold.body.ok).toBe(true);
+    await trading().idle();
+    expect(balanceOf(wallet, token) / bag).toBeCloseTo(0.75, 9);
+    const orders = (await call<Order[]>('GET', '/api/orders', { auth: user.auth })).body;
+    expect(orders.find((o) => o.id === exit.id)).toMatchObject({ status: 'open' });
   });
 
   it("count in the launcher's portfolio: rows flagged 'bundle', totals, win rate and equity", async () => {

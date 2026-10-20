@@ -40,7 +40,7 @@ function KindChip({ kind, active, count, onClick }: { kind: SignalKind | null; a
     >
       {Icon && <Icon size={13} aria-hidden />}
       {meta ? meta.label : 'All'}
-      <span className={clsx('num rounded px-1 text-2xs leading-4', active ? 'bg-bg/30' : 'bg-panel-3 text-faint')}>{count}</span>
+      <span className={clsx('num rounded px-1 text-2xs leading-4', active ? 'bg-bg/30' : 'bg-panel-3 text-muted')}>{count}</span>
     </button>
   );
 }
@@ -66,7 +66,8 @@ function CardsSkeleton() {
   );
 }
 
-function Summary({ signals }: { signals: Signal[] }) {
+/** Summary tiles over the listed signals (exported for tests). */
+export function Summary({ signals, hitsOnly }: { signals: Signal[]; hitsOnly: boolean }) {
   const stats = useMemo(() => {
     let hits = 0;
     let bearish = 0;
@@ -86,7 +87,8 @@ function Summary({ signals }: { signals: Signal[] }) {
         label="Hit 2x+"
         hint="Signals whose token reached at least 2x the market cap at the signal"
         value={<span className="text-up">{stats.hits}</span>}
-        sub={n > 0 ? `${formatPercent(stats.hits / n, { sign: false, digits: 0 })} hit rate` : '--'}
+        // With the hits filter every listed signal is a hit, so a rate would always read 100% (as on Call-outs).
+        sub={hitsOnly ? 'hits filter on' : n > 0 ? `${formatPercent(stats.hits / n, { sign: false, digits: 0 })} hit rate` : '--'}
       />
       <StatTile label="Best run" value={stats.best ? <Multiple value={stats.best.maxMultiple} /> : '--'} sub={stats.best ? `$${stats.best.token.symbol} · ${SIGNAL_META[stats.best.kind].label}` : '--'} />
       <StatTile label="Warnings" hint="Dev and bundler sells" value={<span className={stats.bearish > 0 ? 'text-down' : undefined}>{stats.bearish}</span>} sub="dev / bundler sells" />
@@ -141,7 +143,7 @@ function Signals({ chain }: { chain: ChainId }) {
       />
       {mobile && <div className="flex items-center gap-2">{headerActions}</div>}
 
-      {!live.error && <Summary signals={filtered} />}
+      {!live.error && <Summary signals={filtered} hitsOnly={hitsOnly} />}
 
       <div className="flex flex-col gap-2 md:flex-row md:items-start">
         <div className="no-scrollbar -mx-3 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-3 md:mx-0 md:flex-wrap md:px-0" role="group" aria-label="Signal kinds">
