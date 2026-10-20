@@ -106,6 +106,14 @@
     "label": "copy score, explained",
     "side": "bottom"
    }
+  ],
+  "blur": [
+   [
+    1420,
+    540,
+    260,
+    70
+   ]
   ]
  },
  {
