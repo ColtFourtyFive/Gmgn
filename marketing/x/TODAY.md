@@ -1,6 +1,6 @@
 # Today: account setup + Day-1 posts (live-terminal positioning)
 
-Trenchscope is now marketed as a **real memecoin trading terminal that trades and tracks across Solana, Base and Robinhood Chain, with self-custody**. The warm-up teases it, and launch-day posts say it's live. **No dates go in any post copy.**
+Trenchscope is now marketed as a **real memecoin trading terminal that trades and tracks across Solana, Base, BNB Chain (BSC), Ethereum and Robinhood Chain, with self-custody**. The warm-up teases it, and launch-day posts say it's live. **No dates go in any post copy.**
 
 This page **replaces** the following until those docs are rewritten:
 - `PROFILE.md` §0 and §4–§6 (name, bio, location) and §9 (pinned post)
@@ -18,27 +18,27 @@ Counts are X-weighted (`—` and `·` count as 1). Everything is ≤ 280.
 |---|---|
 | Handle | `@trenchscope` → fallbacks `@trenchscope_`, `@usetrenchscope`, `@trenchscopehq` (check per `PROFILE.md` §2 Phase A) |
 | Display name | `Trenchscope` |
-| Bio | **BIO-1** (154): `a memecoin terminal for solana, base and robinhood chain. see who's really buying (snipers, bundlers, insiders, the dev) before you do. self-custody. nfa.` |
-| Bio fallback | BIO-2 (136): `the trenches, with a scope. trade and track memecoins on solana, base and robinhood chain. every wallet tagged. you keep your keys. nfa.` |
+| Bio | **BIO-1** (158): `one memecoin terminal for sol, base, bsc, eth and robinhood chain. see who's really buying (snipers, bundlers, insiders, the dev) before you do. self-custody.` |
+| Bio fallback | BIO-2 (143): `the trenches, with a scope. trade and track memecoins on sol, base, bsc, eth and robinhood chain. every wallet tagged. you keep your keys. nfa.` |
 | Location | `the trenches` |
 | Website | Leave blank until the app is live, then add the real URL (own domain, no shortener) |
 | Avatar | `marketing/x/profile/avatar.png` |
-| Header | `marketing/x/profile/header-alt.png` (re-rendered today: "see who's really buying." + `SOLANA · BASE · ROBINHOOD CHAIN` + the wallet-tag chips) |
+| Header | `marketing/x/profile/header-alt.png` (re-rendered today: "see who's really buying." + `SOL · BASE · BSC · ETH · ROBINHOOD CHAIN` + the wallet-tag chips) |
 | Professional category | Software / technology. Avoid finance categories until you've checked what X requires of financial-service accounts. |
-| Chain names | Name Base and Robinhood Chain as supported chains only. No Robinhood or Coinbase logos, colours or wording that implies a partnership. |
+| Chain names | Name the chains as supported chains only. No Robinhood, Coinbase, Binance or Ethereum Foundation logos, colours or wording that implies a partnership. |
 
 ---
 
 ## Pinned post (post first, then pin)
 
-**PIN** (271), text only:
+**PIN** (268), text only:
 
 ```
 trenchscope: see who's really buying, before you do.
 
-one memecoin terminal for solana, base and robinhood chain. every wallet gets a tag (sniper, bundler, insider, dev, kol, smart money), every token an audit, and risky buys ask first.
+one memecoin terminal for solana, base, bsc, ethereum and robinhood chain. every wallet gets a tag (sniper, bundler, insider, dev, kol, smart money), every token an audit, risky buys ask first.
 
-you keep your keys. building now.
+you keep your keys.
 ```
 
 **PIN-r1** (self-reply, posted right after): the scam shield. Self-custody brands get impersonated within days.
@@ -78,12 +78,12 @@ Poll options (each ≤ 25 characters):
 3. `bundles at launch`
 4. `the chart (be honest)`
 
-**D1-P3**, evening (138), image `marketing/x/posts/d1-field-guide.png` (a frame from the AI trailer). Turn on X's "Made with AI" label.
+**D1-P3**, evening (157), image `marketing/x/posts/d1-field-guide.png` (a frame from the AI trailer). Turn on X's "Made with AI" label.
 
 ```
 field guide to the trenches, ep.01.
 
-every coin has a cast. we're building the scope that names them, on solana, base and robinhood chain.
+every coin has a cast. we're building the scope that names them, across solana, base, bsc, ethereum and robinhood chain.
 ```
 
 Alt text:
@@ -98,6 +98,6 @@ AI-generated still: a whale drifts over a misty trench at dusk while an amber ta
 
 Each of these must be true of the live product before any post claims it:
 
-- [ ] Real trades execute on all three chains: Solana, Base and Robinhood Chain. If one isn't ready, drop it from the copy.
+- [ ] Real trades execute on all five chains: Solana, Base, BSC, Ethereum and Robinhood Chain. If one isn't ready, drop it from the copy and the header.
 - [ ] Users keep their own keys.
 - [ ] The features named in the posts are in the live build: wallet tags, audit, risk prompt and auto exits.

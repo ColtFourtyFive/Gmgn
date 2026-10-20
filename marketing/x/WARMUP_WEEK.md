@@ -1,4 +1,4 @@
-> **Being rewritten.** The positioning changed: Trenchscope is now marketed as a real multi-chain memecoin trading terminal (Solana, Base, Robinhood Chain) with self-custody, not a simulator. Every "sim", "paper trading" and "no real funds" line below is out of date. Don't post from this file until it is rewritten. For today, use `marketing/x/TODAY.md`.
+> **Being rewritten.** The positioning changed: Trenchscope is now marketed as a real multi-chain memecoin trading terminal (Solana, Base, BSC, Ethereum, Robinhood Chain) with self-custody, not a simulator. Every "sim", "paper trading" and "no real funds" line below is out of date. Don't post from this file until it is rewritten. For today, use `marketing/x/TODAY.md`.
 
 # Warm-up week: X calendar, Tue Oct 20 → Mon Oct 26, 2026
 

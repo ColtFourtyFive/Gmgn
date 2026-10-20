@@ -18,7 +18,7 @@ header_alt = f"""<!doctype html><html><head><meta charset=utf-8><style>*{{margin
 <div style="position:absolute;left:-140px;top:-130px;width:760px;height:760px;opacity:.11">{reticle}</div>
 <div style="position:absolute;inset:0;background:radial-gradient(ellipse 30% 55% at 66% 45%,rgba(255,181,71,.26),transparent 100%)"></div>
 <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 1px,transparent 1px 3px)"></div>
-<div class="mono" style="position:absolute;right:200px;top:86px;font-weight:600;font-size:15px;letter-spacing:.1em;color:#FFB547;border:1.5px solid #FFB547;border-radius:999px;padding:6px 14px">SOLANA · BASE · ROBINHOOD CHAIN</div>
+<div class="mono" style="position:absolute;right:200px;top:86px;font-weight:600;font-size:15px;letter-spacing:.1em;color:#FFB547;border:1.5px solid #FFB547;border-radius:999px;padding:6px 14px">SOL · BASE · BSC · ETH · ROBINHOOD CHAIN</div>
 <div style="position:absolute;left:470px;right:200px;top:140px;display:flex;flex-direction:column;align-items:flex-end;text-align:right">
   <div style="font-weight:600;font-size:70px;letter-spacing:-.035em;line-height:1.02">see who's <span style="color:#FFB547">really</span> buying.</div>
   <div class="mono" style="margin-top:14px;font-weight:600;font-size:19px;color:#8C94A3;letter-spacing:.02em">every wallet tagged before you buy · self-custody</div>
