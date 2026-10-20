@@ -29,9 +29,23 @@ def run(edit):
             args += ["-ss", str(s["start"]), "-t", str(s["end"] - s["start"]), "-i", s["src"]]
             dur = s["end"] - s["start"]
             chain = f"[{idx}:v]fps={FPS},setpts=PTS-STARTPTS,"
+        blurs = s.get("blur") or []
+        if blurs:
+            # Region blur in source pixels, applied before the crop.
+            chain = chain.rstrip(",") + f",split={len(blurs) + 1}" + "".join(f"[b{i}_{k}]" for k in range(len(blurs) + 1)) + ";"
+            base = f"[b{i}_0]"
+            for k, (bx, by, bw, bh) in enumerate(blurs, start=1):
+                chain += f"[b{i}_{k}]crop={bw}:{bh}:{bx}:{by},boxblur=luma_radius=10:luma_power=3:chroma_radius=5:chroma_power=3[bb{i}_{k}];"
+            for k, (bx, by, bw, bh) in enumerate(blurs, start=1):
+                out = f"[bo{i}_{k}]"
+                chain += f"{base}[bb{i}_{k}]overlay={bx}:{by}{out};"
+                base = out
+            chain += base
         if s.get("crop"):
             x, y, w, h = s["crop"]
             chain += f"crop={w}:{h}:{x}:{y},"
+        if chain.endswith("]"):
+            chain += "null,"
         z = s.get("zoom")
         if z:
             # Slow push-in from z[0] to z[1] over the segment (centre crop).
