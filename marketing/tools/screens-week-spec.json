@@ -1,0 +1,78 @@
+[
+ {
+  "ref": "screen-risk-gate",
+  "src": "/home/user/Gmgn/marketing/screens/week/risk-gate.png",
+  "src_w": 768,
+  "src_h": 1114,
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-risk-gate.png",
+  "width": 1200,
+  "height": 1200,
+  "crop": [
+   0,
+   0,
+   768,
+   1114
+  ],
+  "blur": [
+   [
+    248,
+    24,
+    104,
+    48
+   ],
+   [
+    544,
+    712,
+    164,
+    40
+   ]
+  ],
+  "callouts": [
+   {
+    "box": [
+     16,
+     924,
+     736,
+     176
+    ],
+    "label": "it asks first",
+    "side": "top"
+   }
+  ]
+ },
+ {
+  "ref": "screen-dev-hover",
+  "src": "/home/user/Gmgn/marketing/screens/week/dev-hover.png",
+  "src_w": 1340,
+  "src_h": 988,
+  "out": "/home/user/Gmgn/marketing/x/posts/screen-dev-hover.png",
+  "width": 1080,
+  "height": 1350,
+  "crop": [
+   150,
+   0,
+   1190,
+   988
+  ],
+  "blur": [
+   [
+    236,
+    72,
+    300,
+    80
+   ]
+  ],
+  "callouts": [
+   {
+    "box": [
+     190,
+     568,
+     660,
+     84
+    ],
+    "label": "the dev's record, on hover",
+    "side": "top"
+   }
+  ]
+ }
+]

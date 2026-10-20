@@ -1,0 +1,1 @@
+{"duration": 15.0, "bpm": 110, "key_hz": 55, "events": [{"t": 0, "type": "ticks", "dur": 13.5}, {"t": 0, "type": "drone", "dur": 15, "gain": 0.6}, {"t": 1.204, "type": "glitch"}, {"t": 4.254, "type": "boom", "gain": 0.5}, {"t": 6.497, "type": "whoosh"}, {"t": 4.2, "type": "pulse", "dur": 9.3, "gain": 0.7}, {"t": 13.5, "type": "logo_hit", "gain": 0.8}]}

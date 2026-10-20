@@ -37,7 +37,7 @@ const LIMIT = 50;
 const SORT_KEYS: TrenchSortKey[] = ['age', 'mcap', 'volume', 'holders', 'progress'];
 
 const HOTKEYS: HotkeyRow[] = [
-  { keys: ['1', '2', '3'], label: 'Focus New / Almost / Migrated' },
+  { keys: ['1', '2', '3'], label: 'Focus New / Near grad. / Migrated' },
   { keys: ['J', 'K'], label: 'Next / previous token' },
   { keys: ['H', 'L'], label: 'Previous / next column' },
   { keys: ['Enter'], label: 'Open token' },

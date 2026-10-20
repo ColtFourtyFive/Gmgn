@@ -1,0 +1,132 @@
+[
+ {
+  "ref": "d2-a",
+  "out": "/home/user/Gmgn/marketing/x/posts/d2-a.png",
+  "width": 1600,
+  "height": 900,
+  "headline": "spot the rug #1",
+  "subhead": "one was bundled at launch. <em>A or B?</em>",
+  "panels": [
+   {
+    "src": "/home/user/Gmgn/marketing/screens/week/holders-A.png",
+    "size": [
+     340,
+     236
+    ],
+    "label": "A",
+    "masks": [
+     [
+      11,
+      73,
+      88.4,
+      22
+     ],
+     [
+      186.1,
+      73,
+      92.9,
+      22
+     ],
+     [
+      99.4,
+      73,
+      86.7,
+      22
+     ],
+     [
+      176,
+      148,
+      156,
+      24
+     ],
+     [
+      176,
+      174,
+      156,
+      24
+     ],
+     [
+      13,
+      174,
+      156,
+      24
+     ]
+    ]
+   },
+   {
+    "src": "/home/user/Gmgn/marketing/screens/week/holders-B.png",
+    "size": [
+     340,
+     236
+    ],
+    "label": "B",
+    "masks": [
+     [
+      11,
+      73,
+      94.9,
+      22
+     ],
+     [
+      192.6,
+      73,
+      99.3,
+      22
+     ],
+     [
+      105.9,
+      73,
+      86.7,
+      22
+     ],
+     [
+      176,
+      148,
+      156,
+      24
+     ],
+     [
+      176,
+      174,
+      156,
+      24
+     ],
+     [
+      13,
+      174,
+      156,
+      24
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "ref": "d2-a-reveal",
+  "out": "/home/user/Gmgn/marketing/x/posts/d2-a-reveal.png",
+  "width": 1600,
+  "height": 900,
+  "headline": "it's <em>B</em>.",
+  "subhead": "bundlers 53%. insiders 30%. the chips said it first.",
+  "panels": [
+   {
+    "src": "/home/user/Gmgn/marketing/screens/week/holders-A.png",
+    "size": [
+     340,
+     236
+    ],
+    "label": "A"
+   },
+   {
+    "src": "/home/user/Gmgn/marketing/screens/week/holders-B.png",
+    "size": [
+     340,
+     236
+    ],
+    "label": "B",
+    "ring": true,
+    "ring_label": "bundled at launch"
+   }
+  ]
+ }
+]

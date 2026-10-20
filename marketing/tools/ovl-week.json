@@ -1,0 +1,129 @@
+[
+ {
+  "id": "simbug",
+  "out": "/home/user/Gmgn/marketing/video/overlays/simbug.png",
+  "kind": "simbug"
+ },
+ {
+  "id": "d3c-title",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-title.png",
+  "kind": "title",
+  "text": "no mouse.",
+  "sub": "trenchscope hotkeys"
+ },
+ {
+  "id": "d3c-k2",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-k2.png",
+  "kind": "keycap",
+  "text": "2"
+ },
+ {
+  "id": "d3c-kj",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-kj.png",
+  "kind": "keycap",
+  "text": "J"
+ },
+ {
+  "id": "d3c-kb",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-kb.png",
+  "kind": "keycap",
+  "text": "B"
+ },
+ {
+  "id": "d3c-kenter",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-kenter.png",
+  "kind": "keycap",
+  "text": "ENTER"
+ },
+ {
+  "id": "d3c-ks",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-ks.png",
+  "kind": "keycap",
+  "text": "S"
+ },
+ {
+  "id": "d3c-c1",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-c1.png",
+  "kind": "caption",
+  "text": "*2* \u00b7 jump to near grad."
+ },
+ {
+  "id": "d3c-c2",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-c2.png",
+  "kind": "caption",
+  "text": "*j / k* \u00b7 pick a coin"
+ },
+ {
+  "id": "d3c-c3",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-c3.png",
+  "kind": "caption",
+  "text": "*b* \u00b7 quick buy (paper)"
+ },
+ {
+  "id": "d3c-c4",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-c4.png",
+  "kind": "caption",
+  "text": "*enter* \u00b7 open it"
+ },
+ {
+  "id": "d3c-c5",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-c5.png",
+  "kind": "caption",
+  "text": "*s* \u00b7 flip to sell"
+ },
+ {
+  "id": "d3c-end",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d3c-end.png",
+  "kind": "endslate",
+  "text": "j/k through the trench. b to buy.",
+  "sub": "simulated market \u00b7 paper trading \u00b7 no token \u00b7 nfa"
+ },
+ {
+  "id": "d4a-title",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-title.png",
+  "kind": "title",
+  "text": "rug autopsy *#1*",
+  "sub": "one sim launch, replayed"
+ },
+ {
+  "id": "d4a-c1",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-c1.png",
+  "kind": "caption",
+  "text": "audit: *high risk.* rug ratio 81%."
+ },
+ {
+  "id": "d4a-c2",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-c2.png",
+  "kind": "caption",
+  "text": "bundler wallets: in at launch. *out first.*",
+  "pos": "top"
+ },
+ {
+  "id": "d4a-c3",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-c3.png",
+  "kind": "caption",
+  "text": "snipers: in early. *out early.*",
+  "pos": "top"
+ },
+ {
+  "id": "d4a-c4",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-c4.png",
+  "kind": "caption",
+  "text": "the dev: *sold.*",
+  "pos": "top"
+ },
+ {
+  "id": "d4a-c5",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-c5.png",
+  "kind": "caption",
+  "text": "the cliff. *1s candles.*",
+  "pos": "top"
+ },
+ {
+  "id": "d4a-end",
+  "out": "/home/user/Gmgn/marketing/video/overlays/d4a-end.png",
+  "kind": "endslate",
+  "text": "read the chips before the chart.",
+  "sub": "fictional sim token \u00b7 simulated market \u00b7 paper trading \u00b7 nfa"
+ }
+]

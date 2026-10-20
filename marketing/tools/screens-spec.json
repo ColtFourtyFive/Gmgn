@@ -72,6 +72,14 @@
     "label": "full cost before you click",
     "side": "top"
    }
+  ],
+  "blur": [
+   [
+    3470,
+    562,
+    330,
+    74
+   ]
   ]
  },
  {

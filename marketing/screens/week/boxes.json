@@ -1,0 +1,179 @@
+{
+ "holders-A": {
+  "token": "HOMKNO",
+  "address": "LewRK4cxitQQAhSXm644KtV5VMiV3RbWdrsSku72bonk",
+  "size": [
+   340,
+   236
+  ],
+  "masks": {
+   "Insiders": [
+    13,
+    75,
+    84.4,
+    18
+   ],
+   "Bundlers": [
+    188.1,
+    75,
+    88.9,
+    18
+   ],
+   "Snipers": [
+    101.4,
+    75,
+    82.7,
+    18
+   ],
+   "row-Insider": null,
+   "row-Bundler": null,
+   "row-Sniper": null
+  },
+  "risk": 0.011035625977962113
+ },
+ "holders-B": {
+  "token": "ZORP",
+  "address": "Am5d4kCLSFxJoDhDmwjV174c6f9t64iGGsPRkQPbonk",
+  "size": [
+   340,
+   236
+  ],
+  "masks": {
+   "Insiders": [
+    13,
+    75,
+    90.9,
+    18
+   ],
+   "Bundlers": [
+    194.6,
+    75,
+    95.3,
+    18
+   ],
+   "Snipers": [
+    107.9,
+    75,
+    82.7,
+    18
+   ],
+   "row-Insider": null,
+   "row-Bundler": null,
+   "row-Sniper": null
+  },
+  "risk": 1.0234922028855868
+ },
+ "buy-panel": {
+  "token": "ZORP",
+  "size": [
+   340,
+   380
+  ],
+  "blur": [
+   [
+    19,
+    217,
+    302,
+    16
+   ],
+   [
+    19,
+    237,
+    302,
+    16
+   ]
+  ]
+ },
+ "risk-gate": {
+  "token": "ZORP",
+  "size": [
+   384,
+   557
+  ],
+  "title": [
+   17,
+   15,
+   316,
+   20
+  ]
+ },
+ "dev-hover": {
+  "token": "RAN",
+  "size": [
+   670,
+   494
+  ],
+  "devCreated": 11,
+  "line": [
+   101,
+   304,
+   300,
+   16
+  ],
+  "card": [
+   24,
+   280.5,
+   622,
+   103
+  ]
+ },
+ "d3-c-keyboard": {
+  "seconds": 15,
+  "beats": [
+   {
+    "t": 1.204,
+    "label": "2"
+   },
+   {
+    "t": 2.365,
+    "label": "J"
+   },
+   {
+    "t": 3.118,
+    "label": "J"
+   },
+   {
+    "t": 4.254,
+    "label": "B"
+   },
+   {
+    "t": 6.497,
+    "label": "ENTER"
+   },
+   {
+    "t": 9.601,
+    "label": "S"
+   }
+  ]
+ },
+ "d4-a-token": {
+  "symbol": "NPC",
+  "address": "sMECt7z6e7mcwp1oP7uJNvf5Zobzco6udQapuevaQpit",
+  "title": "Bundler sell"
+ },
+ "d4-a-autopsy": {
+  "seconds": 21,
+  "beats": [
+   {
+    "t": 0.001,
+    "label": "audit"
+   },
+   {
+    "t": 4.461,
+    "label": "bundler"
+   },
+   {
+    "t": 7.962,
+    "label": "sniper"
+   },
+   {
+    "t": 11.419,
+    "label": "dev"
+   },
+   {
+    "t": 15.32,
+    "label": "chart"
+   }
+  ]
+ }
+}

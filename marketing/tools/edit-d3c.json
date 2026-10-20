@@ -1,0 +1,92 @@
+{
+ "out": "/home/user/Gmgn/marketing/x/posts/d3-c.mp4",
+ "w": 1920,
+ "h": 1080,
+ "fps": 30,
+ "segments": [
+  {
+   "src": "/home/user/Gmgn/marketing/video/app-footage/d3-c-keyboard.mp4",
+   "start": 0,
+   "end": 13.5,
+   "zoom": [
+    1.0,
+    1.05
+   ]
+  },
+  {
+   "src": "/home/user/Gmgn/marketing/video/overlays/d3c-end.png",
+   "still": true,
+   "dur": 1.5
+  }
+ ],
+ "overlays": [
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/simbug.png",
+   "t0": 0,
+   "t1": 13.5,
+   "fade": 0.01
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-title.png",
+   "t0": 0,
+   "t1": 1.15,
+   "fade": 0.01
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-k2.png",
+   "t0": 1.204,
+   "t1": 2.004
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-c1.png",
+   "t0": 1.204,
+   "t1": 2.3150000000000004
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-kj.png",
+   "t0": 2.365,
+   "t1": 2.9650000000000003
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-kj.png",
+   "t0": 3.118,
+   "t1": 3.8179999999999996
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-c2.png",
+   "t0": 2.365,
+   "t1": 4.204
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-kb.png",
+   "t0": 4.254,
+   "t1": 5.053999999999999
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-c3.png",
+   "t0": 4.254,
+   "t1": 6.447
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-kenter.png",
+   "t0": 6.497,
+   "t1": 7.297
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-c4.png",
+   "t0": 6.497,
+   "t1": 9.551
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-ks.png",
+   "t0": 9.601,
+   "t1": 10.401000000000002
+  },
+  {
+   "png": "/home/user/Gmgn/marketing/video/overlays/d3c-c5.png",
+   "t0": 9.601,
+   "t1": 13.4
+  }
+ ],
+ "audio": "/home/user/Gmgn/marketing/video/audio/d3-c.wav"
+}
