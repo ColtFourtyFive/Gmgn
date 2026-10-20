@@ -1,8 +1,8 @@
 // Visual QA page (/_ui): every design-system component with sample data.
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CHAIN_IDS, LAUNCHPADS, type Range, type SecurityCheck, type WalletTag } from '@trenchscope/shared';
-import { Bell, Ellipsis, Filter, Palette, Settings, Star, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CHAIN_IDS, LAUNCHPADS, type NotificationKind, type Range, type SecurityCheck, type WalletTag } from '@trenchscope/shared';
+import { ArrowUpToLine, Bell, Boxes, ChefHat, Command, Crosshair, Crown, Ellipsis, Filter, Palette, Settings, Star, Trash2 } from 'lucide-react';
 import {
   AddressLink,
   Age,
@@ -30,7 +30,7 @@ import {
   WalletTags,
   type TokenLinkData,
 } from '@/components/common';
-import { Page, PageHeader } from '@/components/layout';
+import { NOTIFICATION_KIND_META, Page, PageHeader } from '@/components/layout';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import {
   Badge,
@@ -62,8 +62,10 @@ import {
   Tooltip,
   type Column,
 } from '@/components/ui';
+import { MOD_KEY } from '@/hooks/useHotkeys';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from '@/store/toasts';
+import { useUi } from '@/store/ui';
 
 /** Deterministic PRNG so the gallery looks the same on every load. */
 function mulberry32(seed: number) {
@@ -170,6 +172,9 @@ export default function UiGalleryPage() {
   const [compact, setCompact] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ticker, setTicker] = useState(0.00001234);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(0);
+  const tableScroll = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setInterval(() => setTicker((v) => v * (0.97 + Math.random() * 0.06)), 1500);
@@ -206,15 +211,20 @@ export default function UiGalleryPage() {
         subtitle="Trenchscope design system — every component with sample data"
         icon={<Palette size={16} />}
         actions={
-          <SegmentedControl
-            aria-label="Theme"
-            value={theme}
-            onChange={setTheme}
-            items={[
-              { value: 'dark', label: 'Dark' },
-              { value: 'light', label: 'Light' },
-            ]}
-          />
+          <>
+            <SegmentedControl
+              aria-label="Theme"
+              value={theme}
+              onChange={setTheme}
+              items={[
+                { value: 'dark', label: 'Dark' },
+                { value: 'light', label: 'Light' },
+              ]}
+            />
+            <Button size="sm" icon={<Command size={13} />} onClick={() => useUi.getState().setPaletteOpen(true)}>
+              Command palette <Kbd className="ml-1">{MOD_KEY === '⌘' ? '⌘K' : 'Ctrl K'}</Kbd>
+            </Button>
+          </>
         }
       />
 
@@ -357,6 +367,15 @@ export default function UiGalleryPage() {
                 options={LAUNCHPADS.map((l) => ({ value: l.id, label: l.name, icon: <span className="h-2 w-2 rounded-full" style={{ background: l.color }} />, hint: l.chain.toUpperCase() }))}
               />
             </Field>
+            <Field label="Disabled input" hint="Disabled fields dim and show a not-allowed cursor">
+              <Input defaultValue="Locked while trading" disabled prefix={<Filter size={13} />} />
+            </Field>
+            <Field label="Disabled NumberInput">
+              <NumberInput value={amount} onChange={setAmount} suffix="SOL" presets={[0.1, 0.5, 1]} disabled />
+            </Field>
+            <Field inline label="Inline field" htmlFor="ui-inline" error="Slippage must be below 50%" className="sm:col-span-2">
+              <NumberInput id="ui-inline" value={75} onChange={() => undefined} suffix="%" invalid wrapperClassName="w-28" size="sm" />
+            </Field>
             <div className="flex flex-col gap-2">
               <Toggle label="Flash updates" description="Highlight changing values" checked={toggle} onChange={setToggle} />
               <Toggle size="sm" aria-label="Compact" checked={!toggle} onChange={(v) => setToggle(!v)} />
@@ -418,6 +437,21 @@ export default function UiGalleryPage() {
                 </div>
               </div>
             </HoverCard>
+            <HoverCard
+              open={cardOpen}
+              onOpenChange={setCardOpen}
+              aria-label="MOON summary"
+              trigger={
+                <span className="block rounded-full">
+                  <TokenAvatar seed="ctl" glyph="🌙" size={28} progress={0.4} />
+                </span>
+              }
+            >
+              <p className="w-56 text-sm text-muted">Controlled with `open` / `onOpenChange`: hover still works, the button opens it for keyboard users, Escape closes it.</p>
+            </HoverCard>
+            <Button size="sm" variant="ghost" onClick={() => setCardOpen(true)}>
+              Open preview
+            </Button>
           </Row>
           <Row label="Dialogs">
             <Button size="sm" onClick={() => setModal(true)}>
@@ -425,6 +459,9 @@ export default function UiGalleryPage() {
             </Button>
             <Button size="sm" onClick={() => setDrawer(true)}>
               Drawer
+            </Button>
+            <Button size="sm" icon={<Command size={13} />} onClick={() => useUi.getState().setPaletteOpen(true)}>
+              Palette
             </Button>
           </Row>
           <Row label="Toasts">
@@ -437,6 +474,17 @@ export default function UiGalleryPage() {
             <Button size="sm" onClick={() => toast.info('Alert triggered', 'MOON crossed $100K market cap')}>
               Info
             </Button>
+          </Row>
+          <Row label="Notifications">
+            {(Object.keys(NOTIFICATION_KIND_META) as NotificationKind[]).map((k) => {
+              const meta = NOTIFICATION_KIND_META[k];
+              return (
+                <span key={k} className="flex items-center gap-1 text-xs text-muted">
+                  <meta.icon size={14} className={meta.className} aria-hidden />
+                  {meta.label}
+                </span>
+              );
+            })}
           </Row>
         </Section>
 
@@ -510,6 +558,12 @@ export default function UiGalleryPage() {
             <RiskChip label="LP burn" value={1} threshold={0.9} invert />
             <RiskChip label="Snipers" value={null} threshold={0.2} />
           </Row>
+          <Row label="hideLabel">
+            <RiskChip label="Top10" value={0.18} threshold={0.3} icon={<Crown size={10} />} hideLabel hint="Top 10 holders' share" />
+            <RiskChip label="Dev" value={0.22} threshold={0.1} icon={<ChefHat size={10} />} hideLabel />
+            <RiskChip label="Snipers" value={0.06} threshold={0.1} icon={<Crosshair size={10} />} hideLabel />
+            <RiskChip label="Bundlers" value={0.52} threshold={0.3} icon={<Boxes size={10} />} hideLabel />
+          </Row>
           <Row label="Curve">
             <CurveProgress progress={0.12} className="w-40" />
             <CurveProgress progress={0.86} className="w-40" />
@@ -531,11 +585,18 @@ export default function UiGalleryPage() {
 
         <Panel
           title="DataTable"
-          subtitle="150 rows · client-side sort · sticky header & first column"
+          subtitle={`150 rows · client-side sort · sticky header & first column · scrolled ${scrolled}px`}
           className="lg:col-span-2"
           padded={false}
           actions={
             <>
+              <IconButton
+                label="Back to top"
+                size="sm"
+                icon={<ArrowUpToLine size={14} />}
+                disabled={scrolled === 0}
+                onClick={() => tableScroll.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+              />
               <Toggle size="sm" label="Compact" checked={compact} onChange={setCompact} />
               <Toggle size="sm" label="Loading" checked={loading} onChange={setLoading} />
             </>
@@ -552,6 +613,8 @@ export default function UiGalleryPage() {
             maxHeight={420}
             minWidth={720}
             onRowClick={(r) => toast.info(`Row clicked: ${r.token.symbol}`)}
+            scrollRef={tableScroll}
+            onScroll={(e) => setScrolled(Math.round(e.currentTarget.scrollTop))}
           />
         </Panel>
 

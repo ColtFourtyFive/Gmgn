@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type UIEvent } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import clsx from 'clsx';
 import { Skeleton } from './Skeleton';
@@ -56,6 +56,10 @@ export interface DataTableProps<T> {
   maxHeight?: number | string;
   /** Minimum table width; narrower viewports scroll horizontally inside the table. */
   minWidth?: number | string;
+  /** Scroll events of the table's own scroll container (infinite loading, "jump to top" buttons). */
+  onScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  /** Ref to the scroll container (scrollTo, scroll position restore). */
+  scrollRef?: Ref<HTMLDivElement>;
   className?: string;
   'aria-label'?: string;
 }
@@ -157,6 +161,8 @@ export function DataTable<T>({
   compact = false,
   maxHeight,
   minWidth,
+  onScroll,
+  scrollRef,
   className,
   'aria-label': ariaLabel,
 }: DataTableProps<T>) {
@@ -183,7 +189,7 @@ export function DataTable<T>({
   const showSkeleton = loading && rows.length === 0;
 
   return (
-    <div className={clsx('relative w-full overflow-auto', className)} style={style}>
+    <div ref={scrollRef} onScroll={onScroll} className={clsx('relative w-full overflow-auto', className)} style={style}>
       <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth }} aria-label={ariaLabel} aria-busy={loading || undefined}>
         <thead>
           <tr>

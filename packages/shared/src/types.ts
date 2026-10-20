@@ -183,6 +183,8 @@ export interface TokenSummary {
   marketCapUsd: number;
   athMarketCapUsd: number;
   liquidityUsd: number;
+  /** initial_liquidity: launch-time liquidity in USD; the pool's initial liquidity once migrated. */
+  initialLiquidityUsd: number;
   /** Bonding curve progress 0..1 (1 once migrated). */
   progress: number;
   holderCount: number;
@@ -273,8 +275,6 @@ export interface TokenDetail extends TokenSummary {
   curve: CurveInfo | null;
   pool: PoolInfo | null;
   dev: DevInfo;
-  /** Launch-time liquidity in USD (initial_liquidity). */
-  initialLiquidityUsd: number;
   /** All-time high price in USD. */
   athPriceUsd: number;
   /** Total fees paid by traders to the venue (USD). */
@@ -387,6 +387,12 @@ export interface TokenRef {
   launchpad: string;
   createdAt: number;
   priceChange24h: number;
+  /**
+   * security.rugRatio / riskLevel from the token's latest security read (at most
+   * ~30s old). The server always sets them; optional so refs built client-side still type-check.
+   */
+  rugRatio?: number;
+  riskLevel?: RiskLevel;
 }
 
 export interface PnlDistribution {
@@ -514,6 +520,20 @@ export interface Signal {
   wallets: string[];
   createdAt: number;
 }
+
+/** A wallet's public calls (kol_call signals) and how they played out; a hit = maxMultiple >= 2. */
+export interface WalletCalls {
+  /** Newest first (calls on tokens the simulator has since deleted are left out). */
+  calls: Signal[];
+  /** Share of the calls made in the last 7d / 30d that hit (0 without calls). */
+  hitRate7d: number;
+  hitRate30d: number;
+  /** Mean maxMultiple of the calls made in the last 30d (0 without calls). */
+  avgMaxMultiple: number;
+}
+
+/** Call-out feed filter: every call, calls by wallets tagged kol, or calls that hit (maxMultiple >= 2). */
+export type CalloutFilter = 'all' | 'kol' | 'hits';
 
 export interface Narrative {
   id: string;
@@ -880,6 +900,9 @@ export interface FollowedWallet {
   createdAt: number;
   /** Push a notification on each trade. */
   notify: boolean;
+  /** The wallet's public label (KOL handle, ...) and platform tags, as of the read. */
+  label: string | null;
+  tags: WalletTag[];
 }
 
 export interface WatchlistItem {
@@ -913,7 +936,15 @@ export interface CopyTradeTask {
   presetId: PresetId;
   createdAt: number;
   stats: { buys: number; sells: number; spentNative: number; receivedNative: number; lastCopiedAt: number | null };
+  /**
+   * Server-managed: failed copies in a row (a successful copy resets it). At
+   * COPY_AUTO_PAUSE_FAILURES the task disables itself and notifies the owner.
+   */
+  consecutiveFailures?: number;
 }
+
+/** Consecutive failed copies after which a copy-trade task pauses itself. */
+export const COPY_AUTO_PAUSE_FAILURES = 3;
 
 export type SniperKind = 'new_token' | 'migration' | 'dev_launch';
 
@@ -967,6 +998,85 @@ export interface AlertRule {
   note: string;
 }
 
+// ---------------------------------------------------------------------------
+// Token launch ("Cooking")
+// ---------------------------------------------------------------------------
+
+export interface LaunchRequest {
+  chain: ChainId;
+  /** Launchpad id on `chain` (LaunchConfig.launchpads). */
+  launchpad: string;
+  /** 1-32 characters; a reserved ticker as the whole name is refused. */
+  name: string;
+  /** 1-10 characters A-Z / 0-9 (lower case is upper-cased, a leading "$" dropped); reserved tickers are refused. */
+  symbol: string;
+  /** At most 280 characters. */
+  description?: string;
+  /** https links only: twitter on x.com / twitter.com, telegram on t.me, website anywhere. */
+  socials?: Socials;
+  /** One of LaunchConfig.glyphs (default LaunchConfig.defaultGlyph); it also picks the token's narrative. */
+  logoGlyph?: string;
+  /** Creator's buy in the creation block (native, 0..LaunchConfig.limits.maxDevBuyNative[chain]). */
+  devBuyNative: number;
+  /**
+   * Extra paper wallets (0..LaunchConfig.limits.maxBundleWallets) funded from the creator's wallet. They
+   * sell whenever the creator sells, so they need devBuyNative > 0.
+   */
+  bundleWallets?: number;
+  /** Native each bundle wallet buys in the creation block (required with bundleWallets). */
+  bundleBuyNative?: number;
+  /** Buy preset whose priority fee / tip the creation-block buys pay (default: the active buy preset). */
+  presetId?: PresetId;
+  /** Exit rules on the dev buy, as SwapRequest.strategy (needs devBuyNative > 0). */
+  strategy?: StrategySpec;
+}
+
+export interface LaunchResponse {
+  token: TokenDetail;
+  /** Creation-block buys: the dev buy first (when devBuyNative > 0), then one per bundle wallet. */
+  receipts: SwapReceipt[];
+}
+
+/** A launchpad's bonding curve as a fresh launch sees it. */
+export interface LaunchpadCurve {
+  id: string;
+  chain: ChainId;
+  name: string;
+  color: string;
+  totalSupply: number;
+  virtualNative: number;
+  virtualTokens: number;
+  /** Real tokens sold on the curve before graduation. */
+  curveTokens: number;
+  feeRate: number;
+  migrationFeeNative: number;
+  /** Native the curve holds when it completes. */
+  graduationNative: number;
+  /** Market cap of a fresh launch / at curve completion, at the current native price. */
+  launchMarketCapUsd: number;
+  graduationMarketCapUsd: number;
+}
+
+export interface LaunchConfig {
+  launchpads: Record<ChainId, LaunchpadCurve[]>;
+  /** Flat fee per launch (about 0.02 SOL worth on every chain). */
+  launchFeeNative: Record<ChainId, number>;
+  /** Allowed logo glyphs and the narrative each one tags the token with. */
+  glyphs: string[];
+  glyphNarratives: Record<string, string>;
+  defaultGlyph: string;
+  reservedTickers: string[];
+  limits: {
+    nameMaxLength: number;
+    symbolMaxLength: number;
+    descriptionMaxLength: number;
+    maxDevBuyNative: Record<ChainId, number>;
+    maxBundleWallets: number;
+    maxBundleBuyNative: Record<ChainId, number>;
+    launchesPerHour: number;
+  };
+}
+
 export type NotificationKind =
   | 'order_filled'
   | 'order_failed'
@@ -986,6 +1096,8 @@ export interface AppNotification {
   wallet: string | null;
   createdAt: number;
   read: boolean;
+  /** Outcome for toasts: fills 'success', failed trades / paused tasks 'error'. Absent = neutral. */
+  level?: 'success' | 'error' | 'info';
 }
 
 export interface RewardsSummary {

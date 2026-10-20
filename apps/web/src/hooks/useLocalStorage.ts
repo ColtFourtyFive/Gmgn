@@ -12,25 +12,37 @@ function read<T>(key: string, initial: T): T {
 /**
  * useState persisted as JSON in localStorage (per-browser UI preferences such
  * as column layouts or last selected tab). Storage failures are ignored, so
- * it degrades to plain state in private mode. Syncs across tabs.
+ * it degrades to plain state in private mode. Syncs across tabs, and re-reads
+ * when `key` changes (e.g. a per-chain or per-token key).
  */
 export function useLocalStorage<T>(key: string, initial: T): [T, (next: T | ((prev: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => read(key, initial));
   // `initial` is only a fallback; keep the latest without re-subscribing on its identity.
   const initialRef = useRef(initial);
   initialRef.current = initial;
+  // Adjust state while rendering (not in an effect) so the new key's value is never a frame late.
+  const [readKey, setReadKey] = useState(key);
+  if (readKey !== key) {
+    setReadKey(key);
+    setValue(read(key, initial));
+  }
+
+  // Latest value for functional updates. Storage is written right away, not inside a
+  // state updater: React drops those when the component unmounts in the same update
+  // (e.g. a dialog that records a choice and closes).
+  const latest = useRef(value);
+  latest.current = value;
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {
-      setValue((prev) => {
-        const resolved = typeof next === 'function' ? (next as (p: T) => T)(prev) : next;
-        try {
-          localStorage.setItem(key, JSON.stringify(resolved));
-        } catch {
-          /* storage unavailable */
-        }
-        return resolved;
-      });
+      const resolved = typeof next === 'function' ? (next as (p: T) => T)(latest.current) : next;
+      latest.current = resolved;
+      try {
+        localStorage.setItem(key, JSON.stringify(resolved));
+      } catch {
+        /* storage unavailable */
+      }
+      setValue(resolved);
     },
     [key],
   );

@@ -5,10 +5,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { WsClientMessage, WsServerMessage } from '@trenchscope/shared';
 
 type Listener = (type: string, data: unknown) => void;
+type ErrorListener = (message: string) => void;
 
 interface ChannelEntry {
   params: unknown;
   listeners: Set<Listener>;
+  /** Server `error` messages about this channel (bad params, auth required ...). */
+  errorListeners: Set<ErrorListener>;
 }
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
@@ -70,6 +73,10 @@ class RealtimeClient {
       if (msg.op === 'data') {
         const entry = this.channels.get(msg.ch);
         if (entry) for (const l of entry.listeners) l(msg.type, msg.data);
+      } else if (msg.op === 'error') {
+        if (import.meta.env.DEV) console.warn(`[ws] ${msg.ch ? `${msg.ch}: ` : ''}${msg.message}`);
+        const entry = msg.ch ? this.channels.get(msg.ch) : undefined;
+        if (entry) for (const l of entry.errorListeners) l(msg.message);
       } else if (msg.op === 'pong') {
         this.latency = Math.round(performance.now() - this.pingSentAt);
       } else if (msg.op === 'auth' && msg.ok && this.channels.has('user')) {
@@ -111,11 +118,11 @@ class RealtimeClient {
     }
   }
 
-  subscribe(ch: string, params: unknown, listener: Listener): () => void {
+  subscribe(ch: string, params: unknown, listener: Listener, onError?: ErrorListener): () => void {
     this.connect();
     let entry = this.channels.get(ch);
     if (!entry) {
-      entry = { params, listeners: new Set() };
+      entry = { params, listeners: new Set(), errorListeners: new Set() };
       this.channels.set(ch, entry);
       if (ch !== 'user' || this.token) this.raw({ op: 'sub', ch, params: params ?? undefined });
     } else if (JSON.stringify(entry.params) !== JSON.stringify(params)) {
@@ -123,10 +130,12 @@ class RealtimeClient {
       this.raw({ op: 'sub', ch, params: params ?? undefined });
     }
     entry.listeners.add(listener);
+    if (onError) entry.errorListeners.add(onError);
     return () => {
       const e = this.channels.get(ch);
       if (!e) return;
       e.listeners.delete(listener);
+      if (onError) e.errorListeners.delete(onError);
       if (e.listeners.size === 0) {
         this.channels.delete(ch);
         this.raw({ op: 'unsub', ch });
@@ -149,17 +158,31 @@ export const realtime = new RealtimeClient();
 /**
  * Subscribe to a channel for the lifetime of the component. `onData` may change
  * between renders without resubscribing; params changes are pushed in place.
+ * `onError` receives the server's `error` messages for this channel (e.g.
+ * rejected params); they are also logged in development.
  */
-export function useChannel(ch: string | null, params: unknown, onData: (type: string, data: unknown) => void): void {
+export function useChannel(
+  ch: string | null,
+  params: unknown,
+  onData: (type: string, data: unknown) => void,
+  onError?: (message: string) => void,
+): void {
   const cb = useRef(onData);
   cb.current = onData;
+  const errCb = useRef(onError);
+  errCb.current = onError;
   const paramsKey = JSON.stringify(params ?? null);
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
   useEffect(() => {
     if (!ch) return;
-    return realtime.subscribe(ch, paramsRef.current, (type, data) => cb.current(type, data));
+    return realtime.subscribe(
+      ch,
+      paramsRef.current,
+      (type, data) => cb.current(type, data),
+      (message) => errCb.current?.(message),
+    );
   }, [ch]);
 
   useEffect(() => {

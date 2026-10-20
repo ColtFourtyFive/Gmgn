@@ -1,6 +1,6 @@
-// Wallet-side REST routes (docs/API.md): wallet profile / holdings / activity,
-// leaderboard, Monitor feed and signals. Inputs are zod-validated; unknown
-// wallets (or a wallet on another chain) are 404.
+// Wallet-side REST routes (docs/API.md): wallet profile / holdings / activity /
+// created tokens / calls, leaderboard, Monitor feed, signals and call-outs.
+// Inputs are zod-validated; unknown wallets (or a wallet on another chain) are 404.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -25,10 +25,12 @@ const ActivityQuery = z.object({
   limit: Limit,
   before: z.coerce.number().optional(),
 });
+const LimitQuery = z.object({ limit: Limit });
 const LeaderboardQuery = z.object({
   tag: z.enum(['smart', 'kol', 'sniper', 'whale', 'all']).optional(),
   period: z.enum(['1d', '7d', '30d']).optional(),
   sort: z.enum(['pnl', 'winRate', 'volume', 'tokens', 'pnlRate']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
   limit: Limit,
 });
 const FeedQuery = z.object({
@@ -37,6 +39,10 @@ const FeedQuery = z.object({
 });
 const SignalsQuery = z.object({
   kind: z.enum(SIGNAL_KINDS as [string, ...string[]]).optional(),
+  limit: Limit,
+});
+const CalloutsQuery = z.object({
+  filter: z.enum(['all', 'kol', 'hits']).optional(),
   limit: Limit,
 });
 
@@ -82,10 +88,20 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
     return ctx.analytics.walletActivity(w, { type: q.type, limit: q.limit, before: q.before }, viewerOf(ctx, req));
   });
 
+  app.get('/api/:chain/wallets/:address/created-tokens', async (req) => {
+    const w = wallet(req);
+    return ctx.analytics.createdTokens(w, parse(LimitQuery, req.query).limit);
+  });
+
+  app.get('/api/:chain/wallets/:address/calls', async (req) => {
+    const w = wallet(req);
+    return ctx.analytics.walletCalls(w, parse(LimitQuery, req.query).limit);
+  });
+
   app.get('/api/:chain/leaderboard', async (req) => {
     const { chain } = parse(ChainParams, req.params);
     const q = parse(LeaderboardQuery, req.query);
-    return ctx.analytics.leaderboard(chain, { tag: q.tag, period: q.period, sort: q.sort, limit: q.limit }, viewerOf(ctx, req));
+    return ctx.analytics.leaderboard(chain, { tag: q.tag, period: q.period, sort: q.sort, order: q.order, limit: q.limit }, viewerOf(ctx, req));
   });
 
   app.get('/api/:chain/feed', async (req) => {
@@ -100,5 +116,11 @@ export async function registerWalletRoutes(app: FastifyInstance, ctx: AppContext
     const { chain } = parse(ChainParams, req.params);
     const q = parse(SignalsQuery, req.query);
     return ctx.analytics.signals(chain, { kind: q.kind, limit: q.limit });
+  });
+
+  app.get('/api/:chain/callouts', async (req) => {
+    const { chain } = parse(ChainParams, req.params);
+    const q = parse(CalloutsQuery, req.query);
+    return ctx.analytics.callouts(chain, q.filter ?? 'all', q.limit);
   });
 }

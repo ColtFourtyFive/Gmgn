@@ -480,6 +480,10 @@ describe('summary, stats and security', () => {
     expect(d.curve).toBeNull();
     expect(d.pool!.address).toBe(t.pool!.address);
     expect(d.pool!.lpBurnedRate).toBe(1);
+    // initial liquidity switches from the launch to the pool's opening liquidity
+    expect(s.initialLiquidityUsd).toBe(t.pool!.initialLiquidityUsd);
+    expect(d.initialLiquidityUsd).toBe(d.pool!.initialLiquidityUsd);
+    expect(s.initialLiquidityUsd).not.toBe(t.initialLiquidityUsd);
   });
 
   it('derives bundlers, snipers and insiders from blocks and funding links', () => {
@@ -690,9 +694,16 @@ describe('summary, stats and security', () => {
     expect(d.nativeUsd).toBe(fx.world.nativeUsd('sol'));
     expect(d.dev.address).toBe(dev.address);
     expect(d.pool).toBeNull();
+    expect(d.initialLiquidityUsd).toBe(t.initialLiquidityUsd);
     const r = fx.ta.ref(t);
     expect(r).toMatchObject({ chain: 'sol', address: t.address, symbol: t.symbol, status: 'curve' });
     expect(r.priceChange24h).toBeGreaterThan(0);
+    expect(r).toMatchObject({ rugRatio: d.security.rugRatio, riskLevel: d.security.riskLevel });
+    // a ref of a token no list has summarised builds the security read on demand
+    const cold = tokenWithBuyers(fx, 'sol', 'CLD', 2).t;
+    const coldRef = fx.ta.ref(cold);
+    expect(coldRef.rugRatio).toBe(fx.ta.summary(cold).security.rugRatio);
+    expect(['low', 'medium', 'high']).toContain(coldRef.riskLevel);
     expect(JSON.parse(JSON.stringify(d))).toEqual(d); // plain JSON
   });
 });

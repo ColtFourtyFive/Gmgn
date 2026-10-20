@@ -9,7 +9,7 @@ import { Age, Native, TokenLink, Usd } from '@/components/common';
 import { QuickBuyButton } from '@/components/trade/QuickBuyButton';
 import { Badge, Tooltip } from '@/components/ui';
 import { Multiple, WalletCell } from '@/components/wallet';
-import type { RiskVerdict } from './useTokenRisk';
+import type { RiskVerdict } from './risk';
 
 export const FEED_GRID = 'md:grid md:grid-cols-[52px_minmax(150px,1.2fr)_minmax(104px,0.7fr)_minmax(96px,0.7fr)_minmax(150px,1.2fr)_minmax(150px,1fr)_68px] md:items-center md:gap-x-3';
 

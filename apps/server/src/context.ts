@@ -5,8 +5,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   Account,
   AppNotification,
+  CalloutFilter,
   ChainId,
   DevInfo,
+  DevToken,
   FeedItem,
   FollowedWallet,
   LeaderboardRow,
@@ -25,6 +27,7 @@ import type {
   TrendingQuery,
   TrendingSnapshot,
   UserSettings,
+  WalletCalls,
   WalletPeriod,
   WalletProfile,
   WalletTag,
@@ -99,9 +102,15 @@ export interface AnalyticsApi {
   walletProfile(w: WalletState, viewer: Viewer): WalletProfile;
   walletHoldings(w: WalletState, opts: { includeClosed?: boolean; sort?: string; limit?: number }, viewer: Viewer): TokenPositionRow[];
   walletActivity(w: WalletState, opts: { limit?: number; before?: number; type?: string }, viewer: Viewer): FeedItem[];
-  leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; limit?: number }, viewer: Viewer): LeaderboardRow[];
+  /** Tokens the wallet created that still exist, newest first. */
+  createdTokens(w: WalletState, limit?: number): DevToken[];
+  /** The wallet's kol_call signals with hit rates. */
+  walletCalls(w: WalletState, limit?: number): WalletCalls;
+  leaderboard(chain: ChainId, opts: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number }, viewer: Viewer): LeaderboardRow[];
   feed(chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit: number, viewer: Viewer): FeedItem[];
   signals(chain: ChainId, opts: { kind?: string; limit?: number }): Signal[];
+  /** Global call-out feed: kol_call signals newest first. */
+  callouts(chain: ChainId, filter: CalloutFilter, limit?: number): Signal[];
   narratives(chain: ChainId): Narrative[];
   search(q: string, chain?: ChainId): SearchResult;
   /** Platform tags of a wallet (smart, kol, ...). */
@@ -115,6 +124,11 @@ export interface TradingApi {
   restore(data: unknown): void;
 }
 
+export interface MarketApi {
+  /** Have the simulated market trade a user's launch like its own (call after the creation-block buys). */
+  adopt(t: TokenState): void;
+}
+
 export interface AppContext {
   config: AppConfig;
   world: World;
@@ -123,6 +137,7 @@ export interface AppContext {
   accounts: AccountsApi;
   analytics: AnalyticsApi;
   trading: TradingApi;
+  market: MarketApi;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Order, TokenDetail } from '@trenchscope/shared';
-import { ListOrdered, X } from 'lucide-react';
+import { ListOrdered, LogIn, X } from 'lucide-react';
 import { Age } from '@/components/common';
 import { OrderAmount, OrderKindCell, OrderResult, OrderStatusBadge, OrderTrigger, SideBadge } from '@/components/account';
 import { Button, DataTable, EmptyState, ErrorState, IconButton, SegmentedControl, type Column } from '@/components/ui';
@@ -95,9 +95,14 @@ export function OrdersTab({ token, maxHeight }: { token: TokenDetail; maxHeight:
         title="Limit and auto orders"
         description="Place limit, take-profit, stop-loss, dev-sell and migration orders from the trade panel."
         action={
-          <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true)}>
-            Start paper trading
-          </Button>
+          <span className="flex flex-wrap justify-center gap-2">
+            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, 'quick')}>
+              Start paper trading
+            </Button>
+            <Button variant="outline" size="sm" icon={<LogIn size={13} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
+              Log in
+            </Button>
+          </span>
         }
       />
     );

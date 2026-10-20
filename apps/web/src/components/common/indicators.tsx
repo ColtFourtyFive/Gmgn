@@ -13,13 +13,15 @@ export interface RiskChipProps {
   /** Lower is worse instead (red when below threshold). */
   invert?: boolean;
   icon?: ReactNode;
+  /** Show only the icon and value (dense rows); the label stays in the accessible name. */
+  hideLabel?: boolean;
   /** Tooltip explaining the metric. */
   hint?: string;
   className?: string;
 }
 
 /** Risk metric chip: red past the threshold, green otherwise. */
-export const RiskChip = memo(function RiskChip({ label, value, threshold, invert, icon, hint, className }: RiskChipProps) {
+export const RiskChip = memo(function RiskChip({ label, value, threshold, invert, icon, hideLabel, hint, className }: RiskChipProps) {
   const known = value !== null && value !== undefined && Number.isFinite(value);
   const bad = known && (invert ? value < threshold : value > threshold);
   const chip = (
@@ -28,7 +30,7 @@ export const RiskChip = memo(function RiskChip({ label, value, threshold, invert
       aria-label={`${label} ${known ? formatPercent(value, { sign: false, digits: 1 }) : 'unknown'}${bad ? ' (risky)' : ''}`}
     >
       {icon}
-      <span className="opacity-80">{label}</span>
+      {!hideLabel && <span className="opacity-80">{label}</span>}
       {known ? formatPercent(value, { sign: false, digits: value < 0.1 ? 1 : 0 }) : '--'}
     </span>
   );

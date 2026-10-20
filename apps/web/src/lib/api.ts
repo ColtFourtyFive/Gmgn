@@ -5,13 +5,18 @@ import type {
   AlertRule,
   AppNotification,
   AuthResponse,
+  CalloutFilter,
   CandleResponse,
   ChainId,
   CopyTradeTask,
   CreateOrderRequest,
   DevInfo,
+  DevToken,
   FeedItem,
   FollowedWallet,
+  LaunchConfig,
+  LaunchRequest,
+  LaunchResponse,
   LeaderboardRow,
   MetaResponse,
   Narrative,
@@ -39,6 +44,7 @@ import type {
   TrendingSort,
   UserSettings,
   UserWallet,
+  WalletCalls,
   WalletPeriod,
   WalletProfile,
   WatchlistItem,
@@ -140,10 +146,13 @@ export const api = {
     get<TokenPositionRow[]>(`/${chain}/wallets/${address}/holdings`, { ...q, includeClosed: q.includeClosed ? 1 : undefined }),
   walletActivity: (chain: ChainId, address: string, q: { type?: string; limit?: number; before?: number } = {}) =>
     get<FeedItem[]>(`/${chain}/wallets/${address}/activity`, q),
-  leaderboard: (chain: ChainId, q: { tag?: string; period?: WalletPeriod; sort?: string; limit?: number } = {}) =>
+  walletCreatedTokens: (chain: ChainId, address: string, limit?: number) => get<DevToken[]>(`/${chain}/wallets/${address}/created-tokens`, { limit }),
+  walletCalls: (chain: ChainId, address: string, limit?: number) => get<WalletCalls>(`/${chain}/wallets/${address}/calls`, { limit }),
+  leaderboard: (chain: ChainId, q: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number } = {}) =>
     get<LeaderboardRow[]>(`/${chain}/leaderboard`, q),
   feed: (chain: ChainId, kind: 'smart' | 'kol' | 'follow' | 'all', limit?: number) => get<FeedItem[]>(`/${chain}/feed`, { kind, limit }),
   signals: (chain: ChainId, q: { kind?: string; limit?: number } = {}) => get<Signal[]>(`/${chain}/signals`, q),
+  callouts: (chain: ChainId, filter: CalloutFilter = 'all', limit?: number) => get<Signal[]>(`/${chain}/callouts`, { filter, limit }),
   narratives: (chain: ChainId) => get<Narrative[]>(`/${chain}/narratives`),
 
   // accounts
@@ -187,6 +196,10 @@ export const api = {
   createAlert: (body: Omit<AlertRule, 'id' | 'createdAt' | 'lastTriggeredAt'>) => post<AlertRule>('/alerts', body),
   updateAlert: (id: string, body: Partial<AlertRule>) => patch<AlertRule>(`/alerts/${id}`, body),
   deleteAlert: (id: string) => del<{ ok: true }>(`/alerts/${id}`),
+
+  // token launch
+  launchConfig: () => get<LaunchConfig>('/launch/config'),
+  launch: (body: LaunchRequest) => post<LaunchResponse>('/launch', body),
 };
 
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? (T[K] extends unknown[] ? T[K] : DeepPartial<T[K]>) : T[K] };

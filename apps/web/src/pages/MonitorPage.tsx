@@ -17,8 +17,8 @@ import {
   FollowingPanel,
   GroupChips,
   HotBySmartMoney,
+  tokenRisk,
   useLiveFeed,
-  useTokenRisk,
   type FeedKind,
 } from '@/components/monitor';
 import { Button, EmptyState, ErrorState, Kbd, NumberInput, SegmentedControl, Skeleton, Tabs, Toggle } from '@/components/ui';
@@ -117,8 +117,8 @@ function Monitor({ chain }: { chain: ChainId }) {
   );
   const followGroups = useMemo(() => [...new Set([DEFAULT_GROUP, ...follows.list.map((f) => f.group)])], [follows.list]);
 
-  const tokenAddrs = useMemo(() => feed.items.slice(0, RENDER_CAP).map((it) => it.trade.token), [feed.items]);
-  const risk = useTokenRisk(chain, tokenAddrs, filters.hideRisky);
+  // Risk from the freshest ref of each token (feed refs carry its latest security read).
+  const riskOf = (it: FeedItem) => tokenRisk(feed.tokens.get(it.trade.token) ?? it.token);
 
   const visible = useMemo(() => {
     const out: FeedItem[] = [];
@@ -127,15 +127,12 @@ function Monitor({ chain }: { chain: ChainId }) {
       if (filters.side !== 'all' && t.side !== filters.side) continue;
       if (filters.minUsd !== null && t.usdAmount < filters.minUsd) continue;
       if (kind === 'follow' && groupMembers && !groupMembers.has(t.wallet)) continue;
-      if (filters.hideRisky) {
-        const v = risk.verdict(t.token);
-        if (v === 'risky' || v === 'checking') continue;
-      }
+      if (filters.hideRisky && tokenRisk(feed.tokens.get(t.token) ?? it.token) === 'risky') continue;
       out.push(it);
       if (out.length >= RENDER_CAP) break;
     }
     return out;
-  }, [feed.items, filters.side, filters.minUsd, filters.hideRisky, kind, groupMembers, risk]);
+  }, [feed.items, feed.tokens, filters.side, filters.minUsd, filters.hideRisky, kind, groupMembers]);
 
   const filtered = filters.side !== 'all' || filters.minUsd !== null || filters.hideRisky || (kind === 'follow' && group !== ALL_GROUPS);
 
@@ -177,7 +174,6 @@ function Monitor({ chain }: { chain: ChainId }) {
           wrapperClassName="!w-[112px]"
         />
         <Toggle size="sm" checked={filters.hideRisky} onChange={(hideRisky) => patch({ hideRisky })} label="Hide high rug risk" />
-        {filters.hideRisky && risk.checking > 0 && <span className="text-xs text-faint">checking {risk.checking}…</span>}
         {kind === 'follow' && <GroupChips groups={followGroups} value={group} onChange={setGroup} />}
         <span className="num ml-auto text-xs text-muted">{visible.length} trades</span>
       </div>
@@ -242,7 +238,7 @@ function Monitor({ chain }: { chain: ChainId }) {
                 label={remarks.get(it.trade.wallet) || it.trade.walletLabel}
                 buyAmount={buyAmount}
                 fresh={feed.freshIds.has(it.trade.id)}
-                risk={risk.verdict(it.trade.token)}
+                risk={riskOf(it)}
                 mobile={mobile}
               />
             ))}

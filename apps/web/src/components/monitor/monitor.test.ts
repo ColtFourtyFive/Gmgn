@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeedItem, TokenRef, WalletTag } from '@trenchscope/shared';
 import { mergeTags, multipleTone } from '@/components/wallet/utils';
 import { aggregateHot, HOT_WINDOW_MS } from './HotBySmartMoney';
+import { tokenRisk } from './risk';
 
 const NOW = 10_000_000;
 
@@ -80,5 +81,14 @@ describe('wallet utils', () => {
     expect(multipleTone(0.996)).toBe('text-fg');
     expect(multipleTone(0.9)).toBe('text-down');
     expect(multipleTone(null)).toBe('text-faint');
+  });
+});
+
+describe('tokenRisk', () => {
+  it('flags high server risk levels and leaves refs without a security read unknown', () => {
+    expect(tokenRisk({ riskLevel: 'high' })).toBe('risky');
+    expect(tokenRisk({ riskLevel: 'medium' })).toBe('ok');
+    expect(tokenRisk({ riskLevel: 'low' })).toBe('ok');
+    expect(tokenRisk(ref('x'))).toBe('unknown');
   });
 });

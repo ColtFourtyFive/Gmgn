@@ -2,11 +2,11 @@
 // security flags, and the launch-block cohorts (dev buy, same-block bundles,
 // dev-funded insiders, first-block snipers, informed early entries).
 
-import { CHAINS, cpIn, launchpadsFor, type ChainId, type Socials } from '@trenchscope/shared';
+import { CHAINS, cpIn, getLaunchpad, launchpadsFor, type ChainId, type Socials } from '@trenchscope/shared';
 import type { TokenFate, TokenState, WalletState, World } from '../world';
 import type { Rng } from '../rng';
 import { NARRATIVES, copycatMeta, generateTokenMeta, makeSocials, narrativeByName } from '../names';
-import { anchorLaunch, isBadFate, isGoodFate, pickFate, planLaunch, simOf, type TokenSim } from './fate';
+import { anchorLaunch, isBadFate, isGoodFate, pickAdoptedFate, pickFate, planLaunch, simOf, type TokenSim } from './fate';
 import { memOf, type Roster } from './roster';
 import type { Scheduler } from './scheduler';
 import type { Desk } from './trader';
@@ -55,7 +55,6 @@ export class Launcher {
   launch(chain: ChainId): TokenState {
     const { world, roster } = this;
     const rng = world.rng;
-    const now = world.now;
     const pads = launchpadsFor(chain);
     const lp = rng.weighted(pads, pads.map((p) => p.weight));
 
@@ -112,23 +111,8 @@ export class Launcher {
       security,
     });
 
-    const curve = t.curve!;
-    const k = curve.virtualNative * curve.virtualTokens;
-    const supplyUsd = t.totalSupply * nu;
-    const heat = weights[NARRATIVES.indexOf(narrative)] ?? 1;
     const gradLn = Math.log(world.graduationMarketCapUsd(t));
-    const sim: TokenSim = planLaunch(rng, fate, {
-      now,
-      launchLn: Math.log(world.marketCapUsd(t)),
-      gradLn,
-      lnAtProgress: (p) => {
-        const vt = curve.virtualTokens - p * curve.initialRealTokens;
-        return Math.log((k / (vt * vt)) * supplyUsd);
-      },
-      act: CHAIN_ACTIVITY[chain] * Math.min(2, Math.max(0.5, Math.sqrt(heat))),
-    });
-    t.sim = sim as unknown as Record<string, unknown>;
-    t.hype = sim.path[2];
+    const sim = this.plan(t, fate, Math.log(world.marketCapUsd(t)), gradLn);
 
     if (costs[0] > 0) this.desk.allocate(dev, t, costs[0]);
     if (bundleShares.length) this.bundle(t, boss, costs.slice(1, 1 + bundleShares.length));
@@ -137,6 +121,56 @@ export class Launcher {
     this.scheduleSnipers(t, dev, bundled);
     this.scheduleInformed(t, fate);
     return t;
+  }
+
+  /**
+   * Bring a token launched outside the simulator (a user's launch, its
+   * creation-block buys already made) into the market: a hidden fate drawn from
+   * what traders can see of the launch, the usual curve-phase plan anchored to
+   * the post-launch market cap, and launch attention (snipers, informed entries).
+   * No crew is created: the launcher's wallets only trade when the user does.
+   */
+  adopt(t: TokenState): void {
+    const { world } = this;
+    const lp = getLaunchpad(t.launchpad)!;
+    const dev = world.wallets.get(t.creator)!;
+    const share = (w: WalletState | undefined) => (w?.positions.get(t.address)?.balance ?? 0) / t.totalSupply;
+    let bundleShare = 0;
+    for (const addr of t.bundlers) bundleShare += share(world.wallets.get(addr));
+    t.fate = pickAdoptedFate(world.rng, {
+      socials: Number(Boolean(t.socials.twitter)) + Number(Boolean(t.socials.telegram)) + Number(Boolean(t.socials.website)),
+      descriptionLength: t.description.length,
+      devShare: share(dev),
+      bundleShare,
+    });
+    const gradLn = Math.log(world.graduationMarketCapUsd(t));
+    const sim = this.plan(t, t.fate, Math.log((lp.virtualNative / lp.virtualTokens) * world.nativeUsd(t.chain) * t.totalSupply), gradLn);
+    anchorLaunch(sim, world.rng, Math.log(world.marketCapUsd(t)), gradLn);
+    this.scheduleSnipers(t, dev, t.bundlers.size > 0);
+    this.scheduleInformed(t, t.fate);
+  }
+
+  /** Curve-phase plan from the launchpad's fresh-curve reserves; launch-block buys are anchored afterwards. */
+  private plan(t: TokenState, fate: TokenFate, launchLn: number, gradLn: number): TokenSim {
+    const { world } = this;
+    const lp = getLaunchpad(t.launchpad)!;
+    const k = lp.virtualNative * lp.virtualTokens;
+    const supplyUsd = t.totalSupply * world.nativeUsd(t.chain);
+    const narrative = narrativeByName(t.narrative);
+    const heat = (narrative && this.hooks.narrativeWeights(t.chain)[NARRATIVES.indexOf(narrative)]) || 1;
+    const sim = planLaunch(world.rng, fate, {
+      now: world.now,
+      launchLn,
+      gradLn,
+      lnAtProgress: (p) => {
+        const vt = lp.virtualTokens - p * lp.curveTokens;
+        return Math.log((k / (vt * vt)) * supplyUsd);
+      },
+      act: CHAIN_ACTIVITY[t.chain] * Math.min(2, Math.max(0.5, Math.sqrt(heat))),
+    });
+    t.sim = sim as unknown as Record<string, unknown>;
+    t.hype = sim.path[2];
+    return sim;
   }
 
   /** Same-block bundle: crew wallets funded by the dev's side (or via an exchange) buy at creation. */

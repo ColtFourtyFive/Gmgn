@@ -1,18 +1,18 @@
 // Followed wallets side panel: add by address, group filter, remark/group
-// editor, per-wallet notifications and unfollow.
+// editor, per-wallet notifications, unfollow, and bulk import / export.
 
 import { memo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { CHAINS, shortAddress, type ChainId, type FollowedWallet } from '@trenchscope/shared';
-import { Bell, BellOff, LogIn, Pencil, Plus, Star, X } from 'lucide-react';
+import { ArrowDownToLine, Bell, BellOff, FileDown, FileUp, LogIn, MoreHorizontal, Pencil, Plus, Star, X } from 'lucide-react';
 import clsx from 'clsx';
 import { WalletAvatar, WalletTags } from '@/components/common';
-import { Button, EmptyState, ErrorState, IconButton, Input, Panel, Popover, Skeleton } from '@/components/ui';
-import { DEFAULT_GROUP, FollowEditor, isWalletAddress, sameWallet, useChainFollows, useFollowActions, walletKeys } from '@/components/wallet';
-import { api } from '@/lib/api';
+import { Button, EmptyState, ErrorState, IconButton, Input, Menu, Panel, Popover, Skeleton } from '@/components/ui';
+import { DEFAULT_GROUP, FollowEditor, isWalletAddress, sameWallet, useChainFollows, useFollowActions } from '@/components/wallet';
+import { serverNow } from '@/hooks';
 import { routes } from '@/lib/chain';
 import { requireAuth, useSession } from '@/store/session';
+import { downloadFollows, FollowsImportDialog } from './FollowsImport';
 
 export const ALL_GROUPS = '__all__';
 
@@ -95,20 +95,11 @@ function AddWalletForm({ chain, group, existing }: { chain: ChainId; group: stri
   );
 }
 
-const PROFILE_ROWS = 30;
-
-const FollowRow = memo(function FollowRow({ chain, follow, withProfile }: { chain: ChainId; follow: FollowedWallet; withProfile: boolean }) {
+const FollowRow = memo(function FollowRow({ chain, follow }: { chain: ChainId; follow: FollowedWallet }) {
   const { update, unfollow, busy } = useFollowActions();
-  // Label + tags of the wallet (KOL handle, smart …); followed lists are short, profiles are cached.
-  const profile = useQuery({
-    queryKey: walletKeys.profile(chain, follow.address),
-    queryFn: () => api.wallet(chain, follow.address),
-    enabled: withProfile,
-    staleTime: 300_000,
-    retry: false,
-  });
-  const label = profile.data?.label ?? null;
-  const tags = profile.data?.tags.filter((t) => t !== 'following') ?? [];
+  // Label + platform tags (KOL handle, smart …) come with the follow; viewer tags are implied here.
+  const label = follow.label;
+  const tags = follow.tags.filter((t) => t !== 'following' && t !== 'you');
   const name = follow.remark || label || shortAddress(follow.address);
   return (
     <li className="group flex items-center gap-2 border-b border-line/60 px-3 py-1.5 last:border-b-0 hover:bg-panel-2">
@@ -151,6 +142,8 @@ export interface FollowingPanelProps {
 export const FollowingPanel = memo(function FollowingPanel({ chain, group, onGroupChange, className }: FollowingPanelProps) {
   const signedIn = useSession((s) => !!s.token);
   const follows = useChainFollows(chain);
+  const [importing, setImporting] = useState(false);
+  const all = follows.data ?? [];
   const groups = [...new Set([DEFAULT_GROUP, ...follows.list.map((f) => f.group)])];
   const counts = new Map<string, number>();
   for (const f of follows.list) counts.set(f.group, (counts.get(f.group) ?? 0) + 1);
@@ -161,10 +154,27 @@ export const FollowingPanel = memo(function FollowingPanel({ chain, group, onGro
       title="Following"
       subtitle={signedIn && follows.data ? `${follows.list.length} wallet${follows.list.length === 1 ? '' : 's'}` : undefined}
       icon={<Star size={14} />}
+      actions={
+        signedIn && follows.data ? (
+          <Popover placement="bottom-end" aria-label="Import or export follows" trigger={<IconButton size="xs" label="Import or export follows" icon={<MoreHorizontal size={14} />} />}>
+            {(close) => (
+              <Menu
+                onDone={close}
+                items={[
+                  { key: 'import', label: 'Import follows…', icon: <FileUp size={14} />, onSelect: () => setImporting(true) },
+                  { key: 'json', label: `Export JSON (${all.length})`, icon: <FileDown size={14} />, disabled: all.length === 0, onSelect: () => downloadFollows(all, 'json', serverNow()) },
+                  { key: 'csv', label: `Export CSV (${all.length})`, icon: <ArrowDownToLine size={14} />, disabled: all.length === 0, onSelect: () => downloadFollows(all, 'csv', serverNow()) },
+                ]}
+              />
+            )}
+          </Popover>
+        ) : undefined
+      }
       padded={false}
       className={className}
       bodyClassName="flex min-h-0 flex-col"
     >
+      <FollowsImportDialog open={importing} onClose={() => setImporting(false)} chain={chain} existing={all} />
       {!signedIn ? (
         <EmptyState
           compact
@@ -210,11 +220,18 @@ export const FollowingPanel = memo(function FollowingPanel({ chain, group, onGro
                   </>
                 ) : undefined
               }
+              action={
+                follows.list.length === 0 ? (
+                  <Button size="sm" variant="outline" icon={<FileUp size={13} />} onClick={() => setImporting(true)}>
+                    Import a list
+                  </Button>
+                ) : undefined
+              }
             />
           ) : (
             <ul className="min-h-0 flex-1 overflow-y-auto">
-              {[...visible].reverse().map((f, i) => (
-                <FollowRow key={f.address} chain={chain} follow={f} withProfile={i < PROFILE_ROWS} />
+              {[...visible].reverse().map((f) => (
+                <FollowRow key={f.address} chain={chain} follow={f} />
               ))}
             </ul>
           )}

@@ -116,11 +116,14 @@ export function Popover({
   );
 }
 
-export type HoverCardProps = Omit<PopoverProps, 'triggerOn' | 'open' | 'onOpenChange'>;
+export type HoverCardProps = Omit<PopoverProps, 'triggerOn'>;
 
 /**
  * Rich preview on hover/focus (token or wallet previews). Opens after
  * `openDelay` (350ms), stays open while the pointer is over the card.
+ * Pass `open`/`onOpenChange` to control it, e.g. to open it from a key
+ * press for keyboard users; hover and focus still report through
+ * `onOpenChange`, and Escape or an outside click closes it.
  */
 export function HoverCard({ openDelay = 350, closeDelay = 150, placement = 'bottom-start', className, ...rest }: HoverCardProps) {
   return <Popover {...rest} triggerOn="hover" openDelay={openDelay} closeDelay={closeDelay} placement={placement} className={clsx('p-3', className)} />;

@@ -306,6 +306,41 @@ describe('pruning', () => {
     expect([...world.wallets.values()].some((w) => [...w.positions.keys()].some((a) => !world.tokens.has(a)))).toBe(true);
   }, 60_000);
 
+  it('never prunes a token a user launched, even one they never bought', () => {
+    const { world, engine, market } = makeSim('prune-launch-test', { maxTokensPerChain: 150 });
+    const user = world.createWallet('sol', 'user', { native: 100, accountId: 'acc_test' });
+    let launched: TokenState | undefined;
+    engine.addTicker(
+      'user-launch',
+      () => {
+        if (launched) return;
+        launched = world.createToken({
+          chain: 'sol',
+          launchpad: 'moonpit',
+          creator: user,
+          symbol: 'MINE',
+          name: 'Mine',
+          description: '',
+          logoSeed: 'mine',
+          logoGlyph: '🐸',
+          narrative: 'Frogs',
+          socials: {},
+          xFollowers: null,
+          fate: 'dud',
+          hype: 0,
+        });
+        market.adopt(launched);
+      },
+      { duringWarmup: true },
+    );
+    engine.warmup(75 * 60_000, 1000, END_AT);
+
+    expect(market.stats.sol.pruned).toBeGreaterThan(0);
+    expect(launched!.dormant).toBe(true);
+    expect(launched!.traders.has(user.address)).toBe(false);
+    expect(world.tokens.has(launched!.address)).toBe(true);
+  }, 60_000);
+
   it('keeps pinned tokens and sweeps single-use crew wallets whose tokens are gone', () => {
     const { world, engine, market } = makeSim('prune-pin-test', { maxTokensPerChain: 150 });
     const removed = new Set<string>();

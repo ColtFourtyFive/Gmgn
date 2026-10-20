@@ -5,10 +5,8 @@ import { Rocket } from 'lucide-react';
 import { ChainIcon, SimBanner } from '@/components/common';
 import { Button, Input, Field, Modal, Tabs } from '@/components/ui';
 import { errorMessage } from '@/lib/format';
-import { useSession } from '@/store/session';
+import { useSession, type AuthTab } from '@/store/session';
 import { toast } from '@/store/toasts';
-
-type AuthTab = 'quick' | 'login' | 'register';
 
 const TABS = [
   { value: 'quick' as const, label: 'Quick start' },
@@ -128,9 +126,16 @@ function CredentialsForm({ mode, referral }: { mode: 'login' | 'register'; refer
   );
 }
 
-/** Tab state lives here: Modal mounts its content fresh on every open, so each open starts on the right tab. */
-function AuthTabs({ guest, referral }: { guest: boolean; referral: string }) {
-  const [tab, setTab] = useState<AuthTab>(guest ? 'register' : 'quick');
+/**
+ * Tab state lives here: Modal mounts its content fresh on every open, so each
+ * open starts on the requested tab (promptAuth(true, tab)) or the default.
+ */
+function AuthTabs({ guest, referral, initialTab }: { guest: boolean; referral: string; initialTab: AuthTab | null }) {
+  const [tab, setTab] = useState<AuthTab>(() => {
+    const fallback = guest ? 'register' : 'quick';
+    // Guests already have an account: no quick start for them.
+    return initialTab && !(guest && initialTab === 'quick') ? initialTab : fallback;
+  });
   return (
     <>
       <Tabs value={tab} onChange={setTab} items={guest ? GUEST_TABS : TABS} aria-label="Sign-in method" className="mb-3" />
@@ -141,11 +146,12 @@ function AuthTabs({ guest, referral }: { guest: boolean; referral: string }) {
 
 /**
  * Sign-in dialog. Opens when `session.authPrompt` is set (Sign in button,
- * requireAuth(), "Register account" for guests) and closes itself on
- * success. Reads ?ref= for referrals.
+ * requireAuth(), "Register account" for guests) on `session.authTab` when
+ * given, and closes itself on success. Reads ?ref= for referrals.
  */
 export function AuthModal() {
   const open = useSession((s) => s.authPrompt);
+  const initialTab = useSession((s) => s.authTab);
   const guest = useSession((s) => !!s.account?.isGuest);
   const [params] = useSearchParams();
   const referral = params.get('ref') ?? '';
@@ -162,7 +168,7 @@ export function AuthModal() {
       }
       size="sm"
     >
-      <AuthTabs guest={guest} referral={referral} />
+      <AuthTabs guest={guest} referral={referral} initialTab={initialTab} />
     </Modal>
   );
 }

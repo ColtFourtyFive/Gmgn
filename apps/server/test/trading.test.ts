@@ -349,7 +349,7 @@ describe('orders', () => {
     const filled = await orderById(user, dip.body.id);
     expect(filled).toMatchObject({ status: 'filled', receipt: { ok: true } });
     expect(balance(user.wallet(), token)).toBeGreaterThan(0);
-    expect(notifications(user)[0]).toMatchObject({ kind: 'order_filled', token: token.address });
+    expect(notifications(user)[0]).toMatchObject({ kind: 'order_filled', token: token.address, level: 'success' });
 
     const held = balance(user.wallet(), token);
     const mcap = world().marketCapUsd(token);
@@ -647,7 +647,7 @@ describe('copy trade', () => {
     };
     await targetBuy();
     expect(balance(user.wallet(), token)).toBeGreaterThan(0);
-    expect(notifications(user)[0]).toMatchObject({ kind: 'copytrade', title: "Copied Alpha's buy · $" + token.symbol });
+    expect(notifications(user)[0]).toMatchObject({ kind: 'copytrade', title: "Copied Alpha's buy · $" + token.symbol, level: 'success' });
     await targetBuy();
     await targetBuy(); // only 0.2 of budget left
     await targetBuy(); // budget exhausted
@@ -666,6 +666,49 @@ describe('copy trade', () => {
     const after = (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
     expect(after.stats).toMatchObject({ buys: 3, sells: 2 });
     expect(after.stats.receivedNative).toBeGreaterThan(0);
+  });
+
+  it('pauses a task after 3 failed copies in a row (a success resets the streak) and re-arms it on re-enable', async () => {
+    const user = await signIn();
+    const target = world().createWallet('sol', 'smart', { native: 500, label: 'Alpha' });
+    const task = (
+      await call<CopyTradeTask>('POST', '/api/copytrade', {
+        auth: user.auth,
+        body: { chain: 'sol', target: target.address, buyMode: 'fixed', buyAmount: 0.5, maxPerToken: 100 },
+      })
+    ).body;
+    expect(task.consecutiveFailures).toBe(0);
+    const { token } = launch({ devBuy: 1 });
+    const current = async () => (await call<CopyTradeTask[]>('GET', '/api/copytrade', { auth: user.auth })).body[0];
+    const targetBuys = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        world().executeSwap(target, token, 'buy', 0.2);
+        await trading().idle();
+      }
+    };
+    const copyNotices = () => notifications(user).filter((n) => n.kind === 'copytrade');
+
+    user.wallet().native = 0.1; // too little for a 0.5 SOL copy
+    await targetBuys(2);
+    expect(await current()).toMatchObject({ enabled: true, consecutiveFailures: 2 });
+    expect(copyNotices()[0]).toMatchObject({ title: `Copy buy failed · $${token.symbol}`, level: 'error' });
+
+    user.wallet().native = 50;
+    await targetBuys(1);
+    expect(await current()).toMatchObject({ enabled: true, consecutiveFailures: 0, stats: { buys: 1 } });
+
+    user.wallet().native = 0.1;
+    await targetBuys(3);
+    const paused = await current();
+    expect(paused).toMatchObject({ enabled: false, consecutiveFailures: 3 });
+    expect(copyNotices()[0]).toMatchObject({ title: 'Copy trading paused · Alpha', level: 'error', wallet: target.address });
+    expect(copyNotices()[0].body).toMatch(/^3 copies failed in a row \(last: insufficient SOL balance/);
+    const count = copyNotices().length;
+    await targetBuys(1);
+    expect(copyNotices()).toHaveLength(count); // paused: nothing is copied
+
+    const resumed = await call<CopyTradeTask>('PATCH', `/api/copytrade/${task.id}`, { auth: user.auth, body: { enabled: true } });
+    expect(resumed.body).toMatchObject({ enabled: true, consecutiveFailures: 0 });
   });
 
   it('honours the blacklist and edits, and refuses own or unknown targets', async () => {
@@ -731,6 +774,7 @@ describe('sniper', () => {
     const task = (await call<SniperTask[]>('GET', '/api/sniper', { auth: user.auth })).body[0];
     expect(task).toMatchObject({ buysDone: 2, enabled: false, lastTriggeredAt: world().now });
     expect(notifications(user).filter((n) => n.kind === 'sniper')).toHaveLength(2);
+    expect(notifications(user).filter((n) => n.kind === 'sniper').every((n) => n.level === 'success')).toBe(true);
   });
 
   it('validates dev launches and launchpads', async () => {

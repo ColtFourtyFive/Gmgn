@@ -99,6 +99,52 @@ export function pickFate(rng: Rng, rep: number): TokenFate {
   return rng.weighted(FATES, w);
 }
 
+/** What traders can see of a launch made outside the simulator (a user's launch). */
+export interface LaunchQuality {
+  /** Social links present (0..3). */
+  socials: number;
+  descriptionLength: number;
+  /** Creator's creation-block share of supply. */
+  devShare: number;
+  /** Bundle wallets' creation-block share of supply. */
+  bundleShare: number;
+}
+
+/**
+ * Fates of adopted launches. The launcher is a human who controls every
+ * dev-side wallet, so dev rugs (rug, slow_rug) are never drawn and the dev-side
+ * sells other scripts include are skipped for them (MarketSim.sellAs).
+ */
+export const ADOPTED_FATES: TokenFate[] = ['dud', 'pump_dump', 'runner', 'moon'];
+
+/** Creator buy that reads as conviction: none is a weak signal, 1-6% ideal, a 20%+ bag scares buyers off. */
+function devBuyScore(share: number): number {
+  if (share <= 0) return 0.2;
+  if (share < 0.01) return 0.2 + 80 * share;
+  if (share <= 0.06) return 1;
+  return Math.max(0, 1 - (share - 0.06) / 0.14);
+}
+
+/**
+ * Adopted-fate weights (ADOPTED_FATES order). Polish (socials, a real
+ * description, a sensible dev buy) moves weight from duds to runners and moons;
+ * bundles bring snipers and flippers: more pump-and-dumps, fewer real runs.
+ */
+export function adoptedFateWeights(q: LaunchQuality): number[] {
+  const polish = 0.4 * Math.min(1, q.socials / 3) + 0.3 * Math.min(1, q.descriptionLength / 140) + 0.3 * devBuyScore(q.devShare);
+  const bundled = Math.min(1, q.bundleShare / 0.15);
+  return [
+    64 * (1.5 - 0.8 * polish),
+    12 * (0.6 + 0.8 * polish) * (1 + 2 * bundled),
+    10 * (0.2 + 1.8 * polish) * (1 - 0.5 * bundled),
+    3 * (0.1 + 1.9 * polish * polish) * (1 - 0.6 * bundled),
+  ];
+}
+
+export function pickAdoptedFate(rng: Rng, q: LaunchQuality): TokenFate {
+  return rng.weighted(ADOPTED_FATES, adoptedFateWeights(q));
+}
+
 export function isBadFate(f: TokenFate): boolean {
   return f === 'rug' || f === 'slow_rug' || f === 'pump_dump';
 }

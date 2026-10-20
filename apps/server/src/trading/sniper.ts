@@ -169,6 +169,7 @@ export class Sniper {
       chain: token.chain,
       token: token.address,
       wallet: null,
+      level: receipt.ok ? 'success' : 'error',
     });
   }
 

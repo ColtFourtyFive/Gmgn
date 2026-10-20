@@ -22,6 +22,8 @@ export interface ModalProps {
   hideClose?: boolean;
   className?: string;
   bodyClassName?: string;
+  /** Accessible name when there is no visible `title`. */
+  'aria-label'?: string;
 }
 
 /**
@@ -41,6 +43,7 @@ export function Modal({
   hideClose,
   className,
   bodyClassName,
+  'aria-label': ariaLabel,
 }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -60,6 +63,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={clsx('panel relative flex w-full flex-col shadow-float outline-none animate-pop-in', SIZE[size], className)}

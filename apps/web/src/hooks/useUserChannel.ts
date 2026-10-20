@@ -121,7 +121,8 @@ const EXECUTION_KINDS = new Set<AppNotification['kind']>(['order_filled', 'copyt
 
 function notificationToast(n: AppNotification): void {
   let kind: ToastKind = 'info';
-  if (n.kind === 'order_failed') kind = 'error';
+  // An explicit error level wins; it never claims a fill (failed executions publish none).
+  if (n.kind === 'order_failed' || n.level === 'error') kind = 'error';
   else if (EXECUTION_KINDS.has(n.kind)) {
     // Failed executions publish no fill, and sniper/copytrade use one kind for both outcomes.
     const filled = !!n.chain && !!n.token && claimPendingFill(fillKey(n.chain, n.token));

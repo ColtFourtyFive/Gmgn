@@ -47,6 +47,14 @@ describe('user channel fill toasts', () => {
     expect(toasts()).toEqual(['error:Copy buy failed · $PEPE']);
   });
 
+  it('toasts notifications with an error level as errors without claiming a fill', () => {
+    handleUserEvent(qc, 'fill', receipt('tokG')); // an unrelated fill of the same token
+    handleUserEvent(qc, 'notification', { ...notification('sniper', 'tokG', 'Snipe failed · $PEPE'), level: 'error' });
+    handleUserEvent(qc, 'notification', { ...notification('alert', 'tokG', 'Alert rule disabled'), level: 'error' });
+    vi.advanceTimersByTime(600);
+    expect(toasts()).toEqual(['error:Snipe failed · $PEPE', 'error:Alert rule disabled', 'success:Bought PEPE']);
+  });
+
   it('toasts distinct fills of the same token separately', () => {
     handleUserEvent(qc, 'fill', receipt('tokD'));
     vi.advanceTimersByTime(600);

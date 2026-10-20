@@ -16,6 +16,8 @@ const MonitorPage = lazy(() => import('@/pages/MonitorPage'));
 const SignalsPage = lazy(() => import('@/pages/SignalsPage'));
 const CopyTradePage = lazy(() => import('@/pages/CopyTradePage'));
 const SniperPage = lazy(() => import('@/pages/SniperPage'));
+const LaunchPage = lazy(() => import('@/pages/LaunchPage'));
+const CalloutsPage = lazy(() => import('@/pages/CalloutsPage'));
 const PortfolioPage = lazy(() => import('@/pages/PortfolioPage'));
 const WatchlistPage = lazy(() => import('@/pages/WatchlistPage'));
 const AlertsPage = lazy(() => import('@/pages/AlertsPage'));
@@ -63,6 +65,8 @@ export default function App() {
           {chainRoute('signals', <SignalsPage />)}
           {chainRoute('copytrade', <CopyTradePage />)}
           {chainRoute('sniper', <SniperPage />)}
+          {chainRoute('launch', <LaunchPage />)}
+          {chainRoute('callouts', <CalloutsPage />)}
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/alerts" element={<AlertsPage />} />

@@ -309,6 +309,7 @@ export class OrderBook {
       chain: order.chain,
       token: order.token,
       wallet: null,
+      level: receipt.ok ? 'success' : 'error',
     });
   }
 

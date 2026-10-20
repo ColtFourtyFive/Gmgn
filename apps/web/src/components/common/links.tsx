@@ -97,13 +97,28 @@ export interface SocialLinksProps {
   className?: string;
 }
 
-/** X / Telegram / website icon links (new tab, noopener). Renders nothing when empty. */
+/** `raw` when it is an absolute http(s) URL; null for anything else (javascript:, data:, relative...). */
+function externalHref(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const { protocol } = new URL(raw);
+    return protocol === 'https:' || protocol === 'http:' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * X / Telegram / website icon links (new tab, noopener). Socials can be
+ * user-supplied (launches), so only http(s) URLs become links. Renders
+ * nothing when empty.
+ */
 export function SocialLinks({ socials, size = 13, className }: SocialLinksProps) {
   const items = [
-    socials.twitter && { href: socials.twitter, label: 'X (Twitter)', icon: <XMark size={size - 1} /> },
-    socials.telegram && { href: socials.telegram, label: 'Telegram', icon: <Send size={size} /> },
-    socials.website && { href: socials.website, label: 'Website', icon: <Globe size={size} /> },
-  ].filter(Boolean) as { href: string; label: string; icon: ReactNode }[];
+    { href: externalHref(socials.twitter), label: 'X (Twitter)', icon: <XMark size={size - 1} /> },
+    { href: externalHref(socials.telegram), label: 'Telegram', icon: <Send size={size} /> },
+    { href: externalHref(socials.website), label: 'Website', icon: <Globe size={size} /> },
+  ].filter((it): it is typeof it & { href: string } => it.href !== null);
   if (items.length === 0) return null;
   return (
     <span className={clsx('inline-flex items-center gap-0.5', className)}>

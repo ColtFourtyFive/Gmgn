@@ -81,7 +81,7 @@ interface MarketSnapshot {
 }
 
 export interface MarketOptions {
-  /** Token cap per chain: beyond it the oldest dormant tokens no human traded are deleted. */
+  /** Token cap per chain: beyond it the oldest dormant tokens no human launched or traded are deleted. */
   maxTokensPerChain?: number;
 }
 
@@ -196,6 +196,16 @@ export class MarketSim {
     this.stats[chain].launches++;
     // bundles on tokens without a scripted dump take profit on their own
     if (!isBadFate(t.fate)) for (const addr of t.bundlers) this.watch(this.world.wallets.get(addr)!, 'crew', t);
+  }
+
+  /**
+   * Trade a token launched outside the simulator (a user's launch, after its
+   * creation-block buys) like any other launch: see Launcher.adopt.
+   */
+  adopt(t: TokenState): void {
+    this.launcher.adopt(t);
+    this.active[t.chain].push(t);
+    this.stats[t.chain].launches++;
   }
 
   /** Advance one token: fair value, momentum and hype, then Poisson order flow. */
@@ -543,10 +553,13 @@ export class MarketSim {
     this.sellAs(t.creator, t, fraction);
   }
 
-  /** Scripted sell by a dev-side wallet (no impact splitting: these are the crashes). */
+  /**
+   * Scripted sell by a dev-side wallet (no impact splitting: these are the crashes).
+   * Paper-trading wallets (a user's own launch and its bundles) never sell on a script.
+   */
   private sellAs(addr: string, t: TokenState, fraction: number): void {
     const w = this.world.wallets.get(addr);
-    if (w) this.desk.dump(w, t, fraction);
+    if (w && w.accountId === null) this.desk.dump(w, t, fraction);
   }
 
   /** Dev, dev team, bundlers and insiders dump everything; proceeds flow back to the dev. */
@@ -599,7 +612,8 @@ export class MarketSim {
     // paid screener boosts: most runners buy one, some ordinary graduations too
     if (rng.chance(s.outcome === 'fizzle' ? 0.1 : 0.45)) this.scheduler.push(now + rng.float(5, 40) * MIN, 'boost', t.address);
     if (s.outcome === 'fizzle') return;
-    if (!t.socials.website && rng.chance(0.5)) {
+    // the dev team ships a site; a user's launch keeps the links its launcher set
+    if (!t.socials.website && !this.launchedByUser(t) && rng.chance(0.5)) {
       t.socials = { ...t.socials, website: `https://${t.symbol.toLowerCase()}${rng.pick(['', 'coin', 'hq'])}.${rng.pick(['fun', 'xyz', 'meme'])}` };
       t.version++;
       world.emit('tokenFlag', t, 'socials');
@@ -777,7 +791,13 @@ export class MarketSim {
     world.removeWallets(dead);
   }
 
+  private launchedByUser(t: TokenState): boolean {
+    return this.world.wallets.get(t.creator)?.archetype === 'user';
+  }
+
+  /** Launched or traded by a paper-trading account. */
   private touchedByUser(t: TokenState): boolean {
+    if (this.launchedByUser(t)) return true;
     for (const addr of t.traders) if (this.world.wallets.get(addr)?.archetype === 'user') return true;
     return false;
   }

@@ -1,5 +1,6 @@
-// HTTP routes of the trading module (docs/API.md, "Trading"). Every route
-// requires a session; authentication is checked before input validation.
+// HTTP routes of the trading module (docs/API.md, "Trading" and "Token
+// launch"). Every route but the launch config requires a session;
+// authentication is checked before input validation.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireAccount, type AppContext } from '../context';
@@ -9,6 +10,7 @@ import {
   alertSchema,
   copyTaskSchema,
   createOrderSchema,
+  launchSchema,
   ordersQuerySchema,
   patchSchema,
   portfolioQuerySchema,
@@ -100,6 +102,15 @@ export async function registerTradingRoutes(app: FastifyInstance, ctx: AppContex
   app.delete('/api/sniper/:id', async (req) => {
     trading.sniper.remove(auth(req), idOf(req));
     return { ok: true };
+  });
+
+  // ---- token launch ----
+
+  app.get('/api/launch/config', async () => trading.launches.config());
+
+  app.post('/api/launch', async (req) => {
+    const id = auth(req);
+    return trading.launches.launch(id, parse(launchSchema, req.body));
   });
 
   // ---- alerts ----

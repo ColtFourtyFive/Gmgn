@@ -1,9 +1,10 @@
 // Copy trading: mirror a target wallet's buys (fixed amount or a ratio of the
 // target's size, capped per token) and, in mirror mode, sell the same share
 // of the position whenever the target sells. Copy sells only touch tokens the
-// task itself bought, like GMGN's Copy Sell.
+// task itself bought, like GMGN's Copy Sell. A task that keeps failing (e.g.
+// the wallet ran dry) pauses itself after COPY_AUTO_PAUSE_FAILURES in a row.
 
-import { shortAddress, type CopyTradeTask, type SwapReceipt, type Trade } from '@trenchscope/shared';
+import { COPY_AUTO_PAUSE_FAILURES, shortAddress, type CopyTradeTask, type SwapReceipt, type Trade } from '@trenchscope/shared';
 import type { AppContext } from '../context';
 import type { TokenState, WalletState } from '../sim/world';
 import { badRequest, balanceOf, describeFill, normalizeAddress, notFound, parse, type Jobs } from './common';
@@ -57,6 +58,7 @@ export class CopyTrader {
       id: this.ctx.world.nextId('copy'),
       createdAt: this.ctx.world.now,
       stats: { buys: 0, sells: 0, spentNative: 0, receivedNative: 0, lastCopiedAt: null },
+      consecutiveFailures: 0,
     };
     this.add({ accountId, task, holdings: new Map(), spent: new Map() });
     return structuredClone(task);
@@ -66,6 +68,8 @@ export class CopyTrader {
     const record = this.owned(accountId, id);
     const { task } = record;
     const resolved = this.resolve(accountId, parse(copyTaskSchema, { ...task, ...patch, chain: task.chain }));
+    // Re-enabling a (possibly auto-paused) task starts its failure streak over.
+    if (resolved.enabled && !task.enabled) task.consecutiveFailures = 0;
     this.unindex(record);
     Object.assign(task, resolved);
     this.index(record);
@@ -198,16 +202,32 @@ export class CopyTrader {
     this.jobs.spawn(`copy sell ${task.id}`, job);
   }
 
+  /** Notify the copy's outcome and track the failure streak (pausing the task at the limit). */
   private notify(record: CopyRecord, token: TokenState, trade: Trade, receipt: SwapReceipt): void {
-    const who = record.task.label || trade.walletLabel || shortAddress(trade.wallet);
+    const { task } = record;
+    const who = task.label || trade.walletLabel || shortAddress(trade.wallet);
     const action = trade.side === 'buy' ? 'buy' : 'sell';
+    const error = receipt.error ?? 'swap failed';
     this.ctx.accounts.notify(record.accountId, {
       kind: 'copytrade',
       title: receipt.ok ? `Copied ${who}'s ${action} · $${token.symbol}` : `Copy ${action} failed · $${token.symbol}`,
-      body: receipt.ok ? describeFill(token.chain, token.symbol, receipt) : (receipt.error ?? 'swap failed'),
+      body: receipt.ok ? describeFill(token.chain, token.symbol, receipt) : error,
       chain: token.chain,
       token: token.address,
       wallet: trade.wallet,
+      level: receipt.ok ? 'success' : 'error',
+    });
+    task.consecutiveFailures = receipt.ok ? 0 : (task.consecutiveFailures ?? 0) + 1;
+    if (!task.enabled || task.consecutiveFailures < COPY_AUTO_PAUSE_FAILURES) return;
+    task.enabled = false;
+    this.ctx.accounts.notify(record.accountId, {
+      kind: 'copytrade',
+      title: `Copy trading paused · ${who}`,
+      body: `${COPY_AUTO_PAUSE_FAILURES} copies failed in a row (last: ${error}). Fix the cause, then re-enable the task.`,
+      chain: task.chain,
+      token: null,
+      wallet: task.target,
+      level: 'error',
     });
   }
 

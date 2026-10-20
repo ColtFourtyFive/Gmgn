@@ -1,17 +1,19 @@
 // Wallet page (/:chain/address/:address): identity header with follow / copy
 // trade / share, period stats cards (PnL + daily calendar, Analysis, PnL
-// distribution) and tabs (Recent PnL, Holdings, live Activity, Created tokens).
+// distribution) and tabs (Recent PnL, Holdings, live Activity, Created tokens,
+// Calls for wallets that call tokens).
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { shortAddress, WALLET_PERIODS, type ChainId, type WalletPeriod } from '@trenchscope/shared';
-import { Activity, Coins, History, Rocket, SearchX } from 'lucide-react';
+import { Activity, Coins, History, MessageSquareQuote, Rocket, SearchX } from 'lucide-react';
 import { useViewerTags } from '@/components/discovery/useViewerTags';
 import { Page } from '@/components/layout';
 import { Button, EmptyState, ErrorState, Panel, Skeleton, SkeletonText, Tabs } from '@/components/ui';
 import {
   ActivityTab,
   AnalysisCard,
+  CallsTab,
   CreatedTokensTab,
   DistributionCard,
   HoldingsTab,
@@ -21,6 +23,7 @@ import {
   PnlCard,
   RecentPnlTab,
   sameWallet,
+  useWalletCalls,
   useWalletLive,
   useWalletProfileQuery,
   WalletHeader,
@@ -29,8 +32,8 @@ import { useLocalStorage } from '@/hooks';
 import { routes, useChain } from '@/lib/chain';
 import { useSession } from '@/store/session';
 
-type TabKey = 'recent' | 'holdings' | 'activity' | 'created';
-const TABS: TabKey[] = ['recent', 'holdings', 'activity', 'created'];
+type TabKey = 'recent' | 'holdings' | 'activity' | 'created' | 'calls';
+const TABS: TabKey[] = ['recent', 'holdings', 'activity', 'created', 'calls'];
 
 export default function WalletPage() {
   const chain = useChain();
@@ -113,8 +116,11 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
     };
   }, [name]);
 
+  const calls = useWalletCalls(chain, address, !!profile);
+  const callCount = calls.data?.calls.length ?? 0;
   const hasCreated = (profile?.createdTokenCount ?? 0) > 0;
-  const activeTab = tab === 'created' && profile && !hasCreated ? 'recent' : tab;
+  // A deep link to a tab this wallet doesn't have falls back to Recent PnL once that is known.
+  const activeTab = (tab === 'created' && profile && !hasCreated) || (tab === 'calls' && calls.data && callCount === 0) ? 'recent' : tab;
 
   if (!profile) {
     if (q.isError && isNotFound(q.error))
@@ -171,13 +177,15 @@ function Wallet({ chain, address }: { chain: ChainId; address: string }) {
             { value: 'holdings', label: 'Holdings', icon: <Coins size={14} /> },
             { value: 'activity', label: 'Activity', icon: <Activity size={14} />, count: live.trades.length > 0 ? live.trades.length : null },
             ...(hasCreated ? [{ value: 'created' as const, label: 'Created tokens', icon: <Rocket size={14} />, count: profile.createdTokenCount }] : []),
+            ...(callCount > 0 ? [{ value: 'calls' as const, label: 'Calls', icon: <MessageSquareQuote size={14} />, count: callCount }] : []),
           ]}
         />
         <div role="tabpanel" aria-label={activeTab}>
-          {activeTab === 'recent' && <RecentPnlTab chain={chain} address={profile.address} />}
+          {activeTab === 'recent' && <RecentPnlTab chain={chain} address={profile.address} trader={profile.label || shortAddress(profile.address)} />}
           {activeTab === 'holdings' && <HoldingsTab chain={chain} address={profile.address} />}
           {activeTab === 'activity' && <ActivityTab chain={chain} address={profile.address} live={live} />}
           {activeTab === 'created' && <CreatedTokensTab chain={chain} address={profile.address} />}
+          {activeTab === 'calls' && <CallsTab chain={chain} address={profile.address} />}
         </div>
       </section>
     </Page>

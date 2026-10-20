@@ -11,21 +11,26 @@ const ICON: Record<ToastKind, ReactNode> = {
 };
 const ACCENT: Record<ToastKind, string> = { success: 'before:bg-up', error: 'before:bg-down', info: 'before:bg-info' };
 
-/** Renders the toast queue (store/toasts). Mounted once by the AppShell. */
+/**
+ * Renders the toast queue (store/toasts). Mounted once by the AppShell.
+ * Phones: under the top bar, newest first. Desktop (md+): bottom-right just
+ * above the status bar, newest nearest the corner, so toasts stay clear of
+ * the top-right trade panel on token pages.
+ */
 export function Toaster() {
   const toasts = useToasts((s) => s.toasts);
   const dismiss = useToasts((s) => s.dismiss);
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-3 top-14 z-toast flex flex-col items-stretch gap-2 sm:inset-x-auto sm:right-4 sm:w-[340px]"
+      className="pointer-events-none fixed inset-x-3 top-14 z-toast flex flex-col-reverse items-stretch gap-2 sm:inset-x-auto sm:right-4 sm:w-[340px] md:bottom-10 md:top-auto md:flex-col"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
           role={t.kind === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'panel pointer-events-auto relative flex gap-2.5 overflow-hidden py-2.5 pl-3.5 pr-2 shadow-float animate-slide-in',
+            'panel pointer-events-auto relative flex gap-2.5 overflow-hidden py-2.5 pl-3.5 pr-2 shadow-float animate-slide-in md:animate-slide-up',
             'before:absolute before:inset-y-0 before:left-0 before:w-[3px]',
             ACCENT[t.kind],
           )}

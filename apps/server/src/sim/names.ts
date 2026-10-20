@@ -279,6 +279,14 @@ export function narrativeByName(name: string): NarrativeDef | undefined {
   return BY_NAME.get(name);
 }
 
+/** Logo glyphs a user launch may pick: every narrative glyph, tagging the token with that (first) narrative. */
+export const LAUNCH_GLYPHS: ReadonlyMap<string, NarrativeDef> = (() => {
+  const glyphs = new Map<string, NarrativeDef>();
+  for (const n of NARRATIVES) for (const g of [n.glyph, ...n.glyphs]) if (!glyphs.has(g)) glyphs.set(g, n);
+  return glyphs;
+})();
+export const DEFAULT_LAUNCH_GLYPH = '🚀';
+
 export interface TokenMeta {
   name: string;
   symbol: string;
@@ -331,7 +339,8 @@ function symbolFrom(rng: Rng, words: string[], core: string): string {
   return sym;
 }
 
-function seedString(rng: Rng, len = 10): string {
+/** Random avatar seed. */
+export function seedString(rng: Rng, len = 10): string {
   let s = '';
   for (let i = 0; i < len; i++) s += Math.floor(rng.next() * 36).toString(36);
   return s;

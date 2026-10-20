@@ -52,7 +52,8 @@ function validSort(s: unknown, fallback: TrenchSort): TrenchSort {
 
 export default function TrenchesPage() {
   const chain = useChain();
-  // Remount per chain: filters and quick-buy amounts are stored per chain.
+  // Remount per chain: the live board, keyboard selection and column buffers belong to one chain
+  // (kept mounted, the board would show the previous chain's snapshot until the first push).
   return <TrenchesBoard key={chain} chain={chain} />;
 }
 

@@ -25,18 +25,18 @@ export interface PageHeaderProps {
   className?: string;
 }
 
-/** Page title row. */
+/** Page title row; on phones the actions wrap onto their own line under the title. */
 export function PageHeader({ title, subtitle, icon, actions, className }: PageHeaderProps) {
   return (
     <div className={clsx('mb-3 flex flex-wrap items-center gap-x-4 gap-y-2', className)}>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="flex min-w-0 basis-full items-center gap-2 sm:flex-1">
         {icon && <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-accent/10 text-accent">{icon}</span>}
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold leading-tight text-fg">{title}</h1>
           {subtitle && <p className="truncate text-sm text-muted">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

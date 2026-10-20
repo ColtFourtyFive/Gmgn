@@ -1,7 +1,7 @@
 // Navigation model shared by the top bar, the mobile tab bar and the drawer.
 
 import { isChainId, type ChainId } from '@trenchscope/shared';
-import { Bell, Crosshair, Flame, Gift, Layers, Radar, Radio, Repeat2, Settings, Sparkles, Star, TrendingUp, Trophy, Wallet, type LucideIcon } from 'lucide-react';
+import { Bell, Crosshair, Flame, Gift, Layers, Megaphone, Radar, Radio, Repeat2, Rocket, Settings, Sparkles, Star, TrendingUp, Trophy, Wallet, type LucideIcon } from 'lucide-react';
 import { routes } from '@/lib/chain';
 
 export interface NavItem {
@@ -25,6 +25,8 @@ export const NAV_ITEMS: NavItem[] = [
   { key: 'sniper', label: 'Sniper', icon: Crosshair, href: routes.sniper, section: 'sniper' },
   { key: 'portfolio', label: 'Portfolio', icon: Wallet, href: () => routes.portfolio(), section: 'portfolio' },
   { key: 'narratives', label: 'Narratives', icon: Layers, href: routes.narratives, section: 'narratives' },
+  { key: 'launch', label: 'Launch', icon: Rocket, href: routes.launch, section: 'launch' },
+  { key: 'callouts', label: 'Call-outs', icon: Megaphone, href: routes.callouts, section: 'callouts' },
 ];
 
 /** Bottom tab bar on phones (the rest lives in the "More" drawer). */

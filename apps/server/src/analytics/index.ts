@@ -42,9 +42,12 @@ export class Analytics implements AnalyticsApi {
   walletProfile: AnalyticsApi['walletProfile'] = (w, viewer) => this.wallets.profile(w, viewer);
   walletHoldings: AnalyticsApi['walletHoldings'] = (w, opts, viewer) => this.wallets.holdings(w, opts, viewer);
   walletActivity: AnalyticsApi['walletActivity'] = (w, opts, viewer) => this.wallets.activity(w, opts, viewer);
+  createdTokens: AnalyticsApi['createdTokens'] = (w, limit) => this.tokens.createdTokens(w, limit);
+  walletCalls: AnalyticsApi['walletCalls'] = (w, limit) => this.wallets.walletCalls(w, limit);
   leaderboard: AnalyticsApi['leaderboard'] = (chain, opts, viewer) => this.wallets.leaderboard(chain, opts, viewer);
   feed: AnalyticsApi['feed'] = (chain, kind, limit, viewer) => this.wallets.feed(chain, kind, limit, viewer);
   signals: AnalyticsApi['signals'] = (chain, opts) => this.wallets.signals(chain, opts);
+  callouts: AnalyticsApi['callouts'] = (chain, filter, limit) => this.wallets.callouts(chain, filter, limit);
 
   serialize(): unknown {
     return { tokens: this.tokens.serialize(), wallets: this.wallets.serialize() };

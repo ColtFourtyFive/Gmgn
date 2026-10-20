@@ -20,8 +20,10 @@ export { Multiple } from './Multiple';
 export {
   isNotFound,
   retryUnlessMissing,
+  useCreatedTokens,
   useLeaderboard,
   useWalletActivity,
+  useWalletCalls,
   useWalletHoldings,
   useWalletProfileQuery,
   walletKeys,
@@ -30,9 +32,11 @@ export {
   type LeaderboardPeriod,
   type LeaderboardSort,
   type LeaderboardTag,
+  type SortOrder,
 } from './queries';
 export { CopyScoreGauge, CopyScoreMeter, StyleBadges, StyleTitle } from './StyleBits';
 export { WalletCell, WalletPreview, type WalletCellProps } from './WalletCell';
 export { WalletHeader, XMark } from './WalletHeader';
-export { CreatedTokensTab, HoldingsTab, RecentPnlTab } from './WalletTables';
+export { CALL_HIT_MULTIPLE, CallsTab, HitRate } from './WalletCalls';
+export { CreatedTokensTab, HoldingsTab, RecentPnlTab, type WalletTableProps } from './WalletTables';
 export { distributionTotal, isWalletAddress, mergeTags, multipleTone, normAddress, PNL_BUCKETS, sameWallet, scoreTone } from './utils';

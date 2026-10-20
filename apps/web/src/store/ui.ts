@@ -1,5 +1,6 @@
 // Shell-level UI state: theme, preferred chain for global routes, unread
-// notification count, and mobile overlays (nav drawer, search sheet).
+// notification count, mobile overlays (nav drawer, search sheet) and the
+// command palette.
 
 import { create } from 'zustand';
 import type { ChainId } from '@trenchscope/shared';
@@ -42,6 +43,9 @@ interface UiState {
   /** Full-screen search sheet (mobile). */
   searchOpen: boolean;
   setSearchOpen(open: boolean): void;
+  /** Command palette (Ctrl/Cmd+K). */
+  paletteOpen: boolean;
+  setPaletteOpen(open: boolean): void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -71,4 +75,7 @@ export const useUi = create<UiState>((set) => ({
 
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
+
+  paletteOpen: false,
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
 }));

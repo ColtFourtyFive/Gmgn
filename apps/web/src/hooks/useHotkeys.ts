@@ -32,6 +32,9 @@ function matches(c: Combo, e: KeyboardEvent): boolean {
   return c.shift === null || e.shiftKey === c.shift;
 }
 
+/** Label of the "mod" key on this platform, for shortcut hints ("⌘" on Apple devices, else "Ctrl"). */
+export const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? '⌘' : 'Ctrl';
+
 /** True when the event comes from a text field, where single-key shortcuts must not fire. */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

@@ -1,12 +1,12 @@
 export { useActiveChain, chainFromPath } from './useActiveChain';
 export { useClipboard, copyText } from './useClipboard';
 export { useDebounce } from './useDebounce';
-export { useHotkeys, isTypingTarget, type HotkeyMap } from './useHotkeys';
+export { useHotkeys, isTypingTarget, MOD_KEY, type HotkeyMap } from './useHotkeys';
 export { useLocalStorage } from './useLocalStorage';
 export { useMediaQuery, useBreakpoint, useIsMobile, usePrefersReducedMotion, BREAKPOINTS } from './useMediaQuery';
 export { useMeta, useClockSync } from './useMeta';
 export { useNow, serverNow, setClockOffset } from './useNow';
 export { useDisplaySettings, useTradeSettings, DEFAULT_DISPLAY, DEFAULT_TRADE } from './useSettings';
-export { useSwap } from './useSwap';
+export { useSwap, type SwapOptions } from './useSwap';
 export { useTheme, useThemeSync } from './useTheme';
 export { useUserChannel, invalidateTradingQueries, toastFill, trackManualSwap, TRADING_QUERY_KEYS } from './useUserChannel';

@@ -9,12 +9,14 @@ import {
   launchpadsFor,
   type AuthResponse,
   type ChainId,
+  type DevToken,
   type FeedItem,
   type LeaderboardRow,
   type PnlDistribution,
   type Signal,
   type TokenPositionRow,
   type Trade,
+  type WalletCalls,
   type WalletProfile,
   type WsClientMessage,
   type WsServerMessage,
@@ -938,6 +940,86 @@ describe('routes', () => {
     expect((await call('/api/eth/signals')).status).toBe(200);
   });
 
+  it('orders the leaderboard ascending on request', async () => {
+    trade(mkWallet(), 6, 1, 3);
+    trade(mkWallet(), 1, 4, 2);
+    trade(mkWallet(), 3, 2, 1.5);
+    wa.classifyAll();
+    const rows = async (q: string) => (await call<LeaderboardRow[]>(`/api/sol/leaderboard?tag=all&sort=pnl${q}`)).body;
+    const desc = await rows('');
+    const asc = await rows('&order=asc');
+    const pnl = (list: LeaderboardRow[]) => list.map((r) => r.stats.realizedPnlUsd);
+    expect(desc.length).toBeGreaterThanOrEqual(3);
+    expect(pnl(desc).every((x, i, a) => i === 0 || a[i - 1] >= x)).toBe(true);
+    expect(pnl(asc).every((x, i, a) => i === 0 || a[i - 1] <= x)).toBe(true);
+    expect(new Set(asc.map((r) => r.address))).toEqual(new Set(desc.map((r) => r.address)));
+    expect(await rows('&order=desc')).toEqual(desc);
+    expect((await call('/api/sol/leaderboard?order=up')).status).toBe(400);
+  });
+
+  it('lists the tokens a wallet created (deleted ones left out), consistent with its profile count', async () => {
+    const first = mkToken();
+    const gone = mkToken();
+    const last = mkToken();
+    world.tokens.delete(gone.address);
+    const r = await call<DevToken[]>(`/api/sol/wallets/${dev.address}/created-tokens`);
+    expect(r.status).toBe(200);
+    expect(r.body.map((d) => d.address)).toEqual([last.address, first.address]);
+    expect(r.body[0]).toMatchObject({ chain: 'sol', symbol: last.symbol, name: last.name, status: 'curve', rugged: false, createdAt: last.createdAt });
+    expect((await call<WalletProfile>(`/api/sol/wallets/${dev.address}`)).body.createdTokenCount).toBe(2);
+    expect((await call<DevToken[]>(`/api/sol/wallets/${dev.address}/created-tokens?limit=1`)).body.map((d) => d.address)).toEqual([last.address]);
+    expect((await call<DevToken[]>(`/api/sol/wallets/${pumper.address}/created-tokens`)).body).toEqual([]);
+    expect((await call(`/api/sol/wallets/${dev.address}/created-tokens?limit=0`)).status).toBe(400);
+    expect((await call(`/api/sol/wallets/nobody/created-tokens`)).status).toBe(404);
+    expect((await call(`/api/bsc/wallets/${dev.address}/created-tokens`)).status).toBe(404);
+  });
+
+  it("serves a wallet's calls with 7d / 30d hit rates and the global call-out feed", async () => {
+    const kol = mkWallet('sol', { label: '@caller', tags: ['kol'] });
+    const anon = mkWallet();
+    const hit = mkToken();
+    const miss = mkToken();
+    const other = mkToken();
+    world.emit('kolCall', hit, kol);
+    buy(pumper, hit, 40); // ~5x from the call
+    world.now += 60_000;
+    world.emit('kolCall', miss, kol);
+    world.emit('kolCall', other, anon);
+
+    const r = await call<WalletCalls>(`/api/sol/wallets/${kol.address}/calls`);
+    expect(r.status).toBe(200);
+    const { calls } = r.body;
+    expect(calls.map((c) => c.token.address)).toEqual([miss.address, hit.address]);
+    expect(calls.every((c) => c.kind === 'kol_call' && c.wallets[0] === kol.address)).toBe(true);
+    expect(calls[1].maxMultiple).toBeGreaterThan(2);
+    expect(calls[0].maxMultiple).toBe(1);
+    expect(r.body).toMatchObject({ hitRate7d: 0.5, hitRate30d: 0.5 });
+    expect(r.body.avgMaxMultiple).toBeCloseTo((calls[0].maxMultiple + calls[1].maxMultiple) / 2, 9);
+    expect((await call<WalletCalls>(`/api/sol/wallets/${kol.address}/calls?limit=1`)).body.calls).toHaveLength(1);
+    expect((await call(`/api/sol/wallets/nobody/calls`)).status).toBe(404);
+
+    const callouts = async (q = '') => (await call<Signal[]>(`/api/sol/callouts${q}`)).body.map((c) => c.token.address);
+    expect(await callouts()).toEqual([other.address, miss.address, hit.address]);
+    expect(await callouts('?filter=kol')).toEqual([miss.address, hit.address]);
+    expect(await callouts('?filter=hits')).toEqual([hit.address]);
+    expect(await callouts('?filter=all&limit=1')).toEqual([other.address]);
+    expect((await call('/api/sol/callouts?filter=moon')).status).toBe(400);
+    expect((await call<Signal[]>('/api/eth/callouts')).body).toEqual([]);
+
+    // a week later the calls only count for 30d; calls on deleted tokens still count but leave the list
+    world.now += 8 * DAY_MS;
+    world.tokens.delete(hit.address);
+    const later = (await call<WalletCalls>(`/api/sol/wallets/${kol.address}/calls`)).body;
+    expect(later.calls.map((c) => c.token.address)).toEqual([miss.address]);
+    expect(later).toMatchObject({ hitRate7d: 0, hitRate30d: 0.5 });
+    expect((await call<WalletCalls>(`/api/sol/wallets/${dev.address}/calls`)).body).toEqual({ calls: [], hitRate7d: 0, hitRate30d: 0, avgMaxMultiple: 0 });
+
+    // the call index survives a snapshot round trip
+    const fresh = new WalletAnalytics(built.ctx);
+    fresh.restore(deserialize(serialize(wa.serialize())));
+    expect(fresh.walletCalls(kol, 50)).toEqual(wa.walletCalls(kol, 50));
+  });
+
   it('serves the follow feed for an authenticated viewer', async () => {
     const res = await built.app.inject({ method: 'POST', url: '/api/auth/guest', payload: {} });
     if (res.statusCode !== 200) return; // accounts module not available
@@ -1035,7 +1117,7 @@ describe('realtime channels', () => {
     const other = mkWallet();
     const t = mkToken();
     vi.spyOn(built.ctx.accounts, 'followedWallets').mockImplementation((accountId: string) =>
-      accountId === 'acc_a' ? [{ chain: 'sol', address: followed.address, remark: '', group: '', createdAt: 0, notify: false }] : [],
+      accountId === 'acc_a' ? [{ chain: 'sol', address: followed.address, remark: '', group: '', createdAt: 0, notify: false, label: null, tags: [] }] : [],
     );
     const a = fakeClient();
     a.client.accountId = 'acc_a';

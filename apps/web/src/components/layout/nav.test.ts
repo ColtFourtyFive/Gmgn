@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computePosition } from '@/components/ui/Floating';
-import { activeSection, switchChainPath } from './nav';
+import { activeSection, NAV_ITEMS, switchChainPath } from './nav';
 
 describe('chain switching', () => {
   it('keeps the section when switching chains', () => {
@@ -16,6 +16,14 @@ describe('chain switching', () => {
   it('leaves global routes alone', () => {
     expect(switchChainPath('/portfolio', 'bsc')).toBeNull();
     expect(switchChainPath('/_ui', 'eth')).toBeNull();
+  });
+
+  it('links the launch and call-out pages per chain', () => {
+    const href = (key: string) => NAV_ITEMS.find((i) => i.key === key)?.href;
+    expect(href('launch')?.('bsc')).toBe('/bsc/launch');
+    expect(href('callouts')?.('sol')).toBe('/sol/callouts');
+    expect(switchChainPath('/sol/callouts', 'eth')).toBe('/eth/callouts');
+    expect(activeSection('/base/launch')).toBe('launch');
   });
 
   it('derives the active section', () => {

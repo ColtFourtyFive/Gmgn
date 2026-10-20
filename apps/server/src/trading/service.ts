@@ -1,7 +1,7 @@
 // Trading facade: paper-trade execution plus the automation built on it
-// (conditional orders and exit strategies, copy trading, sniping, alerts) and
-// the portfolio view. Sub-services share one executor and one job tracker;
-// post-fill bookkeeping that spans them lives here.
+// (conditional orders and exit strategies, copy trading, sniping, alerts),
+// token launches and the portfolio view. Sub-services share one executor and
+// one job tracker; post-fill bookkeeping that spans them lives here.
 
 import type { Order } from '@trenchscope/shared';
 import type { AppContext, TradingApi } from '../context';
@@ -9,6 +9,7 @@ import { Alerts, type StoredAlert } from './alerts';
 import { balanceOf, Jobs } from './common';
 import { CopyTrader, type StoredCopyTask } from './copytrade';
 import { Executor, latencyFromEnv, type Fill } from './execution';
+import { Launches } from './launch';
 import { OrderBook } from './orders';
 import { Portfolio, type EquityPoint } from './portfolio';
 import { Sniper, type StoredSniperTask } from './sniper';
@@ -40,6 +41,7 @@ export class Trading implements TradingApi {
   readonly copyTrade: CopyTrader;
   readonly sniper: Sniper;
   readonly alerts: Alerts;
+  readonly launches: Launches;
   readonly portfolio: Portfolio;
 
   private readonly world: AppContext['world'];
@@ -51,6 +53,7 @@ export class Trading implements TradingApi {
     this.copyTrade = new CopyTrader(ctx, this.executor, this.jobs);
     this.sniper = new Sniper(ctx, this.executor, this.jobs);
     this.alerts = new Alerts(ctx);
+    this.launches = new Launches(ctx, this.executor);
     this.portfolio = new Portfolio(ctx);
   }
 
@@ -60,6 +63,7 @@ export class Trading implements TradingApi {
     this.copyTrade.install();
     this.sniper.install();
     this.alerts.install();
+    this.launches.install();
     this.portfolio.install();
     this.world.addPinSource(() => this.orders.tokensWithOpenOrders());
     this.world.addPinSource(() => this.alerts.referencedTokens());
@@ -77,7 +81,10 @@ export class Trading implements TradingApi {
       ticket.side === 'buy' && ticket.strategy
         ? this.orders.createStrategy(accountId, token, receipt.priceUsd, ticket.strategy, ticket.source === 'manual' ? 'strategy' : ticket.source)
         : [];
-    if (ticket.side === 'sell' && balanceOf(wallet, token) <= 0) this.orders.closePosition(accountId, token.address);
+    if (ticket.side === 'sell') {
+      if (balanceOf(wallet, token) <= 0) this.orders.closePosition(accountId, token.address);
+      this.launches.followSell(ticket, receipt);
+    }
     this.portfolio.record(accountId);
     return created;
   }

@@ -1,17 +1,17 @@
-// Wallet page tabs: Recent PnL (all positions incl. closed), Holdings (open
-// positions) and Created tokens (the wallet's launches, when it is a dev).
+// Wallet page tabs: Recent PnL (all positions incl. closed, each with a PnL
+// share card), Holdings (open positions) and Created tokens (the wallet's
+// launches, when it is a dev).
 
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { formatDuration, formatInt, type ChainId, type DevToken, type TokenPositionRow } from '@trenchscope/shared';
 import { Coins, History, Rocket } from 'lucide-react';
 import { Age, Compact, FlashValue, Pct, Price, StatTile, TokenLink, Usd } from '@/components/common';
+import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { Badge, DataTable, EmptyState, ErrorState, Toggle, type Column } from '@/components/ui';
-import { api } from '@/lib/api';
+import { serverNow } from '@/hooks';
 import { routes } from '@/lib/chain';
-import { isNotFound, retryUnlessMissing, useWalletActivity, useWalletHoldings, walletKeys } from './queries';
-import { sameWallet } from './utils';
+import { useCreatedTokens, useWalletHoldings } from './queries';
 
 const rowKey = (r: TokenPositionRow) => r.token;
 const plural = (n: number, word: string) => `${formatInt(n)} ${word}${n === 1 ? '' : 's'}`;
@@ -162,15 +162,28 @@ export interface WalletTableProps {
   address: string;
 }
 
-/** Every token the wallet traded (open and closed), most recent first. */
-export const RecentPnlTab = memo(function RecentPnlTab({ chain, address }: WalletTableProps) {
+/** Every token the wallet traded (open and closed), most recent first. `trader` names the wallet on share cards. */
+export const RecentPnlTab = memo(function RecentPnlTab({ chain, address, trader }: WalletTableProps & { trader: string }) {
   const navigate = useNavigate();
   const q = useWalletHoldings(chain, address, true, 'recent');
+  const columns = useMemo<Column<TokenPositionRow>[]>(
+    () => [
+      ...recentColumns,
+      {
+        key: 'share',
+        header: <span className="sr-only">Share</span>,
+        align: 'right',
+        width: 44,
+        render: (r) => <SharePnlButton getData={() => shareDataFromPosition(r, r.tokenInfo, trader, serverNow())} />,
+      },
+    ],
+    [trader],
+  );
   if (q.isError && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} compact />;
   return (
     <DataTable
       aria-label="Recent PnL by token"
-      columns={recentColumns}
+      columns={columns}
       rows={q.data ?? []}
       rowKey={rowKey}
       loading={q.isLoading}
@@ -263,62 +276,34 @@ const devColumns: Column<DevToken>[] = [
   { key: 'age', header: 'Created', align: 'right', sortable: true, sortValue: (t) => t.createdAt, render: (t) => <Age ts={t.createdAt} suffix=" ago" className="text-muted" /> },
 ];
 
-const DEV_LAUNCH_WINDOW_MS = 15_000;
+/** Launch record of a dev from its token list. */
+function devStats(tokens: DevToken[]) {
+  let migrated = 0;
+  let rugged = 0;
+  let bestAth = 0;
+  for (const t of tokens) {
+    if (t.status === 'migrated') migrated++;
+    if (t.rugged) rugged++;
+    bestAth = Math.max(bestAth, t.athMarketCapUsd);
+  }
+  return { created: tokens.length, migrated, rugged, bestAth };
+}
 
-/**
- * Tokens this wallet launched. The API has no per-wallet launch list, so the
- * tab finds one launch (a dev trade in the activity, or a first buy at the
- * token's creation time) and reads the full record from that token's dev info.
- */
+/** Tokens this wallet launched that are still on the market, newest first. */
 export const CreatedTokensTab = memo(function CreatedTokensTab({ chain, address }: WalletTableProps) {
   const navigate = useNavigate();
-  const act = useWalletActivity(chain, address, 'all');
-  const holdings = useWalletHoldings(chain, address, true, 'recent');
-  const candidates = useMemo(() => {
-    const out: string[] = [];
-    for (const it of act.data ?? []) if (it.trade.isDev && !out.includes(it.trade.token)) out.push(it.trade.token);
-    for (const r of holdings.data ?? [])
-      if (r.firstBuyAt !== null && Math.abs(r.firstBuyAt - r.tokenInfo.createdAt) <= DEV_LAUNCH_WINDOW_MS && !out.includes(r.token)) out.push(r.token);
-    return out.slice(0, 4);
-  }, [act.data, holdings.data]);
-  const [attempt, setAttempt] = useState(0);
-  const candidate = candidates[attempt] ?? null;
-  const dev = useQuery({
-    queryKey: walletKeys.dev(chain, candidate ?? ''),
-    queryFn: () => api.dev(chain, candidate!),
-    enabled: !!candidate,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-    retry: retryUnlessMissing,
-  });
-  const mismatch = dev.data ? !sameWallet(chain, dev.data.address, address) : dev.isError && isNotFound(dev.error);
-  // A candidate launched by someone else: try the next one.
-  useEffect(() => {
-    if (mismatch && attempt < candidates.length - 1) setAttempt((a) => a + 1);
-  }, [mismatch, attempt, candidates.length]);
-
-  const scanning = act.isLoading || holdings.isLoading || (dev.isLoading && !!candidate);
-  const info = dev.data && !mismatch ? dev.data : null;
-  const tokens = useMemo(() => (info ? [...info.tokens].sort((a, b) => b.createdAt - a.createdAt) : []), [info]);
-
-  if (dev.isError && !isNotFound(dev.error)) return <ErrorState error={dev.error} onRetry={() => void dev.refetch()} retrying={dev.isFetching} compact />;
-  if (!scanning && !info)
-    return (
-      <EmptyState
-        compact
-        icon={<Rocket size={16} />}
-        title="Launch history unavailable"
-        description="This wallet created tokens, but none of its launches are in its recent activity, so the list can’t be loaded here."
-      />
-    );
+  const q = useCreatedTokens(chain, address);
+  const tokens = useMemo(() => q.data ?? [], [q.data]);
+  const stats = useMemo(() => devStats(tokens), [tokens]);
+  if (q.isError && !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} compact />;
   return (
     <div className="flex flex-col">
-      {info && (
+      {stats.created > 0 && (
         <div className="grid grid-cols-2 gap-2 border-b border-line p-3 sm:grid-cols-4">
-          <StatTile label="Created" value={formatInt(info.createdCount)} />
-          <StatTile label="Migrated" value={formatInt(info.migratedCount)} sub={<Pct value={info.migrationRate} sign={false} colored={false} />} />
-          <StatTile label="Rugged" value={<span className={info.ruggedCount > 0 ? 'text-down' : undefined}>{formatInt(info.ruggedCount)}</span>} />
-          <StatTile label="Best ATH MC" value={<Usd value={info.bestAthMarketCapUsd} />} />
+          <StatTile label="Created" value={formatInt(stats.created)} />
+          <StatTile label="Migrated" value={formatInt(stats.migrated)} sub={<Pct value={stats.migrated / stats.created} sign={false} colored={false} />} />
+          <StatTile label="Rugged" value={<span className={stats.rugged > 0 ? 'text-down' : undefined}>{formatInt(stats.rugged)}</span>} />
+          <StatTile label="Best ATH MC" value={<Usd value={stats.bestAth} />} />
         </div>
       )}
       <DataTable
@@ -326,11 +311,12 @@ export const CreatedTokensTab = memo(function CreatedTokensTab({ chain, address 
         columns={devColumns}
         rows={tokens}
         rowKey={(t) => t.address}
-        loading={scanning}
+        loading={q.isLoading}
         defaultSort={{ key: 'age', dir: 'desc' }}
         minWidth={620}
         maxHeight={560}
         onRowClick={(t) => navigate(routes.token(t.chain, t.address))}
+        empty={<EmptyState compact icon={<Rocket size={16} />} title="No live launches" description="The tokens this wallet created are no longer on the market." />}
       />
     </div>
   );

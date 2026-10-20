@@ -15,7 +15,7 @@ export interface InputProps extends NativeInputProps {
   wrapperClassName?: string;
 }
 
-/** Text field styled like `.input`, with optional prefix/suffix adornments. */
+/** Text field styled like `.input`, with optional prefix/suffix adornments; dims when disabled. */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { prefix, suffix, size = 'md', invalid, wrapperClassName, className, ...rest },
   ref,
@@ -123,7 +123,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
             onClick={() => commit(p)}
             disabled={rest.disabled}
             className={clsx(
-              'num h-6 rounded border text-xs transition-colors disabled:opacity-50',
+              'num h-6 rounded border text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               value === p ? 'border-accent bg-accent/10 text-accent' : 'border-line text-muted hover:border-line-strong hover:text-fg',
             )}
           >
@@ -182,15 +182,30 @@ export interface FieldProps {
   children: ReactNode;
 }
 
-/** Form row: label + control + hint/error text. */
+/** Form row: label + control + hint/error text (below the row when `inline`). */
 export function Field({ label, htmlFor, hint, error, inline, className, children }: FieldProps) {
+  const labelEl = (
+    <label htmlFor={htmlFor} className="text-xs font-medium text-muted">
+      {label}
+    </label>
+  );
+  const note = (error || hint) && <p className={clsx('text-xs', error ? 'text-down' : 'text-faint', inline && 'text-right')}>{error ?? hint}</p>;
+  if (inline) {
+    return (
+      <div className={clsx('flex flex-col gap-1', className)}>
+        <div className="flex items-center justify-between gap-3">
+          {labelEl}
+          {children}
+        </div>
+        {note}
+      </div>
+    );
+  }
   return (
-    <div className={clsx(inline ? 'flex items-center justify-between gap-3' : 'flex flex-col gap-1', className)}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-muted">
-        {label}
-      </label>
+    <div className={clsx('flex flex-col gap-1', className)}>
+      {labelEl}
       {children}
-      {(error || hint) && <p className={clsx('text-xs', error ? 'text-down' : 'text-faint')}>{error ?? hint}</p>}
+      {note}
     </div>
   );
 }

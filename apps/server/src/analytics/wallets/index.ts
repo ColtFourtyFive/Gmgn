@@ -12,6 +12,7 @@ import {
   CHAIN_IDS,
   WALLET_PERIODS,
   isChainId,
+  type CalloutFilter,
   type ChainId,
   type FeedItem,
   type LeaderboardRow,
@@ -20,6 +21,7 @@ import {
   type TokenPositionRow,
   type TokenRef,
   type Trade,
+  type WalletCalls,
   type WalletPeriod,
   type WalletPeriodStats,
   type WalletProfile,
@@ -32,7 +34,16 @@ import { viewerLabel, viewerTags } from '../viewer';
 import { EntryWatch, type PendingEntry } from './entries';
 import { DAY_MS, HOUR_MS, median } from './metrics';
 import { Ring } from './ring';
-import { SIGNAL_KINDS, SignalEngine, type SignalEngineData, type StoredSignal } from './signals';
+import {
+  CALL_HIT_MULTIPLE,
+  CALL_RING,
+  CALL_STATS_MS,
+  SIGNAL_KINDS,
+  SignalEngine,
+  maxMultipleOf,
+  type SignalEngineData,
+  type StoredSignal,
+} from './signals';
 import {
   WalletTrack,
   computeStyle,
@@ -482,9 +493,16 @@ export class WalletAnalytics {
     calc.all = periodStats(world, w, tr, 'all', now);
     const stats = {} as Record<WalletPeriod, WalletPeriodStats>;
     for (const p of WALLET_PERIODS) stats[p] = calc[p].stats;
-    const base: ProfileBase = { stats, style: computeStyle(w, tr, calc['7d'], now) };
+    const base: ProfileBase = { stats, style: computeStyle(w, tr, calc['7d'], now, this.createdTokenCount(w)) };
     this.baseCache.set(w.address, { key: w.lastActiveAt, at: now, base });
     return base;
+  }
+
+  /** Tokens the wallet created that still exist (the rows of /created-tokens). */
+  private createdTokenCount(w: WalletState): number {
+    let n = 0;
+    for (const a of w.createdTokens) if (this.ctx.world.tokens.has(a)) n++;
+    return n;
   }
 
   private followerCount(w: WalletState): number {
@@ -510,7 +528,7 @@ export class WalletAnalytics {
       xFollowers: w.xFollowers,
       followerCount: this.followerCount(w),
       isFollowed: acc ? accounts.isFollowing(acc, w.chain, w.address) : false,
-      createdTokenCount: w.createdTokens.length,
+      createdTokenCount: this.createdTokenCount(w),
       stats: base.stats,
       style: base.style,
       lastActiveAt: w.lastActiveAt,
@@ -730,7 +748,7 @@ export class WalletAnalytics {
 
   leaderboard(
     chain: ChainId,
-    opts: { tag?: string; period?: WalletPeriod; sort?: string; limit?: number },
+    opts: { tag?: string; period?: WalletPeriod; sort?: string; order?: 'asc' | 'desc'; limit?: number },
     viewer: Viewer,
   ): LeaderboardRow[] {
     const world = this.ctx.world;
@@ -758,8 +776,9 @@ export class WalletAnalytics {
           return s.realizedPnlUsd;
       }
     };
-    // Ratio sorts rank wallets with a real sample (>= 3 tokens) first.
+    // Ratio sorts rank wallets with a real sample (>= 3 tokens) first, in either order.
     const sampleGate = sort === 'winRate' || sort === 'pnlRate';
+    const dir = opts.order === 'asc' ? -1 : 1;
     const rows: { w: WalletState; base: ProfileBase; s: WalletPeriodStats; k: number; g: number }[] = [];
     for (const e of cache.entries) {
       const w = world.wallets.get(e.address);
@@ -769,7 +788,7 @@ export class WalletAnalytics {
       if (s.buys + s.sells === 0) continue;
       rows.push({ w, base: e.base, s, k: key(s), g: sampleGate && s.tokensTraded < 3 ? 0 : 1 });
     }
-    rows.sort((a, b) => b.g - a.g || b.k - a.k || b.s.realizedPnlUsd - a.s.realizedPnlUsd || (a.w.address < b.w.address ? -1 : 1));
+    rows.sort((a, b) => b.g - a.g || dir * (b.k - a.k) || dir * (b.s.realizedPnlUsd - a.s.realizedPnlUsd) || (a.w.address < b.w.address ? -1 : 1));
     const acc = viewer.accountId;
     return rows.slice(0, limit).map(({ w, base, s }) => ({
       chain,
@@ -898,7 +917,7 @@ export class WalletAnalytics {
       title: s.title,
       detail: s.detail,
       marketCapAtTrigger: s.marketCapAtTrigger,
-      maxMultiple: s.marketCapAtTrigger > 0 ? Math.max(1, s.peak / s.marketCapAtTrigger) : 1,
+      maxMultiple: maxMultipleOf(s),
       wallets: s.wallets,
       createdAt: s.createdAt,
     };
@@ -911,6 +930,56 @@ export class WalletAnalytics {
     const out: Signal[] = [];
     for (const s of this.signalEngine.list(chain, kind, 500)) {
       if (out.length >= limit) break;
+      const dto = this.signalDto(s);
+      if (dto) out.push(dto);
+    }
+    return out;
+  }
+
+  /**
+   * A wallet's calls (kol_call signals) newest first, with hit rates over the
+   * calls made in the last 7d / 30d (hit = maxMultiple >= 2) and their mean
+   * maxMultiple over 30d. Stats cover the caller's last 200 calls, including
+   * calls on tokens since deleted; the list leaves those out.
+   */
+  walletCalls(w: WalletState, limit = 50): WalletCalls {
+    const now = this.ctx.world.now;
+    const lim = Math.max(1, Math.min(200, Math.floor(limit)));
+    const calls: Signal[] = [];
+    const n = { d7: 0, hits7: 0, d30: 0, hits30: 0, sum30: 0 };
+    for (const s of this.signalEngine.callsBy(w.address)) {
+      const multiple = maxMultipleOf(s);
+      const hit = multiple >= CALL_HIT_MULTIPLE ? 1 : 0;
+      const age = now - s.createdAt;
+      if (age <= CALL_STATS_MS) {
+        n.d30++;
+        n.hits30 += hit;
+        n.sum30 += multiple;
+      }
+      if (age <= 7 * DAY_MS) {
+        n.d7++;
+        n.hits7 += hit;
+      }
+      const dto = calls.length < lim ? this.signalDto(s) : null;
+      if (dto) calls.push(dto);
+    }
+    return {
+      calls,
+      hitRate7d: n.d7 > 0 ? n.hits7 / n.d7 : 0,
+      hitRate30d: n.d30 > 0 ? n.hits30 / n.d30 : 0,
+      avgMaxMultiple: n.d30 > 0 ? n.sum30 / n.d30 : 0,
+    };
+  }
+
+  /** Call-out feed: the chain's latest kol_call signals (last 1000), newest first. */
+  callouts(chain: ChainId, filter: CalloutFilter, limit = 100): Signal[] {
+    const world = this.ctx.world;
+    const lim = Math.max(1, Math.min(500, Math.floor(limit)));
+    const out: Signal[] = [];
+    for (const s of this.signalEngine.list(chain, 'kol_call', CALL_RING)) {
+      if (out.length >= lim) break;
+      if (filter === 'hits' && maxMultipleOf(s) < CALL_HIT_MULTIPLE) continue;
+      if (filter === 'kol' && !world.wallets.get(s.wallets[0])?.tags.has('kol')) continue;
       const dto = this.signalDto(s);
       if (dto) out.push(dto);
     }

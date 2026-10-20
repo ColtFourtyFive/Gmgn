@@ -8,10 +8,11 @@ import { ChainIcon, Pct, Price, TokenAvatar, WalletAvatar, WalletTags } from '@/
 import { Floating, Kbd, Spinner } from '@/components/ui';
 import { useActiveChain } from '@/hooks/useActiveChain';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useHotkeys } from '@/hooks/useHotkeys';
+import { MOD_KEY, useHotkeys } from '@/hooks/useHotkeys';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
+import { useUi } from '@/store/ui';
 
 const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -34,7 +35,7 @@ function toHits(data: SearchResult | undefined): Hit[] {
 }
 
 /** Resolve a pasted address to its token or wallet page (falls back to a wallet page). */
-async function resolveAddress(address: string, chain: ChainId): Promise<string> {
+export async function resolveAddress(address: string, chain: ChainId): Promise<string> {
   try {
     const res = await api.search(address);
     const token = res.tokens.find((t) => t.address === address);
@@ -113,7 +114,8 @@ export interface OmniboxProps {
 /**
  * Global search: tokens and wallets by name, symbol, address or KOL label.
  * Debounced; ↑/↓ + Enter keyboard navigation; pasting a full address jumps
- * straight to it; "/" focuses the bar.
+ * straight to it; "/" focuses the bar, and its "⌘K" hint opens the command
+ * palette.
  */
 export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: OmniboxProps) {
   const navigate = useNavigate();
@@ -252,7 +254,22 @@ export function Omnibox({ variant = 'bar', onNavigate, autoFocus, className }: O
           <X size={14} />
         </button>
       ) : (
-        variant === 'bar' && <Kbd>/</Kbd>
+        variant === 'bar' && (
+          <button
+            type="button"
+            title="Command palette: pages, actions and search"
+            aria-label="Open command palette"
+            aria-keyshortcuts="Control+K Meta+K"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              useUi.getState().setPaletteOpen(true);
+            }}
+            className="shrink-0 rounded"
+          >
+            <Kbd className="hover:border-accent/60 hover:text-fg">{MOD_KEY === '⌘' ? '⌘K' : 'Ctrl K'}</Kbd>
+          </button>
+        )
       )}
     </div>
   );

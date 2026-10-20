@@ -98,6 +98,20 @@ function newPairColumns({ win, thresholds, buyAmount, devTags, mobile }: ColumnD
       ),
     },
     {
+      key: 'initLiq',
+      header: 'Initial liq',
+      title: 'Liquidity the pool opened with · change since',
+      sortable: true,
+      align: 'right',
+      sortValue: (t) => t.initialLiquidityUsd,
+      render: (t) => (
+        <span className="flex flex-col items-end leading-tight">
+          <Usd value={t.initialLiquidityUsd} className="text-muted" />
+          <Pct value={t.initialLiquidityUsd > 0 ? t.liquidityUsd / t.initialLiquidityUsd - 1 : null} digits={0} className="text-2xs" />
+        </span>
+      ),
+    },
+    {
       key: 'mcap',
       header: 'MCap',
       sortable: true,
@@ -254,7 +268,7 @@ function NewPairs({ chain }: { chain: ChainId }) {
             loading={snap.loading}
             skeletonRows={14}
             compact={display.compactRows}
-            minWidth={1260}
+            minWidth={1360}
             className="min-h-0 flex-1"
             empty={
               <EmptyState

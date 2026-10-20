@@ -54,6 +54,9 @@ const DEFAULT_FOLLOW_GROUP = 'Default';
 const MAX_INVITEE_ROWS = 200;
 const SNAPSHOT_VERSION = 1;
 
+/** A follow as stored; label and tags are read from the wallet when served. */
+type StoredFollow = Omit<FollowedWallet, 'label' | 'tags'>;
+
 interface AccountRecord {
   id: string;
   username: string;
@@ -67,7 +70,7 @@ interface AccountRecord {
   /** Paper wallet address per chain; the WalletState itself lives in the world snapshot. */
   wallets: Record<ChainId, string>;
   /** `${chain}:${address}` -> follow, in follow order. */
-  follows: Map<string, FollowedWallet>;
+  follows: Map<string, StoredFollow>;
   /** Newest first. */
   watchlist: WatchlistItem[];
   /** Ring buffer, oldest first. */
@@ -77,7 +80,7 @@ interface AccountRecord {
   faucetClaims: Partial<Record<ChainId, number>>;
 }
 
-type StoredAccount = Omit<AccountRecord, 'follows'> & { follows: FollowedWallet[] };
+type StoredAccount = Omit<AccountRecord, 'follows'> & { follows: StoredFollow[] };
 
 interface AccountsSnapshot {
   version: number;
@@ -407,7 +410,13 @@ export class Accounts implements AccountsApi {
     return [...follows]
       .filter((f) => !chain || f.chain === chain)
       .reverse()
-      .map((f) => ({ ...f }));
+      .map((f) => this.viewFollow(f));
+  }
+
+  /** A follow with the wallet's current public label and platform tags. */
+  private viewFollow(f: StoredFollow): FollowedWallet {
+    const wallet = this.ctx.world.getWallet(f.address);
+    return { ...f, label: wallet?.label ?? null, tags: wallet ? this.ctx.analytics.walletTags(wallet) : [] };
   }
 
   followersOf(chain: ChainId, address: string): string[] {
@@ -428,7 +437,7 @@ export class Accounts implements AccountsApi {
     if (!wallet || wallet.chain !== chain) throw notFound('wallet');
     if (wallet.accountId === accountId) throw new HttpError(400, 'you cannot follow your own wallet', 'invalid_input');
     if (record.follows.size >= MAX_FOLLOWS) throw new HttpError(400, `you can follow at most ${MAX_FOLLOWS} wallets`, 'limit_reached');
-    const follow: FollowedWallet = {
+    const follow: StoredFollow = {
       chain,
       address,
       remark: input.remark ?? '',
@@ -438,7 +447,7 @@ export class Accounts implements AccountsApi {
     };
     record.follows.set(key, follow);
     addToSetMap(this.followers, key, accountId);
-    return { ...follow };
+    return this.viewFollow(follow);
   }
 
   updateFollow(accountId: string, chain: ChainId, address: string, patch: FollowInput): FollowedWallet {
@@ -447,7 +456,7 @@ export class Accounts implements AccountsApi {
     if (patch.remark !== undefined) follow.remark = patch.remark;
     if (patch.group !== undefined) follow.group = patch.group;
     if (patch.notify !== undefined) follow.notify = patch.notify;
-    return { ...follow };
+    return this.viewFollow(follow);
   }
 
   unfollow(accountId: string, chain: ChainId, address: string): void {
@@ -468,7 +477,7 @@ export class Accounts implements AccountsApi {
   }
 
   /** At most one notification per (account, wallet, token) per throttle window. */
-  private notifyFollowTrade(accountId: string, follow: FollowedWallet, trade: Trade): void {
+  private notifyFollowTrade(accountId: string, follow: StoredFollow, trade: Trade): void {
     const now = this.ctx.world.now;
     const throttleKey = `${accountId}|${trade.wallet}|${trade.token}`;
     const last = this.followNotifiedAt.get(throttleKey);

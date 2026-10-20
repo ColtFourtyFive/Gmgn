@@ -29,14 +29,19 @@ export interface TradeFormProps {
   onRaiseSlippage: () => void;
 }
 
-/** Signed-out replacement for the submit button. */
+/** Signed-out replacement for the submit button (quick start, or log in to an existing account). */
 export function StartTradingCta({ label = 'Start paper trading' }: { label?: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <Button variant="primary" block icon={<TrendingUp size={14} />} onClick={() => useSession.getState().promptAuth(true)}>
+      <Button variant="primary" block icon={<TrendingUp size={14} />} onClick={() => useSession.getState().promptAuth(true, 'quick')}>
         {label}
       </Button>
-      <p className="text-center text-2xs text-muted">Instant guest account with a paper balance — no wallet, no real funds.</p>
+      <p className="text-center text-2xs text-muted">
+        Instant guest account with a paper balance — no wallet, no real funds.{' '}
+        <button type="button" className="font-medium text-accent hover:underline" onClick={() => useSession.getState().promptAuth(true, 'login')}>
+          Log in
+        </button>
+      </p>
     </div>
   );
 }

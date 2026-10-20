@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Check, LogIn, Rocket } from 'lucide-react';
 import { SimBanner } from '@/components/common';
 import { Button, Skeleton, SkeletonText } from '@/components/ui';
-import { requireAuth, useSession } from '@/store/session';
+import { useSession } from '@/store/session';
 
 export interface AccountGateProps {
   /** Large icon for the signed-out card (lucide element, ~22px). */
@@ -52,10 +52,10 @@ export function AccountGate({ icon, title, description, features, children }: Ac
           </ul>
         )}
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button variant="primary" icon={<Rocket size={14} />} onClick={() => requireAuth(() => undefined)}>
+          <Button variant="primary" icon={<Rocket size={14} />} onClick={() => useSession.getState().promptAuth(true, 'quick')}>
             Start paper trading
           </Button>
-          <Button variant="outline" icon={<LogIn size={14} />} onClick={() => useSession.getState().promptAuth(true)}>
+          <Button variant="outline" icon={<LogIn size={14} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
             Log in
           </Button>
         </div>

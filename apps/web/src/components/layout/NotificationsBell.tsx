@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AppNotification, NotificationKind } from '@trenchscope/shared';
-import { Bell, BellRing, CircleCheck, CircleX, Crosshair, Info, Repeat2, Star, type LucideIcon } from 'lucide-react';
+import type { AppNotification } from '@trenchscope/shared';
+import { Bell } from 'lucide-react';
 import clsx from 'clsx';
 import { Age } from '@/components/common';
 import { EmptyState, ErrorState, IconButton, Popover, SkeletonText } from '@/components/ui';
@@ -10,16 +10,7 @@ import { api } from '@/lib/api';
 import { routes } from '@/lib/chain';
 import { useSession } from '@/store/session';
 import { useUi } from '@/store/ui';
-
-const KIND: Record<NotificationKind, { icon: LucideIcon; className: string }> = {
-  order_filled: { icon: CircleCheck, className: 'text-up' },
-  order_failed: { icon: CircleX, className: 'text-down' },
-  alert: { icon: BellRing, className: 'text-warn' },
-  copytrade: { icon: Repeat2, className: 'text-info' },
-  sniper: { icon: Crosshair, className: 'text-accent' },
-  follow_trade: { icon: Star, className: 'text-info' },
-  system: { icon: Info, className: 'text-muted' },
-};
+import { notificationMeta } from './notifications';
 
 const KEY = ['notifications'];
 
@@ -74,7 +65,7 @@ export function NotificationsBell() {
             ) : (
               <ul>
                 {list.data.map((n) => {
-                  const meta = KIND[n.kind];
+                  const meta = notificationMeta(n);
                   const href = hrefOf(n);
                   return (
                     <li key={n.id}>

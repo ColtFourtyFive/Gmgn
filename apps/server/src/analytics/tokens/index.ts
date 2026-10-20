@@ -29,6 +29,7 @@ import {
   getLaunchpad,
   type ChainId,
   type DevInfo,
+  type DevToken,
   type Narrative,
   type Position,
   type SearchResult,
@@ -62,6 +63,7 @@ import {
   devAggregate,
   devGroupBalance,
   devStatusOf,
+  devTokenRow,
   holderTagStats,
   isRugged,
   riskLevelOf,
@@ -89,6 +91,8 @@ const ROWS_MIN_MS = 1000;
 const ROWS_MAX_MS = 10000;
 const DEV_AGG_TTL_MS = 10000;
 const NARRATIVE_TTL_MS = 5000;
+/** Token refs reuse the latest security read up to this age (refs fill feeds, holdings and signals in bulk). */
+const REF_RISK_MAX_MS = 30_000;
 const SWEEP_EVERY_MS = 30000;
 /** Per-token caches untouched for this long are dropped (bounded memory as tokens go quiet). */
 const CACHE_IDLE_MS = 10 * 60_000;
@@ -626,6 +630,7 @@ export class TokenAnalytics {
       marketCapUsd: mcap,
       athMarketCapUsd: Math.max(t.athMarketCapUsd, mcap),
       liquidityUsd: world.liquidityUsd(t),
+      initialLiquidityUsd: t.pool ? t.pool.initialLiquidityUsd : t.initialLiquidityUsd,
       progress: world.progress(t),
       holderCount: t.holders.size,
       totalSupply: t.totalSupply,
@@ -671,6 +676,8 @@ export class TokenAnalytics {
   ref = (t: TokenState): TokenRef => {
     const { world } = this.ctx;
     const priceUsd = world.priceUsd(t);
+    const cached = this.caches.get(t.address)?.summary;
+    const security = cached && world.now >= cached.at && world.now - cached.at < REF_RISK_MAX_MS ? cached.value.security : this.summary(t).security;
     return {
       chain: t.chain,
       address: t.address,
@@ -685,6 +692,8 @@ export class TokenAnalytics {
       launchpad: t.launchpad,
       createdAt: t.createdAt,
       priceChange24h: priceChangeAt(t, DAY_MS, world.now, priceUsd),
+      rugRatio: security.rugRatio,
+      riskLevel: security.riskLevel,
     };
   };
 
@@ -733,7 +742,6 @@ export class TokenAnalytics {
       curve,
       pool,
       dev: this.devInfo(t),
-      initialLiquidityUsd: t.initialLiquidityUsd,
       athPriceUsd: Math.max(t.athPriceUsd, sum.priceUsd),
       totalFeesUsd: t.totalFeesUsd,
     };
@@ -775,6 +783,18 @@ export class TokenAnalytics {
       fundedBy: world.wallets.get(t.creator)?.fundedBy ?? null,
       tokens,
     };
+  };
+
+  /** Tokens the wallet created that still exist, newest first (default 100, max 500). */
+  createdTokens = (w: WalletState, limit?: number): DevToken[] => {
+    const { world } = this.ctx;
+    const lim = clampInt(limit, 100, 1, 500);
+    const out: DevToken[] = [];
+    for (let i = w.createdTokens.length - 1; i >= 0 && out.length < lim; i--) {
+      const t = world.tokens.get(w.createdTokens[i]);
+      if (t) out.push(devTokenRow(world, t, this.liveRugged(t)));
+    }
+    return out;
   };
 
   // -------------------------------------------------------------------------

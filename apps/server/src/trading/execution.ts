@@ -26,7 +26,7 @@ import {
   type TradePreset,
 } from '@trenchscope/shared';
 import { HttpError, type AppContext } from '../context';
-import type { TokenState, WalletState } from '../sim/world';
+import type { SwapOutcome, TokenState, WalletState } from '../sim/world';
 import { HOUR_MS, assertAmount, balanceOf, normalizeAddress, notFound } from './common';
 
 const IDEMPOTENCY_WINDOW_MS = 60_000;
@@ -116,6 +116,11 @@ function failedReceipt(error: string, latencyMs: number, quote?: Quote): SwapRec
     latencyMs,
     orders: [],
   };
+}
+
+/** Network cost of one swap under a preset: base fee + priority fee (+ the builder tip on the anti-MEV route). */
+export function networkFeeOf(chain: ChainId, preset: TradePreset): number {
+  return CHAINS[chain].baseNetworkFee + preset.priorityFee + (preset.antiMev ? preset.tip : 0);
 }
 
 /** Fixed latency from TRADE_LATENCY_MS (tests use 0), or null for the simulated random latency. */
@@ -208,7 +213,7 @@ export class Executor {
     const { world } = this.ctx;
     const { token: t, side, preset } = ticket;
     if (t.status === 'migrating') return { ok: false, error: 'token is migrating; try again in a few seconds' };
-    const networkFee = CHAINS[t.chain].baseNetworkFee + preset.priorityFee + (preset.antiMev ? preset.tip : 0);
+    const networkFee = networkFeeOf(t.chain, preset);
     const legs = side === 'buy' ? this.buyLegs(ticket) : this.sellLegs(ticket, networkFee);
     if ('error' in legs) return { ok: false, error: legs.error };
     const slippage = preset.autoSlippage ? this.autoSlippage(t, legs.priceImpact) : preset.slippage;
@@ -270,9 +275,20 @@ export class Executor {
     return clamp(slippage, s.min, s.max);
   }
 
+  /**
+   * A launch's creation-block buy: fills at once (no confirmation latency,
+   * slippage check or sandwich: nothing trades before it), paying the platform
+   * fee and the preset's network fee like any buy.
+   */
+  fillAtLaunch(ticket: Ticket): SwapReceipt {
+    const { wallet, token, amount, preset } = ticket;
+    const outcome = this.ctx.world.executeSwap(wallet, token, 'buy', amount, { platformFeeRate: PLATFORM_FEE_RATE, networkFee: networkFeeOf(token.chain, preset) });
+    return this.settle(ticket, outcome, 0);
+  }
+
   private async run(ticket: Ticket, opts: ExecOptions = {}): Promise<ExecResult> {
-    const { world, hub, accounts } = this.ctx;
-    const { accountId, token, wallet, side, preset } = ticket;
+    const { world } = this.ctx;
+    const { token, wallet, side, preset } = ticket;
     const priced = this.price(ticket);
     if (!priced.ok) return { receipt: failedReceipt(priced.error, 0), aborted: null };
     const { quote } = priced;
@@ -296,8 +312,14 @@ export class Executor {
       minOut: quote.minOut,
       mevLossRate: this.sandwichLoss(preset.antiMev, quote),
     });
-    if (!outcome.ok || !outcome.trade) return { receipt: failedReceipt(outcome.error ?? 'swap failed', latencyMs, quote), aborted: null };
+    return { receipt: this.settle(ticket, outcome, latencyMs, quote), aborted: null };
+  }
 
+  /** Ledger outcome -> receipt; a fill also gets the post-fill bookkeeping and fan-out. */
+  private settle(ticket: Ticket, outcome: SwapOutcome, latencyMs: number, quote?: Quote): SwapReceipt {
+    const { world, hub, accounts } = this.ctx;
+    const { accountId, token } = ticket;
+    if (!outcome.ok || !outcome.trade) return failedReceipt(outcome.error ?? 'swap failed', latencyMs, quote);
     const receipt: SwapReceipt = {
       ok: true,
       trade: outcome.trade,
@@ -307,7 +329,7 @@ export class Executor {
       priceUsd: outcome.trade.priceUsd,
       platformFeeNative: outcome.platformFeeNative,
       networkFeeNative: outcome.networkFeeNative,
-      priceImpact: outcome.result?.priceImpact ?? quote.priceImpact,
+      priceImpact: outcome.result?.priceImpact ?? quote?.priceImpact ?? 0,
       mevLossNative: outcome.mevLossNative,
       txHash: outcome.trade.txHash,
       latencyMs,
@@ -317,7 +339,7 @@ export class Executor {
     hub.publishUser(accountId, 'fill', receipt);
     accounts.pushBalance(accountId, token.chain);
     accounts.recordTradeVolume(accountId, receipt.usdAmount, receipt.platformFeeNative * world.nativeUsd(token.chain));
-    return { receipt, aborted: null };
+    return receipt;
   }
 
   /**

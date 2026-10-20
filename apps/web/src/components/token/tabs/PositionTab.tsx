@@ -1,13 +1,15 @@
-// The viewer's position in this token: live PnL card, quick sells and the
-// account's fills on this token.
+// The viewer's position in this token: live PnL card, quick sells, a PnL
+// share card and the account's fills on this token.
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatDuration, type FeedItem, type TokenDetail, type TokenPositionRow } from '@trenchscope/shared';
-import { Wallet } from 'lucide-react';
+import { LogIn, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { Age, Compact, Native, Pct, Price, StatTile, Usd } from '@/components/common';
+import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { Button, DataTable, EmptyState, ErrorState, Skeleton, type Column } from '@/components/ui';
+import { serverNow } from '@/hooks/useNow';
 import { useTradeSettings } from '@/hooks/useSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { api } from '@/lib/api';
@@ -66,9 +68,14 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
         title="Track your position here"
         description={`Paper trade ${token.symbol} to see your balance, average entry and live PnL.`}
         action={
-          <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true)}>
-            Start paper trading
-          </Button>
+          <span className="flex flex-wrap justify-center gap-2">
+            <Button variant="primary" size="sm" onClick={() => useSession.getState().promptAuth(true, 'quick')}>
+              Start paper trading
+            </Button>
+            <Button variant="outline" size="sm" icon={<LogIn size={13} />} onClick={() => useSession.getState().promptAuth(true, 'login')}>
+              Log in
+            </Button>
+          </span>
         }
       />
     );
@@ -118,16 +125,19 @@ export function PositionTab({ token, position, loading, error, onRetry, maxHeigh
             <StatTile label="Total PnL" value={<Usd value={total} colored signed />} sub={totalRate !== null ? <Pct value={totalRate} /> : '—'} />
             <StatTile label="Trades" value={`${p.buys} B / ${p.sells} S`} sub={p.firstBuyAt ? <>Held {formatDuration(p.holdSeconds)}</> : '—'} />
           </div>
-          {held > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted">Quick sell</span>
-              {trade.quickSellPercents.map((pct) => (
-                <Button key={pct} size="xs" variant="sell" disabled={pending} onClick={() => sell(pct)}>
-                  {pct}%
-                </Button>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {held > 0 && (
+              <>
+                <span className="text-xs text-muted">Quick sell</span>
+                {trade.quickSellPercents.map((pct) => (
+                  <Button key={pct} size="xs" variant="sell" disabled={pending} onClick={() => sell(pct)}>
+                    {pct}%
+                  </Button>
+                ))}
+              </>
+            )}
+            <SharePnlButton variant="button" getData={() => shareDataFromPosition(p, token, null, serverNow())} className="ml-auto" />
+          </div>
         </>
       )}
       <div className="min-w-0 overflow-hidden rounded border border-line">

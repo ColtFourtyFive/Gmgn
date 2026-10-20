@@ -285,13 +285,16 @@ describe('follows', () => {
   it('supports create, list, update and delete', async () => {
     const { token, account } = await guest();
     const { world } = built.ctx;
-    const kol = world.createWallet('sol', 'kol', { native: 100, label: 'Ansem' });
+    const kol = world.createWallet('sol', 'kol', { native: 100, label: 'Ansem', tags: ['kol'] });
     kol.followerCount = 7;
 
     const created = await call<FollowedWallet>('POST', '/api/follows', { token, body: { chain: 'sol', address: kol.address, remark: 'Big fish' } });
     expect(created.status).toBe(200);
-    expect(created.body).toMatchObject({ chain: 'sol', address: kol.address, remark: 'Big fish', group: 'Default', notify: true });
+    expect(created.body).toMatchObject({ chain: 'sol', address: kol.address, remark: 'Big fish', group: 'Default', notify: true, label: kol.label, tags: ['kol'] });
     expect((await call<FollowedWallet[]>('GET', '/api/follows', { token })).body).toEqual([created.body]);
+    // label and tags are the wallet's current ones, read when served
+    kol.tags.add('whale');
+    expect((await call<FollowedWallet[]>('GET', '/api/follows', { token })).body[0].tags).toEqual(['kol', 'whale']);
     expect((await call<FollowedWallet[]>('GET', '/api/follows?chain=bsc', { token })).body).toEqual([]);
     expect(accounts().followerCount('sol', kol.address)).toBe(8);
     expect(accounts().followersOf('sol', kol.address)).toEqual([account.id]);

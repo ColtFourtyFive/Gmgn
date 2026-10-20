@@ -141,6 +141,14 @@
   .input-bare {
     @apply h-full w-full min-w-0 bg-transparent text-fg placeholder:text-faint outline-none focus-visible:outline-none;
   }
+  /* Disabled fields read as inert: dimmed, flat, not-allowed cursor. */
+  .input:disabled,
+  .input-group:has(> .input-bare:disabled) {
+    @apply cursor-not-allowed bg-panel-3/50 opacity-50;
+  }
+  .input-bare:disabled {
+    @apply cursor-not-allowed;
+  }
 
   .btn {
     @apply inline-flex h-8 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;

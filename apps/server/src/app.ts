@@ -55,6 +55,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   ctx.analytics = analytics;
   ctx.trading = trading;
   const market = new MarketSim(ctx);
+  ctx.market = market;
 
   // Install order = ticker order: market dynamics first, then analytics, trading, accounts.
   market.install();

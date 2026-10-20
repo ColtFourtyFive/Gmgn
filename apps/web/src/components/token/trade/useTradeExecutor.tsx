@@ -23,7 +23,7 @@ interface Pending {
 }
 
 export function useTradeExecutor(token: TokenDetail) {
-  const { swap, pending } = useSwap();
+  const { swap, pending, error } = useSwap();
   const { confirmTrades } = useDisplaySettings();
   const [confirm, setConfirm] = useState<Pending | null>(null);
   const [ack, setAck] = useState(false);
@@ -31,7 +31,8 @@ export function useTradeExecutor(token: TokenDetail) {
 
   const run = async (req: SwapRequest) => {
     setResult(null);
-    const receipt = await swap(req, { symbol: token.symbol, silent: true });
+    // The outcome shows inline (TradeResultLine): no fill toast from useSwap, no failure toast either.
+    const receipt = await swap(req, { symbol: token.symbol, silent: true, silentError: true });
     const at = Date.now();
     if (receipt?.ok) {
       const verb = req.side === 'buy' ? 'Bought' : 'Sold';
@@ -43,8 +44,8 @@ export function useTradeExecutor(token: TokenDetail) {
       );
       setResult({ ok: true, receipt, at });
     } else {
-      // useSwap already toasted the failure; keep the reason inline with a fix.
-      setResult({ ok: false, error: receipt?.error ?? 'The trade request failed', at });
+      // A rejected request has no receipt: its reason is useSwap's `error`, read at render.
+      setResult({ ok: false, error: receipt?.error ?? '', at });
     }
     return receipt;
   };
@@ -111,5 +112,6 @@ export function useTradeExecutor(token: TokenDetail) {
     </Modal>
   );
 
-  return { submit, pending, dialog, result, clearResult: () => setResult(null) };
+  const shown: TradeResult | null = result && !result.ok && !result.error ? { ...result, error: error ?? 'The trade request failed' } : result;
+  return { submit, pending, dialog, result: shown, clearResult: () => setResult(null) };
 }

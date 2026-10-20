@@ -526,7 +526,8 @@ export function perDayRate(trades: number, tr: WalletTrack | undefined, now: num
   return (trades / span) * DAY_MS;
 }
 
-export function computeStyle(w: WalletState, tr: WalletTrack | undefined, s7: PeriodCalc, now: number): WalletStyle {
+/** `createdTokens`: tokens the wallet launched that still exist (badge; the launcher test counts every launch). */
+export function computeStyle(w: WalletState, tr: WalletTrack | undefined, s7: PeriodCalc, now: number, createdTokens: number): WalletStyle {
   const st = s7.stats;
   const trades = st.buys + st.sells;
   const perDay = perDayRate(trades, tr, now, 7 * DAY_MS, STYLE_MIN_SPAN_MS);
@@ -549,7 +550,7 @@ export function computeStyle(w: WalletState, tr: WalletTrack | undefined, s7: Pe
     gt500: st.distribution.gt500,
     totalCostUsd: st.totalCostUsd,
     sample,
-    createdTokenCount: w.createdTokens.length,
+    createdTokenCount: createdTokens,
     label: w.label,
     isKol: w.tags.has('kol'),
     walletAgeMs: now - w.createdAt,

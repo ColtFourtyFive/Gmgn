@@ -3,14 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import type { TokenPositionRow } from '@trenchscope/shared';
 import { Wallet } from 'lucide-react';
 import { Age, ChainIcon, Compact, FlashValue, Pct, Price, TokenLink, Usd } from '@/components/common';
+import { SharePnlButton, shareDataFromPosition } from '@/components/share';
 import { DataTable, EmptyState, Skeleton, type Column } from '@/components/ui';
-import { useIsMobile } from '@/hooks';
+import { serverNow, useIsMobile } from '@/hooks';
 import { useDisplaySettings } from '@/hooks/useSettings';
 import { routes } from '@/lib/chain';
 import { SellButtons } from './SellButtons';
 
 const keyOf = (r: TokenPositionRow) => `${r.chain}:${r.token}`;
 const unrealizedRate = (r: TokenPositionRow) => (r.costBasisUsd > 0 ? r.unrealizedPnlUsd / r.costBasisUsd : null);
+
+function ShareRow({ row, size }: { row: TokenPositionRow; size?: 'xs' | 'sm' }) {
+  return <SharePnlButton size={size} getData={() => shareDataFromPosition(row, row.tokenInfo, null, serverNow())} />;
+}
 
 export interface PositionsTableProps {
   rows: TokenPositionRow[];
@@ -138,8 +143,13 @@ export function PositionsTable({ rows, loading, showChain, empty }: PositionsTab
         key: 'sell',
         header: 'Quick sell',
         align: 'right',
-        width: 150,
-        render: (r) => <SellButtons row={r} />,
+        width: 180,
+        render: (r) => (
+          <span className="flex items-center justify-end gap-1">
+            <SellButtons row={r} />
+            <ShareRow row={r} />
+          </span>
+        ),
       },
     ],
     [showChain],
@@ -219,7 +229,10 @@ function PositionCard({ row: r, showChain }: { row: TokenPositionRow; showChain:
           </dd>
         </div>
       </dl>
-      <SellButtons row={r} size="sm" className="!justify-stretch" />
+      <div className="flex items-center gap-1.5">
+        <SellButtons row={r} size="sm" className="min-w-0 flex-1 !justify-stretch" />
+        <ShareRow row={r} size="sm" />
+      </div>
     </li>
   );
 }

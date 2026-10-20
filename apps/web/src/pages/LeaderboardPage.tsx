@@ -1,6 +1,7 @@
 // Leaderboard (/:chain/leaderboard): top wallets by tag (smart money, KOLs,
 // snipers, whales) over 1D/7D/30D. PnL, ROI, win rate, token and volume sorts
-// run on the server; the other columns re-sort the loaded top 100.
+// run on the server in either direction (ascending asks for the bottom of the
+// ranking); the other columns re-sort the loaded top 100.
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -234,7 +235,8 @@ function Leaderboard({ chain }: { chain: ChainId }) {
   const validTag = TAG_TABS.some((t) => t.value === tag) ? tag : 'smart';
   const validPeriod = PERIODS.some((p) => p.value === period) ? period : '7d';
 
-  const q = useLeaderboard(chain, validTag, validPeriod, SERVER_SORT[sort.key] ?? 'pnl');
+  const serverSort = SERVER_SORT[sort.key];
+  const q = useLeaderboard(chain, validTag, validPeriod, serverSort ?? 'pnl', serverSort ? sort.dir : 'desc');
   const viewerTags = useViewerTags(chain);
   const columns = useMemo(
     () => leaderboardColumns({ chain, viewerTags, onCopy: (address) => navigate(`${routes.copytrade(chain)}?target=${encodeURIComponent(address)}`) }),

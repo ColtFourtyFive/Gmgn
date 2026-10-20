@@ -248,6 +248,24 @@ export const DEV_RESOLVED = 4;
 
 export const RESOLVE_AGE_MS = 60 * 60_000;
 
+/** DevToken row of a token that still exists. */
+export function devTokenRow(world: World, t: TokenState, rugged: boolean): DevToken {
+  const mcap = world.marketCapUsd(t);
+  return {
+    chain: t.chain,
+    address: t.address,
+    symbol: t.symbol,
+    name: t.name,
+    logoSeed: t.logoSeed,
+    logoGlyph: t.logoGlyph,
+    createdAt: t.createdAt,
+    status: t.status,
+    marketCapUsd: mcap,
+    athMarketCapUsd: Math.max(t.athMarketCapUsd, mcap),
+    rugged,
+  };
+}
+
 export function devAggregate(
   world: World,
   creator: string,
@@ -266,22 +284,8 @@ export function devAggregate(
     let row: DevToken | null = null;
     let resolved = false;
     if (t) {
-      const mcap = world.marketCapUsd(t);
-      const ath = Math.max(t.athMarketCapUsd, mcap);
       const rugged = liveRugged(t);
-      row = {
-        chain: t.chain,
-        address: t.address,
-        symbol: t.symbol,
-        name: t.name,
-        logoSeed: t.logoSeed,
-        logoGlyph: t.logoGlyph,
-        createdAt: t.createdAt,
-        status: t.status,
-        marketCapUsd: mcap,
-        athMarketCapUsd: ath,
-        rugged,
-      };
+      row = devTokenRow(world, t, rugged);
       resolved = t.status !== 'curve' || rugged || t.dormant || now - t.createdAt > RESOLVE_AGE_MS;
     } else {
       const s = trackOf(addr);

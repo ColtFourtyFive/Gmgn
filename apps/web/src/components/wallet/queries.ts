@@ -1,5 +1,5 @@
 // React-query keys and hooks for wallet analytics (profile, holdings,
-// activity, created tokens, leaderboard). Profiles share the
+// activity, created tokens, calls, leaderboard). Profiles share the
 // ['wallet-profile', chain, address] key with the account pages' previews.
 
 import { useQuery } from '@tanstack/react-query';
@@ -11,15 +11,17 @@ export type ActivityType = 'all' | 'buy' | 'sell';
 export type LeaderboardTag = 'smart' | 'kol' | 'sniper' | 'whale' | 'all';
 export type LeaderboardPeriod = Exclude<WalletPeriod, 'all'>;
 export type LeaderboardSort = 'pnl' | 'winRate' | 'volume' | 'tokens' | 'pnlRate';
+export type SortOrder = 'asc' | 'desc';
 
 export const walletKeys = {
   profile: (chain: ChainId, address: string) => ['wallet-profile', chain, address] as const,
   holdings: (chain: ChainId, address: string, includeClosed: boolean, sort: HoldingsSort) =>
     ['wallet-holdings', chain, address, includeClosed ? 'closed' : 'open', sort] as const,
   activity: (chain: ChainId, address: string, type: ActivityType) => ['wallet-activity', chain, address, type] as const,
-  dev: (chain: ChainId, token: string) => ['token-dev', chain, token] as const,
-  leaderboard: (chain: ChainId, tag: LeaderboardTag, period: LeaderboardPeriod, sort: LeaderboardSort) =>
-    ['leaderboard', chain, tag, period, sort] as const,
+  created: (chain: ChainId, address: string) => ['wallet-created', chain, address] as const,
+  calls: (chain: ChainId, address: string) => ['wallet-calls', chain, address] as const,
+  leaderboard: (chain: ChainId, tag: LeaderboardTag, period: LeaderboardPeriod, sort: LeaderboardSort, order: SortOrder) =>
+    ['leaderboard', chain, tag, period, sort, order] as const,
 };
 
 /** 404s are final (unknown wallet); other failures retry twice. */
@@ -64,10 +66,35 @@ export function useWalletActivity(chain: ChainId, address: string, type: Activit
   });
 }
 
-export function useLeaderboard(chain: ChainId, tag: LeaderboardTag, period: LeaderboardPeriod, sort: LeaderboardSort) {
+/** Tokens the wallet launched (still alive), newest first; refreshed every 15s while mounted. */
+export function useCreatedTokens(chain: ChainId, address: string | null, enabled = true) {
   return useQuery({
-    queryKey: walletKeys.leaderboard(chain, tag, period, sort),
-    queryFn: () => api.leaderboard(chain, { tag, period, sort, limit: 100 }),
+    queryKey: walletKeys.created(chain, address ?? ''),
+    queryFn: () => api.walletCreatedTokens(chain, address!),
+    enabled: enabled && !!address,
+    staleTime: 10_000,
+    refetchInterval: enabled ? 15_000 : false,
+    retry: retryUnlessMissing,
+  });
+}
+
+/** The wallet's public calls with 7d / 30d hit rates (calls are cheap ring reads). */
+export function useWalletCalls(chain: ChainId, address: string, enabled = true) {
+  return useQuery({
+    queryKey: walletKeys.calls(chain, address),
+    queryFn: () => api.walletCalls(chain, address, 200),
+    enabled,
+    staleTime: 15_000,
+    refetchInterval: enabled ? 30_000 : false,
+    retry: retryUnlessMissing,
+  });
+}
+
+/** Ranked wallets; `order` asks the server for the bottom of the ranking instead of re-sorting its top rows. */
+export function useLeaderboard(chain: ChainId, tag: LeaderboardTag, period: LeaderboardPeriod, sort: LeaderboardSort, order: SortOrder) {
+  return useQuery({
+    queryKey: walletKeys.leaderboard(chain, tag, period, sort, order),
+    queryFn: () => api.leaderboard(chain, { tag, period, sort, order, limit: 100 }),
     staleTime: 15_000,
     // The server rebuilds rankings about every 30s.
     refetchInterval: 30_000,

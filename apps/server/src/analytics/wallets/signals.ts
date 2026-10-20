@@ -17,7 +17,7 @@ import {
 } from '@trenchscope/shared';
 import type { AppContext } from '../../context';
 import type { PositionState, TokenState, WalletState } from '../../sim/world';
-import { HOUR_MS, MIN_MS, SEC } from './metrics';
+import { DAY_MS, HOUR_MS, MIN_MS, SEC } from './metrics';
 import { Ring } from './ring';
 
 export const SIGNAL_KINDS: SignalKind[] = [
@@ -53,6 +53,13 @@ export const SPIKE_MIN_AGE_MS = 10 * MIN_MS;
 
 const ALL_RING = 500;
 const KIND_RING = 150;
+/** kol_call signals kept per chain (the call-out feed). */
+export const CALL_RING = 1000;
+/** Calls kept per caller for its call stats (hit rates over 7d / 30d). */
+const CALLS_PER_CALLER = 200;
+export const CALL_STATS_MS = 30 * DAY_MS;
+/** A call "hits" once the token reaches this multiple of its market cap at the call. */
+export const CALL_HIT_MULTIPLE = 2;
 
 export interface StoredSignal {
   id: string;
@@ -81,6 +88,11 @@ interface TokSig {
   smart: { w: string; t: number }[];
 }
 
+/** Highest market cap since the trigger as a multiple of the market cap at the trigger (>= 1). */
+export function maxMultipleOf(s: StoredSignal): number {
+  return s.marketCapAtTrigger > 0 ? Math.max(1, s.peak / s.marketCapAtTrigger) : 1;
+}
+
 export interface SignalEngineData {
   seq: number;
   signals: StoredSignal[];
@@ -91,6 +103,8 @@ export class SignalEngine {
   private all = {} as Record<ChainId, Ring<StoredSignal>>;
   private byKind = {} as Record<ChainId, Map<SignalKind, Ring<StoredSignal>>>;
   private byToken = new Map<string, StoredSignal[]>();
+  /** Caller wallet -> its kol_call signals (outlives the per-chain rings). */
+  private calls = new Map<string, Ring<StoredSignal>>();
   private tok = new Map<string, TokSig>();
   private spikeDirty = new Set<string>();
   private seq = 0;
@@ -110,7 +124,23 @@ export class SignalEngine {
       this.byKind[c] = new Map();
     }
     this.byToken.clear();
+    this.calls.clear();
     this.tok.clear();
+  }
+
+  /** Store a signal in its chain's rings (and its caller's calls). */
+  private file(s: StoredSignal): void {
+    this.all[s.chain].push(s);
+    let kr = this.byKind[s.chain].get(s.kind);
+    if (!kr) {
+      kr = new Ring(s.kind === 'kol_call' ? CALL_RING : KIND_RING);
+      this.byKind[s.chain].set(s.kind, kr);
+    }
+    kr.push(s);
+    if (s.kind !== 'kol_call') return;
+    let calls = this.calls.get(s.wallets[0]);
+    if (!calls) this.calls.set(s.wallets[0], (calls = new Ring(CALLS_PER_CALLER)));
+    calls.push(s);
   }
 
   private state(token: string): TokSig {
@@ -142,13 +172,7 @@ export class SignalEngine {
       createdAt: this.ctx.world.now,
     };
     this.created++;
-    this.all[t.chain].push(s);
-    let kr = this.byKind[t.chain].get(kind);
-    if (!kr) {
-      kr = new Ring(KIND_RING);
-      this.byKind[t.chain].set(kind, kr);
-    }
-    kr.push(s);
+    this.file(s);
     const list = this.byToken.get(t.address);
     if (list) list.push(s);
     else this.byToken.set(t.address, [s]);
@@ -319,35 +343,36 @@ export class SignalEngine {
     return out;
   }
 
-  /** Rebuild the per-token index from the rings and drop state of deleted tokens. */
-  prune(): void {
-    this.byToken.clear();
+  /** A caller's kol_call signals, newest first (the last CALLS_PER_CALLER). */
+  callsBy(wallet: string): StoredSignal[] {
+    return this.calls.get(wallet)?.toArray().reverse() ?? [];
+  }
+
+  /** Every stored signal once: chain rings, then calls kept only by their caller. */
+  private stored(): Set<StoredSignal> {
     const seen = new Set<StoredSignal>();
-    for (const c of CHAIN_IDS) {
-      const rings = [this.all[c], ...this.byKind[c].values()];
-      for (const r of rings)
-        for (const s of r.toArray()) {
-          if (seen.has(s)) continue;
-          seen.add(s);
-          const l = this.byToken.get(s.token);
-          if (l) l.push(s);
-          else this.byToken.set(s.token, [s]);
-        }
+    for (const c of CHAIN_IDS) for (const r of [this.all[c], ...this.byKind[c].values()]) for (const s of r.toArray()) seen.add(s);
+    for (const r of this.calls.values()) for (const s of r.toArray()) seen.add(s);
+    return seen;
+  }
+
+  /** Drop stale callers, rebuild the per-token index and drop state of deleted tokens. */
+  prune(): void {
+    const { world } = this.ctx;
+    for (const [wallet, r] of this.calls) {
+      if (!world.wallets.has(wallet) || world.now - r.newest()!.createdAt > CALL_STATS_MS) this.calls.delete(wallet);
     }
-    const tokens = this.ctx.world.tokens;
-    for (const addr of this.tok.keys()) if (!tokens.has(addr)) this.tok.delete(addr);
+    this.byToken.clear();
+    for (const s of this.stored()) {
+      const l = this.byToken.get(s.token);
+      if (l) l.push(s);
+      else this.byToken.set(s.token, [s]);
+    }
+    for (const addr of this.tok.keys()) if (!world.tokens.has(addr)) this.tok.delete(addr);
   }
 
   dump(): SignalEngineData {
-    const all: StoredSignal[] = [];
-    const seen = new Set<StoredSignal>();
-    for (const c of CHAIN_IDS)
-      for (const r of [this.all[c], ...this.byKind[c].values()])
-        for (const s of r.toArray())
-          if (!seen.has(s)) {
-            seen.add(s);
-            all.push(s);
-          }
+    const all = [...this.stored()];
     all.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
     return { seq: this.seq, signals: all, tok: [...this.tok.entries()] };
   }
@@ -356,16 +381,7 @@ export class SignalEngine {
     this.reset();
     if (!d) return;
     this.seq = d.seq ?? 0;
-    for (const s of d.signals ?? []) {
-      if (!CHAIN_IDS.includes(s.chain)) continue;
-      this.all[s.chain].push(s);
-      let kr = this.byKind[s.chain].get(s.kind);
-      if (!kr) {
-        kr = new Ring(KIND_RING);
-        this.byKind[s.chain].set(s.kind, kr);
-      }
-      kr.push(s);
-    }
+    for (const s of d.signals ?? []) if (CHAIN_IDS.includes(s.chain)) this.file(s);
     for (const [k, v] of d.tok ?? []) this.tok.set(k, v);
     this.prune();
   }
