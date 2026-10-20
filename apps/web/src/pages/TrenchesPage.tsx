@@ -192,7 +192,7 @@ function TrenchesBoard({ chain }: { chain: ChainId }) {
       <PageHeader
         title="Trenches"
         icon={<Flame size={16} />}
-        subtitle={<span className="hidden sm:inline">Live launchpad tokens on {CHAINS[chain].name} · new → almost bonded → migrated</span>}
+        subtitle={<span className="hidden sm:inline">Live launchpad tokens on {CHAINS[chain].name} · new → near graduation → migrated</span>}
         className="!mb-2"
         actions={
           <>
