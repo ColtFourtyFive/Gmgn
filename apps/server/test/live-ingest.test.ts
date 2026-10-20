@@ -292,6 +292,10 @@ describe('feed -> World', () => {
     expect(t.totalSupply).toBe(PUMP_MAYHEM_SUPPLY);
     expect(isMayhemToken(t)).toBe(true);
     expect(world.marketCapUsd(t)).toBeCloseTo((30 / 1.073e9) * 2e9 * 200, 6);
+    // CreateV2 minted the extra billion to the agent (mainnet: 1,000,000,000 in the create's balances)
+    expect(t.holders.has(PUMP_MAYHEM_AGENT)).toBe(true);
+    expect(world.wallets.get(PUMP_MAYHEM_AGENT)!.positions.get(t.address)!.balance).toBe(1e9);
+    expect(world.wallets.get(PUMP_MAYHEM_AGENT)!.positions.get(t.address)!.realizedPnlUsd).toBe(0);
     const trade = (over: Partial<TradeEvent>): TradeEvent => ({
       kind: 'trade',
       side: 'buy',

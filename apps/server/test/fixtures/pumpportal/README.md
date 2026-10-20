@@ -28,9 +28,10 @@ Facts the captures and the chain showed (see `src/live/feed/messages.ts` and `in
 - A quarter to nearly half of pump.fun launches (24-46% over the day's captures) are quoted in
   another mint (PUMP, CARDS, other coins); the frame does not say so. Their curve account does
   (`quoteMint`).
-- Mayhem-mode mints (`is_mayhem_mode: true`) have a 2B supply; the mayhem agent
-  `BwWK17cbHxwWBKZkUYvzxLcNQ1YVyaFezduWbtm2de6s` trades them without fees, and the curve moves its
-  virtual SOL off the constant product (the 279.9M virtual token offset still holds).
+- Mayhem-mode mints (`is_mayhem_mode: true`) have a 2B supply: `CreateV2` mints the second billion
+  to the mayhem agent `BwWK17cbHxwWBKZkUYvzxLcNQ1YVyaFezduWbtm2de6s`, which trades them without
+  fees; the curve moves its virtual SOL off the constant product (the 279.9M virtual token offset
+  still holds).
 - Buyers pay `solAmount` plus 0.95% protocol and 0.30% creator fees; sellers receive `solAmount`
   less them.
 - `MigrateV2` puts the completed curve's real SOL less 0.015 SOL (85.005 -> 84.990, 17.58 of it as

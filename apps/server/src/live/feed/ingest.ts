@@ -18,7 +18,8 @@
 //     curve amounts are converted here; pump.fun's mayhem agent trades fee-free.
 //   - real reserves follow from the virtual ones with fixed offsets (30 SOL, 279.9M tokens) on a
 //     normal curve. A mayhem-mode curve keeps the token offset, but the program moves its virtual
-//     SOL on its own: its real SOL is tracked from the trades' flows instead.
+//     SOL on its own: its real SOL is tracked from the trades' flows instead. A mayhem launch mints
+//     a second billion straight to the mayhem agent, registered as its holding at the launch.
 //   - MigrateV2 moves the completed curve's real SOL less 0.015 SOL, and its 206.9M remaining
 //     tokens, into the canonical PumpSwap pool (part of that SOL as the pool's virtual quote reserve).
 
@@ -197,6 +198,8 @@ export class FeedIngestor {
       logoGlyph: glyph,
     });
     this.stats.creates++;
+    // A mayhem launch (CreateV2) mints the extra billion straight to the mayhem agent: a holder from the start.
+    if (e.mayhem) this.world.syncHolderBalance(token, PUMP_MAYHEM_AGENT, PUMP_MAYHEM_SUPPLY - PUMP.totalSupply);
     if (e.initialBuy > 0) {
       this.world.recordExternalTrade(token, {
         wallet: e.trader,

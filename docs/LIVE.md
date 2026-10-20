@@ -316,8 +316,10 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
   Telling them apart needs the launch's curve account, so without `SOLANA_RPC_URL` launches pass
   unchecked (`diagnostics().verify.unverified`). The check holds each launch for one batched read
   (~0.3-1 s).
-- Mayhem-mode coins get their 2B supply and their real SOL is tracked from trade flows (the program
-  moves their virtual SOL on its own); the mayhem agent's trades are booked fee-free.
+- Mayhem-mode coins get their 2B supply (the agent's minted billion is its holding from the launch)
+  and their real SOL is tracked from trade flows (the program moves their virtual SOL on its own);
+  the mayhem agent's trades are booked fee-free. The supply is not re-read when the agent's unsold
+  tokens are burned after its 24 h.
 - PumpSwap trades (`pool: 'pump-amm'`) could not be captured: their amounts are taken as sent. A
   migrated pool's reserves are read back from chain once after the migration. Fresh pump coins pay
   tiered PumpSwap fees (20 + 5 + 95 bps observed), not the 0.25% in `LIVE_DEXES` (fee totals only).
