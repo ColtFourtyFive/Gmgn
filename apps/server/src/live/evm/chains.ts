@@ -133,3 +133,12 @@ export const EVM_CHAINS: Record<EvmChainId, EvmChainInfo> = {
     explorerUrl: 'https://etherscan.io',
   },
 };
+
+/**
+ * Robinhood Chain tokenized stocks / ETFs ("<Name> • Robinhood Token") are
+ * BeaconProxies of this beacon (read from their EIP-1967 beacon slot): real
+ * assets, not memecoins, so live discovery never lists them.
+ */
+export const ROBINHOOD_STOCK_TOKEN_BEACON: Address = '0xe10b6f6b275de231345c20d14ab812db62151b00';
+/** EIP-1967 beacon slot: bytes32(uint256(keccak256('eip1967.proxy.beacon')) - 1). */
+export const EIP1967_BEACON_SLOT = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';

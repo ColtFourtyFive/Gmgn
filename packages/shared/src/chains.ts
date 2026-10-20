@@ -157,6 +157,26 @@ export const LAUNCHPADS: LaunchpadConfig[] = [
  */
 export const LIVE_LAUNCHPADS: LaunchpadConfig[] = [
   { id: 'pump', chain: 'sol', name: 'pump.fun', totalSupply: 1e9, virtualNative: 30, virtualTokens: 1_073_000_000, curveTokens: 793_100_000, feeRate: 0.0125, migrationFeeNative: 0, weight: 1, color: '#54D38A' },
+  // Robinhood Chain. Pons V2 (launch config 0): 1.68 ETH phantom quote on the full 1B supply, 5/7 sold on the
+  // curve, graduates at 4.2 ETH into a Uniswap V4 pool (PonsV2MemeHook) with a locked full-range position.
+  { id: 'pons', chain: 'robinhood', name: 'Pons', totalSupply: 1e9, virtualNative: 1.68, virtualTokens: 1e9, curveTokens: 714_285_714.2857143, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#C3F53C' },
+  // Flap (CDPV2 curve, ETH quote): (R + r)(1e9 + h - S) = k with r = 1.9189797 ETH, h = 107,036,752; 800M sold,
+  // graduates at 5 ETH into a Pancake-V2-style pair with burned LP.
+  { id: 'flap-robinhood', chain: 'robinhood', name: 'Flap', totalSupply: 1e9, virtualNative: 1.9189797, virtualTokens: 1_107_036_752, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#FF6FB5' },
+  // Pools.trade (Uniswap Labs): 1B supply launched straight into a Uniswap V4 pool (0.25% LP fee, locked liquidity).
+  { id: 'pools-trade', chain: 'robinhood', name: 'Pools.trade', totalSupply: 1e9, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0.0025, migrationFeeNative: 0, weight: 1, color: '#FF37C7' },
+  { id: 'uniswap-robinhood', chain: 'robinhood', name: 'Uniswap', totalSupply: 0, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0, migrationFeeNative: 0, weight: 1, color: '#FC72FF' },
+  // Base. Clanker v4: tokens launch straight into a Uniswap V4 pool (Clanker hook).
+  { id: 'clanker', chain: 'base', name: 'Clanker', totalSupply: 1e11, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#8A63D2' },
+  { id: 'uniswap-base', chain: 'base', name: 'Uniswap', totalSupply: 0, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0, migrationFeeNative: 0, weight: 1, color: '#FC72FF' },
+  // BNB Chain. four.meme (BNB quote): constant product on virtual reserves of 25/73 x (max funds, 800M), graduates
+  // at the token's max funds (13.6-13.8 BNB at launch) into PancakeSwap.
+  { id: 'fourmeme', chain: 'bsc', name: 'four.meme', totalSupply: 1e9, virtualNative: 4.6917808, virtualTokens: 1_073_972_602.74, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#3CE07A' },
+  // Flap (CDPV2 curve, BNB quote): r = 6.14 BNB, h = 107,036,752; 800M sold, graduates at ~16 BNB into PancakeSwap.
+  { id: 'flap-bsc', chain: 'bsc', name: 'Flap', totalSupply: 1e9, virtualNative: 6.14, virtualTokens: 1_107_036_752, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0, weight: 1, color: '#FF6FB5' },
+  { id: 'pancake-bsc', chain: 'bsc', name: 'PancakeSwap', totalSupply: 0, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0, migrationFeeNative: 0, weight: 1, color: '#1FC7D4' },
+  // Ethereum: tokens launched straight into a Uniswap pool.
+  { id: 'uniswap-eth', chain: 'eth', name: 'Uniswap', totalSupply: 0, virtualNative: 0, virtualTokens: 0, curveTokens: 0, feeRate: 0, migrationFeeNative: 0, weight: 1, color: '#FC72FF' },
 ];
 
 /** Simulator launchpads of a chain (demo mode). */
@@ -193,6 +213,19 @@ export const LIVE_DEXES: DexConfig[] = [
   { id: 'pumpswap', chain: 'sol', name: 'PumpSwap', feeRate: 0.0025 },
   { id: 'raydium', chain: 'sol', name: 'Raydium', feeRate: 0.0025 },
   { id: 'meteora', chain: 'sol', name: 'Meteora', feeRate: 0.0025 },
+  // EVM: concentrated-liquidity pools set their own fee (a pool's live fee is on its PoolRuntime).
+  { id: 'uniswap-v4-robinhood', chain: 'robinhood', name: 'Uniswap V4', feeRate: 0.003 },
+  { id: 'uniswap-v3-robinhood', chain: 'robinhood', name: 'Uniswap V3', feeRate: 0.003 },
+  // Pancake-V2-style AMM Flap graduates into on Robinhood Chain (0.25%, measured from swaps).
+  { id: 'pancake-v2-robinhood', chain: 'robinhood', name: 'Pancake V2', feeRate: 0.0025 },
+  { id: 'uniswap-v4-base', chain: 'base', name: 'Uniswap V4', feeRate: 0.003 },
+  { id: 'uniswap-v3-base', chain: 'base', name: 'Uniswap V3', feeRate: 0.003 },
+  { id: 'uniswap-v2-base', chain: 'base', name: 'Uniswap V2', feeRate: 0.003 },
+  { id: 'pancake-v2-bsc', chain: 'bsc', name: 'PancakeSwap V2', feeRate: 0.0025 },
+  { id: 'pancake-v3-bsc', chain: 'bsc', name: 'PancakeSwap V3', feeRate: 0.0025 },
+  { id: 'uniswap-v4-eth', chain: 'eth', name: 'Uniswap V4', feeRate: 0.003 },
+  { id: 'uniswap-v3-eth', chain: 'eth', name: 'Uniswap V3', feeRate: 0.003 },
+  { id: 'uniswap-v2-eth', chain: 'eth', name: 'Uniswap V2', feeRate: 0.003 },
 ];
 
 /** The simulator's AMM for a chain (demo mode). */
