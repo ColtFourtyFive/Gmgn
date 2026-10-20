@@ -7,10 +7,13 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { CHAIN_IDS, LAUNCHPADS, PLATFORM_FEE_RATE, type MetaResponse } from '@trenchscope/shared';
+import { CHAIN_IDS, LAUNCHPADS, LIVE_LAUNCHPADS, PLATFORM_FEE_RATE, type AppMode, type ChainId, type MetaResponse } from '@trenchscope/shared';
 import { Accounts, registerAccountRoutes } from './accounts';
 import { Analytics, registerMarketRoutes } from './analytics';
-import { HttpError, sendError, type AppConfig, type AppContext } from './context';
+import { HttpError, sendError, type AppConfig, type AppContext, type MarketSource } from './context';
+import { loadLiveConfig } from './live/config';
+import { LiveMarket } from './live/market';
+import { createLiveServices } from './live/services';
 import { loadSnapshot, saveSnapshot, saveSnapshotAsync, SNAPSHOT_VERSION, type Snapshot } from './persistence';
 import { congestionOf, priorityFeeTiers } from './sim/congestion';
 import { Engine } from './sim/engine';
@@ -22,7 +25,7 @@ import { Hub } from './ws/hub';
 export interface BuiltApp {
   app: FastifyInstance;
   ctx: AppContext;
-  market: MarketSim;
+  market: MarketSource;
   /** Persist a snapshot now, in one blocking pass (no-op when persistence is disabled). */
   save(): void;
   /**
@@ -35,7 +38,13 @@ export interface BuiltApp {
 }
 
 export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  const mode: AppMode = overrides.mode ?? (process.env.MODE === 'live' ? 'live' : 'demo');
+  const loaded = mode === 'live' && overrides.live === undefined ? loadLiveConfig() : null;
   return {
+    mode,
+    live: loaded?.config ?? null,
+    liveProblems: loaded?.problems ?? [],
+    demoUrl: process.env.DEMO_URL?.trim() || null,
     port: Number(process.env.PORT ?? 8787),
     host: process.env.HOST ?? '0.0.0.0',
     dataDir: process.env.DATA_DIR ?? '.data',
@@ -53,19 +62,25 @@ export function defaultConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 
 export async function buildApp(config: AppConfig, opts: { start?: boolean; persist?: boolean; logger?: boolean } = {}): Promise<BuiltApp> {
   const persist = opts.persist ?? config.snapshotEveryMs > 0;
-  const snapshot = persist ? loadSnapshot(config.dataDir) : null;
+  let snapshot = persist ? loadSnapshot(config.dataDir) : null;
+  // A demo snapshot holds simulated tokens and paper balances: never load it into live mode (or back).
+  if (snapshot && (snapshot.mode ?? 'demo') !== config.mode) {
+    console.warn(`[app] ignoring ${snapshot.mode ?? 'demo'} snapshot in ${config.mode} mode (use a separate DATA_DIR per mode)`);
+    snapshot = null;
+  }
+  if (config.mode === 'live') for (const p of config.liveProblems) console.warn(`[live] ${p}`);
 
   const world = snapshot ? World.restore(snapshot.world) : new World(config.seed);
   const engine = new Engine(world);
   const hub = new Hub({ maxConnectionsPerIp: config.wsConnectionsPerIp });
-  const ctx = { config, world, engine, hub } as AppContext;
+  const ctx = { config, world, engine, hub, live: createLiveServices(config) } as AppContext;
   const accounts = new Accounts(ctx);
   const analytics = new Analytics(ctx);
   const trading = new Trading(ctx);
   ctx.accounts = accounts;
   ctx.analytics = analytics;
   ctx.trading = trading;
-  const market = new MarketSim(ctx);
+  const market: MarketSource = config.mode === 'live' ? new LiveMarket(ctx) : new MarketSim(ctx);
   ctx.market = market;
 
   // Install order = ticker order: market dynamics first, then analytics, trading, accounts.
@@ -82,8 +97,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     ctx.trading.restore(snapshot.trading);
     console.log(`[app] restored snapshot from ${new Date(snapshot.savedAt).toISOString()} (${world.tokens.size} tokens)`);
   } else {
-    market.seedPopulation();
-    if (config.warmupMinutes > 0) engine.warmup(config.warmupMinutes * 60000);
+    market.bootstrap();
   }
 
   // Headers up to 128KB so list URLs can carry exclusion filters (the `filters` param itself stops at 64KB).
@@ -103,7 +117,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
       perMessageDeflate: { threshold: 16 * 1024, serverNoContextTakeover: true, zlibDeflateOptions: { level: 3 }, concurrencyLimit: 4 },
     },
   });
-  const headers = securityHeaders(config.webDist);
+  const headers = securityHeaders(config.webDist, config.mode);
   app.addHook('onRequest', async (_req, reply) => {
     reply.headers(headers);
   });
@@ -154,6 +168,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
   // Section order is write order: analytics (derived, and the bulk of the file) goes last.
   const capture = (): Snapshot => ({
     version: SNAPSHOT_VERSION,
+    mode: config.mode,
     savedAt: Date.now(),
     world: world.serialize(),
     market: market.serialize(),
@@ -198,6 +213,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
     // live tick, when reconnecting clients resubscribe; the ticker keeps them fresh in time slices.
     analytics.wallets.refreshLeaderboards();
     engine.start();
+    market.start();
     stopHeartbeat = hub.startHeartbeat();
     if (persist && config.snapshotEveryMs > 0) {
       snapTimer = setInterval(() => void saveInBackground(), config.snapshotEveryMs);
@@ -215,6 +231,7 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
       closed = true;
       if (snapTimer) clearInterval(snapTimer);
       stopHeartbeat?.();
+      await market.stop();
       engine.stop();
       if (saving) await saving;
       save();
@@ -227,17 +244,17 @@ export async function buildApp(config: AppConfig, opts: { start?: boolean; persi
  * Security headers for every response (API and the served SPA). The CSP fits the Vite build: its
  * own module scripts plus the inline scripts of the built index.html (by hash, e.g. the theme
  * bootstrap), Google Fonts for Inter / JetBrains Mono, inline styles (style attributes in
- * component and chart markup), data:/blob: images (avatars, share cards) and same-origin or
- * ws(s) connections; nothing may frame the app.
+ * component and chart markup), data:/blob: images (avatars, share cards; live mode also https:
+ * token images from their metadata) and same-origin or ws(s) connections; nothing may frame the app.
  */
-export function securityHeaders(webDist: string | null): Record<string, string> {
+export function securityHeaders(webDist: string | null, mode: AppMode = 'demo'): Record<string, string> {
   const scriptSrc = ["'self'", ...inlineScriptHashes(webDist)];
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${mode === 'live' ? ' https:' : ''}`,
     "connect-src 'self' ws: wss:",
     "manifest-src 'self'",
     "worker-src 'self'",
@@ -313,11 +330,15 @@ function installIpLimit(app: FastifyInstance, routes: string[], perWindow: numbe
 }
 
 export function buildMeta(ctx: AppContext): MetaResponse {
-  const { world, engine } = ctx;
+  const { world, engine, config } = ctx;
+  const live = config.mode === 'live';
+  const enabledChains: ChainId[] = live ? ['sol'] : CHAIN_IDS;
   return {
     serverTime: world.now,
-    platformFeeRate: PLATFORM_FEE_RATE,
-    chains: CHAIN_IDS.map((id) => {
+    mode: config.mode,
+    enabledChains,
+    platformFeeRate: live && config.live ? config.live.fees.platformFeeBps / 10_000 : PLATFORM_FEE_RATE,
+    chains: enabledChains.map((id) => {
       const c = world.chains[id];
       let volume24hUsd = 0;
       let tracked = 0;
@@ -339,7 +360,9 @@ export function buildMeta(ctx: AppContext): MetaResponse {
         congestion: congestionOf(c.congestion),
       };
     }),
-    launchpads: LAUNCHPADS.map((l) => ({ id: l.id, chain: l.chain, name: l.name, color: l.color })),
+    launchpads: (live ? LIVE_LAUNCHPADS : LAUNCHPADS).map((l) => ({ id: l.id, chain: l.chain, name: l.name, color: l.color })),
     sim: { seed: world.seed, startedAt: world.startedAt, speed: 1, tradesPerSecond: engine.tps },
+    ...(live ? { live: ctx.market.liveStatus() ?? undefined } : {}),
+    demoUrl: config.demoUrl,
   };
 }

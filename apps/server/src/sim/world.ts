@@ -38,7 +38,10 @@ import { Rng, base58Address, evmAddress, txHash } from './rng';
 // Internal state types
 // ---------------------------------------------------------------------------
 
-/** Behavioural archetype of a simulated wallet. 'user' = human paper-trading account wallet. */
+/**
+ * Behavioural archetype of a simulated wallet. 'user' = an account's own wallet;
+ * 'external' = a real on-chain wallet observed in live mode (no simulated behaviour).
+ */
 export type Archetype =
   | 'retail'
   | 'smart'
@@ -51,7 +54,8 @@ export type Archetype =
   | 'fresh'
   | 'bot'
   | 'sandwich'
-  | 'user';
+  | 'user'
+  | 'external';
 
 export interface PositionState {
   token: string;
@@ -160,6 +164,9 @@ export interface TokenState {
   description: string;
   logoSeed: string;
   logoGlyph: string;
+  /** Real token image and metadata URI (live mode). */
+  imageUrl?: string | null;
+  metadataUri?: string | null;
   narrative: string;
   launchpad: string;
   status: TokenStatus;
@@ -261,6 +268,55 @@ export interface SwapOutcome {
   mevLossNative: number;
 }
 
+/** A token observed on-chain (live mode). */
+export interface ExternalTokenSpec {
+  chain: ChainId;
+  address: string;
+  launchpad: string;
+  symbol: string;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  metadataUri: string | null;
+  creator: string;
+  createdAt: number;
+  decimals: number;
+  totalSupply: number;
+  status: TokenStatus;
+  /** Curve state at registration (tokens still on their launchpad). */
+  curve: { virtualNative: number; virtualTokens: number; realNative: number; realTokens: number; initialRealTokens: number; feeRate: number } | null;
+  pool: Omit<PoolRuntime, 'createdAt' | 'initialLiquidityUsd'> | null;
+  socials: Socials;
+  narrative: string;
+  logoGlyph: string;
+}
+
+/**
+ * A trade observed on-chain (live feed) or one of our own confirmed fills.
+ * Amounts are what the chain reports; reserves / price are the post-trade state.
+ */
+export interface ExternalTrade {
+  wallet: string;
+  side: Side;
+  /** Native leg as the venue reports it (SOL in for buys, SOL out for sells). */
+  nativeAmount: number;
+  tokenAmount: number;
+  at: number;
+  /** Transaction signature (dedupe key with wallet + token). */
+  txHash: string;
+  slot?: number;
+  /** Post-trade curve reserves (bonding-curve trades). */
+  curve?: { virtualNative: number; virtualTokens: number; realNative?: number; realTokens?: number };
+  /** Post-trade price in native (pool trades without full reserves). */
+  priceNative?: number;
+  /** Post-trade pool reserves when known. */
+  pool?: { native: number; tokens: number };
+  /** The trader's token balance after the trade (authoritative; covers transfers we never saw). */
+  walletTokenBalance?: number;
+  /** Our own fills: platform + network fees paid on top of the native leg. */
+  fees?: { platform: number; network: number };
+}
+
 export interface WorldEvents {
   trade: [trade: Trade, token: TokenState, wallet: WalletState];
   tokenCreated: [token: TokenState];
@@ -325,6 +381,8 @@ export class World extends EventEmitter {
   tradeTotal = 0;
   /** Modules that need tokens kept alive (open orders, alerts) register sources here. */
   private pinSources: (() => Iterable<string>)[] = [];
+  /** `${txHash}|${wallet}|${token}` -> when booked: external trades arrive from several sources. */
+  private bookedExternal = new Map<string, number>();
 
   constructor(seed = 'trenchscope', now = Date.now()) {
     super();
@@ -664,6 +722,162 @@ export class World extends EventEmitter {
     return t;
   }
 
+  // ---------------------------------------------------------------------------
+  // Live mode: state observed on-chain
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The wallet at `address`, registered as an observed real wallet when new.
+   * Its creation time is unknown (0) until something looks it up.
+   */
+  ensureWallet(chain: ChainId, address: string): WalletState {
+    return this.wallets.get(address) ?? this.createWallet(chain, 'external', { address, createdAt: 0 });
+  }
+
+  /** Register a token seen on-chain; returns the known token when it is already tracked. */
+  addExternalToken(spec: ExternalTokenSpec): TokenState {
+    const known = this.tokens.get(spec.address);
+    if (known) return known;
+    const creator = this.ensureWallet(spec.chain, spec.creator);
+    const candles = {} as Record<Resolution, Candle[]>;
+    for (const r of RESOLUTIONS) candles[r] = [];
+    const t: TokenState = {
+      chain: spec.chain,
+      address: spec.address,
+      symbol: spec.symbol,
+      name: spec.name,
+      description: spec.description,
+      logoSeed: spec.address.slice(0, 10),
+      logoGlyph: spec.logoGlyph,
+      imageUrl: spec.imageUrl,
+      metadataUri: spec.metadataUri,
+      narrative: spec.narrative,
+      launchpad: spec.launchpad,
+      status: spec.status,
+      creator: creator.address,
+      createdAt: spec.createdAt,
+      migratedAt: spec.status === 'migrated' ? spec.createdAt : null,
+      completedAt: null,
+      decimals: spec.decimals,
+      totalSupply: spec.totalSupply,
+      curve: spec.curve ? { ...spec.curve } : null,
+      pool: spec.pool ? { ...spec.pool, createdAt: spec.createdAt, initialLiquidityUsd: 2 * spec.pool.native * this.nativeUsd(spec.chain) } : null,
+      socials: spec.socials,
+      xFollowers: null,
+      cto: false,
+      boosted: false,
+      isCopycat: false,
+      // Launchpad mints renounce both authorities; the live security check confirms on-chain.
+      renouncedMint: spec.chain === 'sol' ? true : null,
+      renouncedFreeze: spec.chain === 'sol' ? true : null,
+      isOpenSource: spec.chain === 'sol' ? null : true,
+      isRenounced: spec.chain === 'sol' ? null : true,
+      isHoneypot: spec.chain === 'sol' ? null : false,
+      buyTax: 0,
+      sellTax: 0,
+      holders: new Set(),
+      traders: new Set(),
+      bundlers: new Set(),
+      insiders: new Set(),
+      snipers: new Set(),
+      devTeam: new Set(),
+      trades: [],
+      candles,
+      buckets: [],
+      athPriceUsd: 0,
+      athMarketCapUsd: 0,
+      initialLiquidityUsd: 0,
+      totalFeesUsd: 0,
+      lastTradeAt: spec.createdAt,
+      tradeCount: 0,
+      watchers: 0,
+      fate: 'dud',
+      hype: 0,
+      sim: {},
+      cache: {},
+      version: 0,
+      dormant: false,
+    };
+    const price = this.priceUsd(t);
+    t.athPriceUsd = price;
+    t.athMarketCapUsd = price * t.totalSupply;
+    t.initialLiquidityUsd = t.pool ? t.pool.initialLiquidityUsd : (t.curve?.virtualNative ?? 0) * this.nativeUsd(t.chain);
+    this.tokens.set(t.address, t);
+    this.tokensByChain[t.chain].push(t.address);
+    creator.createdTokens.push(t.address);
+    if (spec.status === 'curve') this.chains[t.chain].launches.push(spec.createdAt);
+    this.emit('tokenCreated', t);
+    return t;
+  }
+
+  /**
+   * Book a trade observed on-chain. Idempotent per (signature, wallet, token): the
+   * same swap can arrive from the feed and from our own fill confirmation.
+   * Returns null for a duplicate or an empty trade.
+   */
+  recordExternalTrade(t: TokenState, e: ExternalTrade): Trade | null {
+    if (!(e.tokenAmount > 0) || !(e.nativeAmount >= 0)) return null;
+    const key = `${e.txHash}|${e.wallet}|${t.address}`;
+    if (this.bookedExternal.has(key)) return null;
+    this.bookedExternal.set(key, e.at);
+    const wallet = this.ensureWallet(t.chain, e.wallet);
+    if (e.curve && t.curve) {
+      t.curve.virtualNative = e.curve.virtualNative;
+      t.curve.virtualTokens = e.curve.virtualTokens;
+      if (e.curve.realNative !== undefined) t.curve.realNative = e.curve.realNative;
+      if (e.curve.realTokens !== undefined) t.curve.realTokens = e.curve.realTokens;
+    }
+    if (t.pool) {
+      if (e.pool) {
+        t.pool.native = e.pool.native;
+        t.pool.tokens = e.pool.tokens;
+      } else if (e.priceNative && e.priceNative > 0) {
+        // Only the price is known: keep the pool's native depth and solve its token side.
+        t.pool.tokens = t.pool.native / e.priceNative;
+      }
+    }
+    const fees = e.fees ?? { platform: 0, network: 0 };
+    const venueFeeRate = t.pool?.feeRate ?? t.curve?.feeRate ?? 0;
+    const completes = t.status === 'curve' && !!t.curve && t.curve.realTokens <= 0;
+    return this.book(wallet, t, e.side, {
+      at: e.at,
+      nativeForTrade: e.nativeAmount,
+      tokenQty: e.tokenAmount,
+      platformFee: fees.platform,
+      networkFee: fees.network,
+      // Native balances of real wallets come from the chain, not from our bookkeeping.
+      trackNative: false,
+      venueFeeNative: e.nativeAmount * venueFeeRate,
+      txHash: e.txHash,
+      block: e.slot ?? this.blockAt(t.chain, e.at),
+      completes,
+      walletTokenBalance: e.walletTokenBalance,
+    });
+  }
+
+  /** The curve is complete on-chain (the launchpad's complete event): trading pauses until migration. */
+  completeCurve(t: TokenState, at: number): void {
+    if (t.status !== 'curve') return;
+    t.status = 'migrating';
+    t.completedAt = at;
+    if (t.curve) t.curve.realTokens = 0;
+    t.version++;
+    this.emit('curveCompleted', t);
+  }
+
+  /** The token now trades on an AMM pool, as reported on-chain. */
+  migrateExternal(t: TokenState, pool: Omit<PoolRuntime, 'createdAt' | 'initialLiquidityUsd'>, at: number): void {
+    if (t.status === 'migrated' && t.pool) return;
+    t.pool = { ...pool, createdAt: at, initialLiquidityUsd: 2 * pool.native * this.nativeUsd(t.chain) };
+    if (t.curve) t.curve = { ...t.curve, realTokens: 0 };
+    t.status = 'migrated';
+    t.completedAt ??= at;
+    t.migratedAt = at;
+    t.version++;
+    this.chains[t.chain].migrations.push(at);
+    this.emit('tokenMigrated', t);
+  }
+
   /** Move a completed curve into an AMM pool. Called by the market module after a short delay. */
   migrate(t: TokenState): void {
     if (t.status === 'migrated' || !t.curve) return;
@@ -781,9 +995,73 @@ export class World extends EventEmitter {
       this.applyReserves(t, 'sell', q, sellAmount);
     }
 
-    // ---- wallet + position bookkeeping ----
-    wallet.native += nativeDelta;
-    if (wallet.native < 0) wallet.native = 0;
+    const trade = this.book(wallet, t, side, {
+      at,
+      nativeForTrade,
+      tokenQty: Math.abs(tokenDelta),
+      platformFee,
+      networkFee,
+      trackNative: true,
+      nativeDelta,
+      venueFeeNative: result.venueFee,
+      txHash: this.newTxHash(t.chain),
+      block: this.blockAt(t.chain, at),
+      completes: result.completesCurve,
+    });
+    const usdAmount = trade.usdAmount;
+    const tradeTokenAmount = trade.tokenAmount;
+
+    return {
+      ok: true,
+      trade,
+      result,
+      nativeAmount: nativeForTrade,
+      tokenAmount: tradeTokenAmount,
+      usdAmount,
+      platformFeeNative: platformFee,
+      networkFeeNative: networkFee,
+      mevLossNative: mevLoss,
+    };
+  }
+
+  /**
+   * Shared trade bookkeeping: position (average cost), wallet, token indexes,
+   * trade ring, candles, minute buckets, ATH; then the trade event (and the curve
+   * completion, which is applied first so listeners see the real state).
+   */
+  private book(
+    wallet: WalletState,
+    t: TokenState,
+    side: Side,
+    b: {
+      at: number;
+      /** Native leg on the trade (gross of platform/network fees). */
+      nativeForTrade: number;
+      tokenQty: number;
+      platformFee: number;
+      networkFee: number;
+      /** Apply nativeDelta to wallet.native (simulated wallets); real wallets sync from the chain. */
+      trackNative: boolean;
+      /** Change to the wallet's native balance (defaults to cost / proceeds from the legs and fees). */
+      nativeDelta?: number;
+      venueFeeNative: number;
+      txHash: string;
+      block: number;
+      completes: boolean;
+      /** Authoritative post-trade token balance (live feed). */
+      walletTokenBalance?: number;
+    },
+  ): Trade {
+    const { at } = b;
+    const nativeUsd = this.nativeUsd(t.chain);
+    const costNative = b.nativeForTrade + b.platformFee + b.networkFee;
+    const proceedsNative = b.nativeForTrade - b.platformFee - b.networkFee;
+    const nativeDelta = b.nativeDelta ?? (side === 'buy' ? -costNative : proceedsNative);
+    if (b.trackNative) {
+      wallet.native += nativeDelta;
+      if (wallet.native < 0) wallet.native = 0;
+    }
+    let pos = wallet.positions.get(t.address);
     if (!pos) {
       pos = {
         token: t.address,
@@ -804,41 +1082,47 @@ export class World extends EventEmitter {
       };
       wallet.positions.set(t.address, pos);
     }
-    const usdAmount = nativeForTrade * nativeUsd;
+    const usdAmount = b.nativeForTrade * nativeUsd;
     let realized: number | null = null;
     if (side === 'buy') {
-      const costUsd = (nativeForTrade + platformFee + networkFee) * nativeUsd;
-      pos.balance += tokenDelta;
+      const costUsd = costNative * nativeUsd;
+      pos.balance += b.tokenQty;
       pos.costBasisUsd += costUsd;
       pos.boughtUsd += costUsd;
-      pos.boughtTokens += tokenDelta;
-      pos.boughtNative += -nativeDelta;
+      pos.boughtTokens += b.tokenQty;
+      pos.boughtNative += b.trackNative ? -nativeDelta : costNative;
       pos.buys += 1;
       if (pos.firstBuyAt === null) pos.firstBuyAt = at;
       pos.closedAt = null;
     } else {
-      const sold = -tokenDelta;
+      // A real wallet can sell tokens it received by transfer: never sell below zero.
+      const sold = Math.min(b.tokenQty, Math.max(pos.balance, b.trackNative ? 0 : b.tokenQty));
       const avgCost = pos.balance > 0 ? pos.costBasisUsd / pos.balance : 0;
-      const costOut = avgCost * sold;
-      const proceedsUsd = nativeDelta * nativeUsd;
+      const costOut = avgCost * Math.min(sold, pos.balance);
+      const proceeds = b.trackNative ? nativeDelta : proceedsNative;
+      const proceedsUsd = proceeds * nativeUsd;
       realized = proceedsUsd - costOut;
       pos.realizedPnlUsd += realized;
       pos.costBasisUsd = Math.max(0, pos.costBasisUsd - costOut);
-      pos.balance -= sold;
+      pos.balance = Math.max(0, pos.balance - sold);
       pos.soldUsd += proceedsUsd;
       pos.soldTokens += sold;
-      pos.soldNative += nativeDelta;
+      pos.soldNative += proceeds;
       pos.sells += 1;
-      if (pos.balance <= t.totalSupply * DUST_RATE) {
-        pos.balance = 0;
-        pos.costBasisUsd = 0;
-        pos.closedAt = at;
-      }
+    }
+    if (b.walletTokenBalance !== undefined && Number.isFinite(b.walletTokenBalance) && b.walletTokenBalance >= 0) {
+      // Transfers in/out happened that we never saw: keep the average cost per token we know.
+      if (pos.balance > 0 && b.walletTokenBalance < pos.balance) pos.costBasisUsd *= b.walletTokenBalance / pos.balance;
+      pos.balance = b.walletTokenBalance;
+    }
+    if (side === 'sell' && pos.balance <= t.totalSupply * DUST_RATE) {
+      pos.balance = 0;
+      pos.costBasisUsd = 0;
+      pos.closedAt = at;
     }
     pos.lastActiveAt = at;
-    wallet.lastActiveAt = at;
+    wallet.lastActiveAt = Math.max(wallet.lastActiveAt, at);
 
-    // ---- token indexes ----
     t.traders.add(wallet.address);
     if (pos.balance > t.totalSupply * DUST_RATE) t.holders.add(wallet.address);
     else t.holders.delete(wallet.address);
@@ -846,8 +1130,7 @@ export class World extends EventEmitter {
     const priceNative = this.priceNative(t);
     const priceUsd = priceNative * nativeUsd;
     const mcap = priceUsd * t.totalSupply;
-    const tradeTokenAmount = Math.abs(tokenDelta);
-    const execPriceUsd = tradeTokenAmount > 0 ? usdAmount / tradeTokenAmount : priceUsd;
+    const execPriceUsd = b.tokenQty > 0 ? usdAmount / b.tokenQty : priceUsd;
 
     const trade: Trade = {
       id: this.nextId('tx'),
@@ -858,15 +1141,15 @@ export class World extends EventEmitter {
       walletTags: this.tradeTags(t, wallet),
       walletLabel: wallet.label,
       side,
-      nativeAmount: nativeForTrade,
-      tokenAmount: tradeTokenAmount,
+      nativeAmount: b.nativeForTrade,
+      tokenAmount: b.tokenQty,
       usdAmount,
       priceUsd: execPriceUsd,
-      priceNative: tradeTokenAmount > 0 ? nativeForTrade / tradeTokenAmount : priceNative,
+      priceNative: b.tokenQty > 0 ? b.nativeForTrade / b.tokenQty : priceNative,
       marketCapUsd: mcap,
       timestamp: at,
-      txHash: this.newTxHash(t.chain),
-      block: this.blockAt(t.chain, at),
+      txHash: b.txHash,
+      block: b.block,
       isDev: wallet.address === t.creator || t.devTeam.has(wallet.address),
       makerHoldRate: t.totalSupply > 0 ? pos.balance / t.totalSupply : 0,
       realizedPnlUsd: realized,
@@ -875,8 +1158,8 @@ export class World extends EventEmitter {
     t.trades.push(trade);
     if (t.trades.length > TRADE_RING) t.trades.splice(0, t.trades.length - TRADE_RING);
     t.tradeCount += 1;
-    t.lastTradeAt = at;
-    t.totalFeesUsd += result.venueFee * nativeUsd;
+    t.lastTradeAt = Math.max(t.lastTradeAt, at);
+    t.totalFeesUsd += b.venueFeeNative * nativeUsd;
     if (priceUsd > t.athPriceUsd) {
       t.athPriceUsd = priceUsd;
       t.athMarketCapUsd = mcap;
@@ -888,7 +1171,7 @@ export class World extends EventEmitter {
 
     // A buy that completes the curve stops trading before anyone hears of it, so
     // listeners reacting to the trade (copy trades, orders) see the real state.
-    const completed = result.completesCurve && t.status === 'curve';
+    const completed = b.completes && t.status === 'curve';
     if (completed) {
       t.status = 'migrating';
       t.completedAt = at;
@@ -896,18 +1179,7 @@ export class World extends EventEmitter {
     }
     this.emit('trade', trade, t, wallet);
     if (completed) this.emit('curveCompleted', t);
-
-    return {
-      ok: true,
-      trade,
-      result,
-      nativeAmount: nativeForTrade,
-      tokenAmount: tradeTokenAmount,
-      usdAmount,
-      platformFeeNative: platformFee,
-      networkFeeNative: networkFee,
-      mevLossNative: mevLoss,
-    };
+    return trade;
   }
 
   private applyReserves(t: TokenState, side: Side, q: SwapResult, tokenQty: number): void {
@@ -1097,6 +1369,8 @@ export class World extends EventEmitter {
 
   /** Drop old launch/migration timestamps (kept for 1h counters). */
   pruneCounters(): void {
+    const bookedCutoff = this.now - 15 * 60_000;
+    for (const [key, at] of this.bookedExternal) if (at < bookedCutoff) this.bookedExternal.delete(key);
     const cutoff = this.now - 3600 * 1000;
     for (const id of CHAIN_IDS) {
       const c = this.chains[id];

@@ -10,7 +10,7 @@
 // reproduces the same market.
 
 import { CHAINS, CHAIN_IDS, type ChainId, type Trade } from '@trenchscope/shared';
-import type { AppContext } from '../context';
+import type { AppContext, MarketSource } from '../context';
 import { newCongestionModel, stepCongestion, type CongestionModel } from './congestion';
 import type { TokenState, WalletState, World } from './world';
 import { NARRATIVES, ctoSocials } from './names';
@@ -104,7 +104,8 @@ function tradable(t: TokenState): boolean {
   return t.status !== 'migrating';
 }
 
-export class MarketSim {
+export class MarketSim implements MarketSource {
+  readonly mode = 'demo' as const;
   private readonly world: World;
   private readonly roster: Roster;
   private readonly desk: Desk;
@@ -143,6 +144,22 @@ export class MarketSim {
     engine.addTicker('market', (dt) => this.tick(dt), { everyMs: 0, duringWarmup: true });
     engine.addTicker('market-ambient', (dt) => this.ambient(dt), { everyMs: 5 * SEC, duringWarmup: true });
     engine.addTicker('market-housekeeping', () => this.housekeeping(), { everyMs: 30 * SEC, duringWarmup: true });
+  }
+
+  /** Fresh start: seed the agent population, then fast-forward WARMUP_MINUTES of history. */
+  bootstrap(): void {
+    this.seedPopulation();
+    const minutes = this.ctx.config.warmupMinutes;
+    if (minutes > 0) this.ctx.engine.warmup(minutes * 60000);
+  }
+
+  /** The simulator runs on engine ticks: nothing to connect. */
+  start(): void {}
+
+  async stop(): Promise<void> {}
+
+  liveStatus(): null {
+    return null;
   }
 
   seedPopulation(): void {

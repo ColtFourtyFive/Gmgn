@@ -195,6 +195,8 @@ export interface TokenSummary {
   logoSeed: string;
   /** Emoji / glyph that hints the meme theme, rendered on the avatar. */
   logoGlyph: string;
+  /** Real token image (live mode, from the token's metadata); the generated avatar is the fallback. */
+  imageUrl?: string | null;
   /** Narrative/meta tag (e.g. "AI", "Cats"). */
   narrative: string;
   launchpad: string;
@@ -449,6 +451,8 @@ export interface TokenRef {
   name: string;
   logoSeed: string;
   logoGlyph: string;
+  /** Real token image (live mode, from the token's metadata); the generated avatar is the fallback. */
+  imageUrl?: string | null;
   priceUsd: number;
   marketCapUsd: number;
   liquidityUsd: number;
@@ -1278,13 +1282,43 @@ export interface ChainCongestion {
   label: CongestionLabel;
 }
 
+/**
+ * live = real chain data and real on-chain trades from custodied embedded wallets;
+ * demo = the deterministic market simulator with paper balances (never real funds).
+ */
+export type AppMode = 'live' | 'demo';
+
+/** Health of the live data/execution stack (live mode only). */
+export interface LiveStatus {
+  /** Market feed connected and delivering events. */
+  feedConnected: boolean;
+  /** Last feed event received (ms), null before the first one. */
+  lastEventAt: number | null;
+  /** RPC answered the last health probe. */
+  rpcHealthy: boolean;
+  /** Embedded-wallet signer in use ('turnkey', or 'local-dev' for development only). */
+  signer: string;
+  /** Swaps can be executed (signer + RPC + router configured). */
+  tradingEnabled: boolean;
+  /** Tokens currently tracked from the feed. */
+  trackedTokens: number;
+}
+
 export interface MetaResponse {
   serverTime: number;
+  /** live or demo; the web adapts navigation, copy and features to it. */
+  mode: AppMode;
+  /** Chains this server serves (live: the chains with real integrations). */
+  enabledChains: ChainId[];
   platformFeeRate: number;
   chains: ChainMarketInfo[];
   launchpads: { id: string; chain: ChainId; name: string; color: string }[];
-  /** Simulation status. */
+  /** Simulation status (demo mode). */
   sim: { seed: string; startedAt: number; speed: number; tradesPerSecond: number };
+  /** Live stack health (live mode). */
+  live?: LiveStatus;
+  /** Where the other mode runs (e.g. the demo site), when configured. */
+  demoUrl?: string | null;
 }
 
 // ---------------------------------------------------------------------------

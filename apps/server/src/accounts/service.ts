@@ -28,7 +28,7 @@ import {
   type WatchlistItem,
   type WatchlistResponse,
 } from '@trenchscope/shared';
-import { HttpError, type AccountsApi, type AppContext } from '../context';
+import { HttpError, type AccountsApi, type AppContext, type EmbeddedWalletRef } from '../context';
 import type { WalletState } from '../sim/world';
 import {
   PasswordHashBusy,
@@ -410,6 +410,28 @@ export class Accounts implements AccountsApi {
   pushBalance(accountId: string, chain: ChainId): void {
     if (!this.records.has(accountId)) return;
     this.ctx.hub.publishUser(accountId, 'balance', this.userWallet(accountId, chain));
+  }
+
+  // ---- live-mode security hooks (demo accounts have no embedded wallets, 2FA or withdrawals) ----
+
+  walletRef(_accountId: string, _chain: ChainId): EmbeddedWalletRef | null {
+    return null;
+  }
+
+  hasSecondFactor(_accountId: string): boolean {
+    return false;
+  }
+
+  verifySecondFactor(_accountId: string, _code: string): boolean {
+    return false;
+  }
+
+  canWithdrawTo(_accountId: string, _chain: ChainId, _address: string): boolean {
+    return false;
+  }
+
+  audit(accountId: string | null, action: string, detail: Record<string, unknown>): void {
+    console.log(`[audit] ${action}`, JSON.stringify({ accountId, ...detail }));
   }
 
   /** Paper "deposit": top the wallet back up to the chain's starter balance, at most once per cooldown. */

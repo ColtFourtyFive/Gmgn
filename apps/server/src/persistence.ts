@@ -14,12 +14,15 @@ import { mkdir, open, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { deserialize, serialize } from 'node:v8';
+import type { AppMode } from '@trenchscope/shared';
 import type { WorldSnapshot } from './sim/world';
 
 export const SNAPSHOT_VERSION = 1;
 
 export interface Snapshot {
   version: number;
+  /** Mode that wrote the snapshot (absent = demo, from before live mode existed). */
+  mode?: AppMode;
   savedAt: number;
   world: WorldSnapshot;
   market: unknown;

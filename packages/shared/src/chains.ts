@@ -130,12 +130,27 @@ export const LAUNCHPADS: LaunchpadConfig[] = [
   { id: 'etherforge', chain: 'eth', name: 'EtherForge', totalSupply: 1e9, virtualNative: 1.8, virtualTokens: 1_073_000_000, curveTokens: 800_000_000, feeRate: 0.01, migrationFeeNative: 0.08, weight: 1, color: '#9DA8FF' },
 ];
 
+/**
+ * Real launchpads indexed in live mode. Curve parameters are the venue's
+ * public launch constants, used for progress and graduation previews only:
+ * live quotes and fills always come from the chain / router.
+ */
+export const LIVE_LAUNCHPADS: LaunchpadConfig[] = [
+  { id: 'pump', chain: 'sol', name: 'pump.fun', totalSupply: 1e9, virtualNative: 30, virtualTokens: 1_073_000_000, curveTokens: 793_100_000, feeRate: 0.0125, migrationFeeNative: 0, weight: 1, color: '#54D38A' },
+];
+
+/** Simulator launchpads of a chain (demo mode). */
 export function launchpadsFor(chain: ChainId): LaunchpadConfig[] {
   return LAUNCHPADS.filter((l) => l.chain === chain);
 }
 
+/** Real launchpads of a chain (live mode). */
+export function liveLaunchpadsFor(chain: ChainId): LaunchpadConfig[] {
+  return LIVE_LAUNCHPADS.filter((l) => l.chain === chain);
+}
+
 export function getLaunchpad(id: string): LaunchpadConfig | undefined {
-  return LAUNCHPADS.find((l) => l.id === id);
+  return LAUNCHPADS.find((l) => l.id === id) ?? LIVE_LAUNCHPADS.find((l) => l.id === id);
 }
 
 export interface DexConfig {
@@ -152,11 +167,55 @@ export const DEXES: DexConfig[] = [
   { id: 'trenchswap-eth', chain: 'eth', name: 'TrenchSwap', feeRate: 0.003 },
 ];
 
+/** Real AMMs a live token can trade on after leaving its launchpad. */
+export const LIVE_DEXES: DexConfig[] = [
+  { id: 'pumpswap', chain: 'sol', name: 'PumpSwap', feeRate: 0.0025 },
+  { id: 'raydium', chain: 'sol', name: 'Raydium', feeRate: 0.0025 },
+  { id: 'meteora', chain: 'sol', name: 'Meteora', feeRate: 0.0025 },
+];
+
+/** The simulator's AMM for a chain (demo mode). */
 export function dexFor(chain: ChainId): DexConfig {
   return DEXES.find((d) => d.chain === chain)!;
 }
 
-/** Platform trading fee charged by Trenchscope on every paper trade (ratio). */
+export function getDex(id: string): DexConfig | undefined {
+  return DEXES.find((d) => d.id === id) ?? LIVE_DEXES.find((d) => d.id === id);
+}
+
+// ---------------------------------------------------------------------------
+// Solana constants & explorer links (live mode)
+// ---------------------------------------------------------------------------
+
+export const LAMPORTS_PER_SOL = 1_000_000_000;
+/** Wrapped SOL mint: the native side of every SOL swap route. */
+export const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
+/** Block explorer link for a transaction (live mode only; demo hashes are not on-chain). */
+export function explorerTxUrl(chain: ChainId, signature: string): string {
+  return chain === 'sol' ? `https://solscan.io/tx/${signature}` : `${EVM_EXPLORERS[chain]}/tx/${signature}`;
+}
+
+/** Block explorer link for a wallet address (live mode only). */
+export function explorerAddressUrl(chain: ChainId, address: string): string {
+  return chain === 'sol' ? `https://solscan.io/account/${address}` : `${EVM_EXPLORERS[chain]}/address/${address}`;
+}
+
+/** Block explorer link for a token mint / contract (live mode only). */
+export function explorerTokenUrl(chain: ChainId, address: string): string {
+  return chain === 'sol' ? `https://solscan.io/token/${address}` : `${EVM_EXPLORERS[chain]}/token/${address}`;
+}
+
+const EVM_EXPLORERS: Record<Exclude<ChainId, 'sol'>, string> = {
+  bsc: 'https://bscscan.com',
+  base: 'https://basescan.org',
+  eth: 'https://etherscan.io',
+};
+
+/**
+ * Default platform trading fee (ratio). Demo mode always charges this; live
+ * mode charges the server's configured fee (MetaResponse.platformFeeRate).
+ */
 export const PLATFORM_FEE_RATE = 0.008;
 
 export function isChainId(v: unknown): v is ChainId {

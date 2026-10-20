@@ -4,6 +4,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   Account,
+  AppMode,
+  LiveStatus,
   AppNotification,
   CalloutFilter,
   ChainId,
@@ -33,11 +35,21 @@ import type {
   WalletTag,
   WatchlistItem,
 } from '@trenchscope/shared';
+import type { Connection, VersionedTransaction } from '@solana/web3.js';
+import type { LiveConfig } from './live/config';
 import type { Engine } from './sim/engine';
 import type { TokenState, WalletState, World } from './sim/world';
 import type { Hub } from './ws/hub';
 
 export interface AppConfig {
+  /** live = real Solana data and trading; demo = the market simulator with paper balances. */
+  mode: AppMode;
+  /** Live-mode settings (null in demo mode). */
+  live: LiveConfig | null;
+  /** Reasons live features are disabled (missing credentials), surfaced in live status. */
+  liveProblems: string[];
+  /** Public URL of the other deployment (the demo site, from live mode), shown in the UI. */
+  demoUrl: string | null;
   port: number;
   host: string;
   /** Directory for snapshots. */
@@ -89,6 +101,16 @@ export interface AccountsApi {
   recordTradeVolume(accountId: string, volumeUsd: number, platformFeeUsd: number): void;
   /** Push current native balance of a wallet to its owner. */
   pushBalance(accountId: string, chain: ChainId): void;
+  /** Live mode: the embedded wallet behind an account's chain wallet (null in demo mode or before provisioning). */
+  walletRef(accountId: string, chain: ChainId): EmbeddedWalletRef | null;
+  /** Whether the account has a second factor (TOTP) enabled. */
+  hasSecondFactor(accountId: string): boolean;
+  /** Check a TOTP code for a sensitive action (withdrawals, whitelist changes); false when 2FA is off or the code is wrong. */
+  verifySecondFactor(accountId: string, code: string): boolean;
+  /** Whether `address` is a whitelisted withdrawal destination of the account, past its activation delay. */
+  canWithdrawTo(accountId: string, chain: ChainId, address: string): boolean;
+  /** Durable, append-only audit record of a security- or money-relevant action. */
+  audit(accountId: string | null, action: string, detail: Record<string, unknown>): void;
   serialize(): unknown;
   restore(data: unknown): void;
 }
@@ -141,6 +163,54 @@ export interface MarketApi {
   adopt(t: TokenState): void;
 }
 
+/**
+ * Where market state comes from: the simulator (demo) or the live chain feed.
+ * Both write into the same World ledger, so analytics and trading are shared.
+ */
+export interface MarketSource extends MarketApi {
+  readonly mode: AppMode;
+  /** Register tickers and listeners (before any module restores state). */
+  install(): void;
+  /** Fresh start without a snapshot: seed + warm up (demo) or nothing to do (live). */
+  bootstrap(): void;
+  /** Start real-time sources (live feed connections); the simulator runs on engine ticks. */
+  start(): void;
+  /** Close real-time sources. */
+  stop(): Promise<void>;
+  /** Health of the live stack (null in demo mode). */
+  liveStatus(): LiveStatus | null;
+  serialize(): unknown;
+  restore(data: unknown): void;
+}
+
+/** An account's embedded wallet held by the key-management provider (never a raw key). */
+export interface EmbeddedWalletRef {
+  chain: ChainId;
+  address: string;
+  /** Provider that holds the key ('turnkey', or 'local-dev' in development). */
+  provider: string;
+  /** Provider-side identifier (e.g. Turnkey wallet / sub-organization id). */
+  providerWalletId: string;
+}
+
+/** Signs for embedded wallets; the platform never sees private keys (local-dev excepted). */
+export interface SignerApi {
+  readonly provider: string;
+  /** Provision a new wallet for an account. */
+  createWallet(accountId: string, chain: ChainId): Promise<EmbeddedWalletRef>;
+  /** Sign a transaction with the wallet (the provider enforces its signing policies). */
+  signTransaction(ref: EmbeddedWalletRef, tx: VersionedTransaction): Promise<VersionedTransaction>;
+}
+
+/** Live-mode services shared by the live market, trading and accounts (null in demo mode). */
+export interface LiveServices {
+  config: LiveConfig;
+  /** Solana RPC (null when SOLANA_RPC_URL is unset). */
+  connection: Connection | null;
+  /** Embedded-wallet signer (null when no provider is configured). */
+  signer: SignerApi | null;
+}
+
 export interface AppContext {
   config: AppConfig;
   world: World;
@@ -149,7 +219,9 @@ export interface AppContext {
   accounts: AccountsApi;
   analytics: AnalyticsApi;
   trading: TradingApi;
-  market: MarketApi;
+  market: MarketSource;
+  /** Live-mode services; null in demo mode. */
+  live: LiveServices | null;
 }
 
 // ---------------------------------------------------------------------------
