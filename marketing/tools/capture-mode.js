@@ -9,6 +9,8 @@
     /^\s*Faucet\s*$/,
     /^\s*Top up\s*$/,
     /^\s*Your (paper )?wallets are funded on every chain\.?\s*$/,
+    /^\s*Live\s*$/, // the green "Live" pills: demo data is not live
+    /^\s*\d+\s?ms\s*$/, // the status bar's ping
   ];
   // In-place rewrites of sim-only phrasing into the live product's wording.
   const REPLACE = [
@@ -27,6 +29,10 @@
     [/\bpaper trades?\b/gi, (m) => (m.endsWith('s') ? 'trades' : 'trade')],
     [/\bpaper portfolio\b/gi, 'portfolio'],
     [/^guest_[a-z0-9]+$/, 'demo'],
+    [/\s*·\s*\d+\s?ms\b/g, ''], // simulated latency in fill toasts
+    // Fictional demo venue names read as real brands; show the generic role instead.
+    [/\b(Moonpit|Bonkfire|Rayforge|FourPad|BNB Rocket|ClawLab|BaseDrop|EtherForge)\b/g, 'launchpad'],
+    [/\bTrenchSwap\b/g, 'dex'],
   ];
   const ATTRS = ['title', 'aria-label', 'placeholder'];
 
@@ -64,6 +70,11 @@
   }
 
   function start() {
+    // Chain marks render in the chains' brand colours; neutralise them (ledger §7.11, F-7).
+    const css = document.createElement('style');
+    css.textContent = ['Solana', 'BNB Chain', 'Base', 'Ethereum']
+      .map((n) => `span[role="img"][aria-label="${n}"]`).join(',') + '{background:#2A303B!important;color:#E6E9F0!important}';
+    document.head.appendChild(css);
     walk(document.body);
     new MutationObserver((muts) => {
       for (const m of muts) {
