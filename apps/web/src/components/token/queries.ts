@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ChainId, CreateOrderRequest, Order, Position, Resolution, TokenDetail, Trade } from '@trenchscope/shared';
+import type { ChainId, CreateOrderRequest, Order, Position, Resolution, Signal, TokenDetail, Trade } from '@trenchscope/shared';
 import { invalidateTradingQueries } from '@/hooks/useUserChannel';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { api, ApiError } from '@/lib/api';
@@ -25,6 +25,7 @@ export const tokenKeys = {
   position: (chain: ChainId, address: string, wallet: string | null) => ['token-position', chain, address, wallet] as const,
   orders: (chain: ChainId, address: string, status: 'open' | 'history') => ['orders', 'token', chain, address, status] as const,
   fills: (chain: ChainId, address: string) => ['portfolio', 'token-fills', chain, address] as const,
+  signals: (chain: ChainId, address: string) => ['token-signals', chain, address] as const,
   quote: (q: object) => ['quote', q] as const,
 };
 
@@ -51,7 +52,8 @@ export function useTokenDetail(chain: ChainId, address: string) {
 
 /**
  * The single `token:<chain>:<address>` subscription of the page: 'token'
- * updates the detail cache, 'trades' and 'candle' fan out through the feed.
+ * updates the detail cache, 'trades' and 'candle' fan out through the feed,
+ * 'signals' join the token's signal list (chart markers).
  */
 export function useTokenStream(chain: ChainId, address: string, resolution: Resolution, feed: TokenFeed, enabled: boolean): void {
   const qc = useQueryClient();
@@ -59,6 +61,35 @@ export function useTokenStream(chain: ChainId, address: string, resolution: Reso
     if (type === 'token') qc.setQueryData(tokenKeys.detail(chain, address), data as TokenDetail);
     else if (type === 'trades') feed.pushTrades(data as Trade[]);
     else if (type === 'candle') feed.pushCandle(data as CandleEvent);
+    else if (type === 'signals' && Array.isArray(data)) qc.setQueryData<Signal[]>(tokenKeys.signals(chain, address), (prev) => mergeTokenSignals(prev, data as Signal[]));
+  });
+}
+
+/** Signals kept per token page (the server returns at most this many). */
+export const TOKEN_SIGNALS_CAP = 200;
+
+/** Merge pushed signals into the list newest first, without duplicates (an unloaded list stays unloaded). */
+export function mergeTokenSignals(prev: Signal[] | undefined, incoming: Signal[]): Signal[] | undefined {
+  if (!prev) return prev;
+  const byId = new Map(prev.map((s) => [s.id, s]));
+  for (const s of incoming) byId.set(s.id, s);
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1)).slice(0, TOKEN_SIGNALS_CAP);
+}
+
+/**
+ * The token's signals newest first (chart markers): REST once, then kept
+ * current by the page's token channel; polls only while it is down.
+ */
+export function useTokenSignals(chain: ChainId, address: string, enabled = true) {
+  const conn = useConnectionState();
+  return useQuery<Signal[]>({
+    queryKey: tokenKeys.signals(chain, address),
+    queryFn: () => api.tokenSignals(chain, address, TOKEN_SIGNALS_CAP),
+    enabled: enabled && !!address,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: conn === 'open' ? false : 30_000,
+    retry: 1,
   });
 }
 

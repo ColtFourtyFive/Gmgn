@@ -159,6 +159,7 @@ export const api = {
     get<Position[]>(`/${chain}/tokens/${address}/top-traders`, q),
   earlyBuyers: (chain: ChainId, address: string) => get<EarlyBuyersResponse>(`/${chain}/tokens/${address}/early-buyers`),
   dev: (chain: ChainId, address: string) => get<DevInfo>(`/${chain}/tokens/${address}/dev`),
+  tokenSignals: (chain: ChainId, address: string, limit?: number) => get<Signal[]>(`/${chain}/tokens/${address}/signals`, { limit }),
   wallet: (chain: ChainId, address: string) => get<WalletProfile>(`/${chain}/wallets/${address}`),
   walletHoldings: (chain: ChainId, address: string, q: { includeClosed?: boolean; sort?: string; limit?: number } = {}) =>
     get<TokenPositionRow[]>(`/${chain}/wallets/${address}/holdings`, { ...q, includeClosed: q.includeClosed ? 1 : undefined }),

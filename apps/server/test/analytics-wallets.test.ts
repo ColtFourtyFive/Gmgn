@@ -1335,6 +1335,35 @@ describe('realtime channels', () => {
     expect(pushed).toHaveLength(2);
     expect((pushed[1].data as Signal[])[0].kind).toBe('migration');
   });
+
+  it("serves a token's signals newest first and pushes new ones on its token channel (chart markers)", async () => {
+    const s = mkWallet();
+    s.tags.add('smart');
+    const k = mkWallet('sol', { label: 'Caller' });
+    k.tags.add('kol');
+    const t = mkToken();
+    const other = mkToken();
+    buy(s, t, 0.5);
+    buy(s, other, 0.5);
+    world.now += 1_000;
+    world.emit('kolCall', t, k);
+
+    const res = await call<Signal[]>(`/api/sol/tokens/${t.address}/signals`);
+    expect(res.status).toBe(200);
+    expect(res.body.map((x) => x.kind)).toEqual(['kol_call', 'smart_buy']);
+    expect(res.body.every((x) => x.token.address === t.address)).toBe(true);
+    expect((await call<Signal[]>(`/api/sol/tokens/${t.address}/signals?limit=1`)).body).toHaveLength(1);
+    expect((await call(`/api/sol/tokens/${t.address}/signals?limit=0`)).status).toBe(400);
+    expect((await call(`/api/bsc/tokens/${t.address}/signals`)).status).toBe(404);
+
+    const c = fakeClient();
+    await c.msg({ op: 'sub', ch: `token:sol:${t.address}` });
+    world.emit('tokenFlag', t, 'boost');
+    world.emit('tokenFlag', other, 'boost');
+    const pushed = c.data('signals', `token:sol:${t.address}`);
+    expect(pushed).toHaveLength(1);
+    expect((pushed[0].data as Signal[]).map((x) => [x.kind, x.token.address])).toEqual([['boost', t.address]]);
+  });
 });
 
 // ---------------------------------------------------------------------------

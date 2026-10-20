@@ -107,6 +107,7 @@ export class SignalEngine {
   private calls = new Map<string, Ring<StoredSignal>>();
   private tok = new Map<string, TokSig>();
   private spikeDirty = new Set<string>();
+  private listeners = new Set<(s: Signal) => void>();
   private seq = 0;
   /** Count of signals created (diagnostics). */
   created = 0;
@@ -176,12 +177,37 @@ export class SignalEngine {
     const list = this.byToken.get(t.address);
     if (list) list.push(s);
     else this.byToken.set(t.address, [s]);
-    const ch = `signals:${t.chain}`;
-    if (!this.ctx.engine.warming && this.ctx.hub.hasSubscribers(ch)) {
-      const dto = this.toDto(s);
-      if (dto) this.ctx.hub.publish(ch, 'signals', [dto]);
+    if (!this.ctx.engine.warming) {
+      // The chain feed, the token page's chart markers and in-app subscriptions share one DTO.
+      const ch = `signals:${t.chain}`;
+      const tch = `token:${t.chain}:${t.address}`;
+      const { hub } = this.ctx;
+      const chain = hub.hasSubscribers(ch);
+      const token = hub.hasSubscribers(tch);
+      const dto = chain || token || this.listeners.size > 0 ? this.toDto(s) : null;
+      if (dto) {
+        if (chain) hub.publish(ch, 'signals', [dto]);
+        if (token) hub.publish(tch, 'signals', [dto]);
+        for (const l of this.listeners) l(dto);
+      }
     }
     return s;
+  }
+
+  /** Called with every signal fired once the engine is live (never during warmup); returns an unsubscribe. */
+  onSignal(listener: (s: Signal) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** A token's stored signals, newest first. */
+  forToken(token: string, limit: number): StoredSignal[] {
+    const list = this.byToken.get(token);
+    if (!list) return [];
+    return list
+      .slice()
+      .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1))
+      .slice(0, limit);
   }
 
   // -------------------------------------------------------------------------

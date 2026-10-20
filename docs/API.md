@@ -50,6 +50,7 @@ current `low` tier can fail to land.
 | GET | `/api/:chain/tokens/:address/top-traders` | `tag?`, `sort?` = `pnl\|realized\|unrealized\|bought\|sold`, `order?`, `limit?` | `Position[]` |
 | GET | `/api/:chain/tokens/:address/early-buyers` | | `EarlyBuyersResponse`: the first `EARLY_BUYERS_LIMIT` (70) distinct buyers by rank, and status counts |
 | GET | `/api/:chain/tokens/:address/dev` | | `DevInfo` |
+| GET | `/api/:chain/tokens/:address/signals` | `limit?` (default 200, max 500) | `Signal[]` newest first: the token's signals the chain's signal rings still hold (chart markers); later ones arrive on `token:<chain>:<address>` as `signals` |
 | GET | `/api/:chain/wallets/:address` | | `WalletProfile` |
 | GET | `/api/:chain/wallets/:address/holdings` | `includeClosed?` (`1`), `sort?` = `value\|pnl\|recent`, `limit?` (default 200, max 1000) | `TokenPositionRow[]` |
 | GET | `/api/:chain/wallets/:address/activity` | `type?` = `all\|buy\|sell`, `limit?`, `before?`, `beforeId?` | `FeedItem[]` (with `positionEvent`; paging: see below) |
@@ -319,6 +320,7 @@ the web client normalizes them.
 | `token:<chain>:<address>` | `token` | `TokenDetail` | every 1s while trades happen |
 |  | `trades` | `Trade[]` (oldest first within batch) | batched ~250ms |
 |  | `candle` | `{ resolution, candle: Candle }` | on change; params `{ resolution }` |
+|  | `signals` | `Signal[]` | when the token fires a signal (chart markers) |
 | `feed:<chain>:<smart\|kol\|follow\|all>` | `feed` | `FeedItem[]` | batched ~500ms (`follow` needs auth) |
 | `signals:<chain>` | `signals` | `Signal[]` | on trigger |
 | `wallet:<chain>:<address>` | `trades` | `Trade[]` | batched ~500ms |

@@ -1336,6 +1336,7 @@ export interface MetaResponse {
  *   token:<chain>:<address>        -> 'token'     TokenDetail every 1s
  *                                   -> 'trades'    Trade[] batches (~250ms)
  *                                   -> 'candle'    { resolution, candle } (params: { resolution })
+ *                                   -> 'signals'   Signal[] when the token fires a signal
  *   feed:<chain>:<smart|kol|follow|all> -> 'feed' FeedItem[] batches
  *   signals:<chain>                -> 'signals'   Signal[] batches
  *   wallet:<chain>:<address>       -> 'trades'    Trade[] batches of that wallet

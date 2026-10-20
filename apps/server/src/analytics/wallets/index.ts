@@ -976,6 +976,17 @@ export class WalletAnalytics {
     return out;
   }
 
+  /** One token's signals newest first (whatever the chain rings still hold for it; chart markers). */
+  tokenSignals(t: TokenState, limit = 200): Signal[] {
+    const lim = Math.max(1, Math.min(500, Math.floor(limit)));
+    const out: Signal[] = [];
+    for (const s of this.signalEngine.forToken(t.address, lim)) {
+      const dto = this.signalDto(s);
+      if (dto) out.push(dto);
+    }
+    return out;
+  }
+
   /**
    * A wallet's calls (kol_call signals) newest first, with hit rates over the
    * calls made in the last 7d / 30d (hit = maxMultiple >= 2) and their mean
