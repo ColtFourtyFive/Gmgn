@@ -6,7 +6,7 @@
 // limiting are tested offline and deterministically.
 
 import { describe, expect, it } from 'vitest';
-import { EvmSecurityChecker, toTokenSecurityFlags, type EvmSecurityCheckerOptions } from '../src/live/evm/security';
+import { EvmSecurityChecker, toTokenSecurityFlags, type EvmSecurityCheckerOptions, type PoolRef } from '../src/live/evm/security';
 import { loadRecording, replay, type Recording } from './fixtures/evm/security/replay';
 
 function setup(name: string, opts: Partial<EvmSecurityCheckerOptions> = {}, override?: Parameters<typeof replay>[1]) {
@@ -131,6 +131,42 @@ describe('EvmSecurityChecker on recorded tokens', () => {
     expect(rep.ownerRole).toBe('none');
     expect(rep.isRenounced).toBe(true);
     expect(rep.flags).toMatchObject({ mintable: false, blacklist: false, pausable: false, taxModifiable: false });
+  });
+});
+
+describe('RoundTripSimulator hook', () => {
+  it('runs a registered venue simulator on the best pool it finds (e.g. a bonding curve)', async () => {
+    const { rec, checker } = setup('robinhood-flap-kek-1-tax');
+    const curve: PoolRef = { venue: 'test-curve', address: '0x00000000000000000000000000000000000c0e5e', token: rec.token as `0x${string}`, quote: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as const, quoteReserve: 10n ** 30n, fee: null };
+    const seen: string[] = [];
+    checker.registerSimulator({
+      id: 'test-curve',
+      discover: async () => [curve],
+      accepts: (p) => p.venue === 'test-curve',
+      run: async (_ctx, pool) => {
+        seen.push(pool.address);
+        const leg = { ok: true, expected: 100n, actual: 80n, gasUsed: 1n, error: null, reason: null };
+        return { venue: 'test-curve', pool, amountIn: 1n, buy: leg, transfer: null, sell: { ...leg, ok: false, reason: 'blocked' }, quoteOut: 0n, expectedQuoteOut: 0n, buyTax: 0.2, sellTax: null, tokenSellTax: null, effectiveSellTax: null, transferTax: null, isHoneypot: true, cannotBuy: false, holderSells: [], notes: ['sell blocked on the curve'] };
+      },
+    });
+    // The orchestrator passes the token's venue as the main pool (it outranks template and discovered pools).
+    const rep = await checker.check('robinhood', rec.token, { pools: [curve] });
+    expect(seen).toEqual([curve.address]);
+    expect(rep.simulation?.venue).toBe('test-curve');
+    expect(rep.isHoneypot).toBe(true);
+    expect(rep.buyTax).toBe(0.2);
+    // the V2 measurement is not run once the registered venue answered conclusively
+    expect(rep.sources.some((s) => s.detail?.startsWith('uniswap-v2:'))).toBe(false);
+  });
+
+  it('uses a caller-supplied main pool first', async () => {
+    const first = await setup('robinhood-flap-kek-1-tax').check();
+    const pool: PoolRef = first.simulation!.pool;
+    const { rec, checker, r } = setup('robinhood-flap-kek-1-tax');
+    const rep = await checker.check('robinhood', rec.token, { pools: [pool] });
+    expect(r.misses).toEqual([]);
+    expect(rep.simulation?.pool.address).toBe(pool.address);
+    expect(rep.sellTax).toBe(0.01);
   });
 });
 

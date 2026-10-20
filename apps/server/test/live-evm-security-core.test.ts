@@ -53,9 +53,10 @@ describe('bytecode analysis', () => {
     // SELFDESTRUCT (ff) and DELEGATECALL (f4) bytes after STOP without a JUMPDEST are data.
     const data = analyzeBytecode('0x6001600201 00 fff4f1 00'.replace(/ /g, '') as Hex);
     expect(data.opcodes).toMatchObject({ selfdestruct: false, delegatecall: false, call: false });
-    // ... but reachable again after a JUMPDEST
-    const live = analyzeBytecode('0x00 5b ff'.replace(/ /g, '') as Hex);
-    expect(live.opcodes.selfdestruct).toBe(true);
+    // ... reachable again at a JUMPDEST some PUSH targets (PUSH1 4 JUMP STOP JUMPDEST SELFDESTRUCT)
+    expect(analyzeBytecode('0x600456005bff').opcodes.selfdestruct).toBe(true);
+    // ... but not at a stray 0x5b inside appended data that nothing jumps to
+    expect(analyzeBytecode('0x6003565b00 fe 5b ff'.replace(/ /g, '') as Hex).opcodes.selfdestruct).toBe(false);
     // PUSH data is skipped: 0x7fff... is PUSH32 of 0xff bytes
     expect(analyzeBytecode(`0x7f${'ff'.repeat(32)}00`).opcodes.selfdestruct).toBe(false);
     // Solidity CBOR metadata: a2 64 'ipfs' 58 22 <34 bytes> 64 'solc' 43 <3 bytes> 0033

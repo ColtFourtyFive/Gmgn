@@ -336,7 +336,8 @@ export class EvmSecurityChecker {
     for (const h of hints) {
       const owner = this.simulators.find((s) => s.accepts(h));
       if (owner) resolved.push(h);
-      else
+      else if (h.venue === 'unknown')
+        // A bare pair / pool address (e.g. a template's main pool): let a simulator classify it.
         for (const s of this.simulators) {
           if (!s.resolve) continue;
           const r = await s.resolve(ctx, token, h).catch(() => null);

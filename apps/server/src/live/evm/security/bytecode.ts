@@ -95,20 +95,40 @@ export function detectMinimalProxy(code: Hex): MinimalProxy | null {
   return null;
 }
 
+/** Every PUSH1..PUSH4 immediate: compilers push jump destinations as constants. */
+function pushedConstants(bytes: Uint8Array, end: number): Set<number> {
+  const out = new Set<number>();
+  for (let i = 0; i < end; i++) {
+    const op = bytes[i];
+    if (op >= PUSH1 && op <= PUSH32) {
+      const n = op - PUSH1 + 1;
+      if (n <= 4) {
+        let v = 0;
+        for (let k = 1; k <= n; k++) v = v * 256 + (bytes[i + k] ?? 0);
+        if (v < end) out.add(v);
+      }
+      i += n;
+    }
+  }
+  return out;
+}
+
 /**
  * Walks the bytecode once. Code after a terminating opcode is unreachable until
- * the next JUMPDEST, which skips embedded data (constant strings, immutables
- * tables, metadata) so stray 0xff / 0xf4 bytes there are not read as opcodes.
+ * a JUMPDEST that some PUSH targets, which skips embedded data (constant
+ * strings, immutables tables, metadata, appended data whose bytes happen to
+ * contain 0x5b) so stray 0xff / 0xf4 bytes there are not read as opcodes.
  */
 export function analyzeBytecode(code: Hex | undefined | null): BytecodeAnalysis {
   const bytes = code && code !== '0x' ? hexToBytes(code) : new Uint8Array();
   const end = codeLength(bytes);
+  const targets = pushedConstants(bytes, end);
   const selectors = new Set<string>();
   const opcodes: OpcodeFlags = { selfdestruct: false, delegatecall: false, call: false, callcode: false, staticcall: false, create: false, create2: false };
   let reachable = true;
   for (let i = 0; i < end; i++) {
     const op = bytes[i];
-    if (op === JUMPDEST) reachable = true;
+    if (op === JUMPDEST && targets.has(i)) reachable = true;
     if (reachable) {
       if (op === 0xff) opcodes.selfdestruct = true;
       else if (op === 0xf4) opcodes.delegatecall = true;

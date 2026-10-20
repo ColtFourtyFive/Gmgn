@@ -2,7 +2,8 @@
 // prints a table. Read-only: eth_call / eth_getCode / eth_getStorageAt and
 // keyless HTTP APIs only.
 // Usage: NODE_USE_ENV_PROXY=1 npx tsx scripts/evm-security-check.ts [--chain base] [--only label] [--discover]
-//        [--record <dir>] [--json]
+//        [--token <chain>:<address>] [--record <dir>] [--json]
+//   --token     checks one token instead of the built-in list
 //   --discover  also checks the newest pools' tokens per chain (GeckoTerminal new_pools)
 //   --record    writes each token's RPC + HTTP traffic as a replayable fixture
 
@@ -37,6 +38,7 @@ const TARGETS: Target[] = [
   { chain: 'robinhood', label: 'Pons V2 HUST', address: '0xf6a78f0fa7675f77e37aa8c57b70307acfe8ae4a' },
   { chain: 'robinhood', label: 'pools.trade MITSU', address: '0x1cad5848e7556fa9272302264e3cb2904bde77ac' },
   { chain: 'robinhood', label: 'CREORA (Uniswap V2)', address: '0x3c803f4badcc2eb6b16d0887db2a703695ca822b' },
+  { chain: 'robinhood', label: 'ENDAI (buys only)', address: '0xC882f10529a5518ee3393Af5a80e9fF00d38d44b' },
   // BNB Chain
   { chain: 'bsc', label: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955' },
   { chain: 'bsc', label: 'WBNB', address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' },
@@ -126,7 +128,10 @@ for (const id of EVM_CHAIN_IDS) {
 }
 const checker = new EvmSecurityChecker({ clients, fetch: recordingFetch, enable: {} });
 
-let targets = TARGETS.filter((t) => (!chainFilter || t.chain === chainFilter) && (!only || t.label.toLowerCase().includes(only.toLowerCase())));
+const adhoc = opt('--token');
+let targets = adhoc
+  ? [{ chain: adhoc.split(':')[0] as EvmChainId, label: adhoc.split(':')[1].slice(0, 10), address: adhoc.split(':')[1] }]
+  : TARGETS.filter((t) => (!chainFilter || t.chain === chainFilter) && (!only || t.label.toLowerCase().includes(only.toLowerCase())));
 if (args.includes('--discover')) for (const c of EVM_CHAIN_IDS) if (!chainFilter || c === chainFilter) targets = targets.concat(await discover(c));
 
 const yn = (v: boolean | null) => (v === null ? '—' : v ? 'yes' : 'no');
