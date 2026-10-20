@@ -62,10 +62,10 @@ def run(edit):
         args += ["-loop", "1", "-i", o["png"]]
         fade = o.get("fade", 0.1)
         d = o["t1"] - o["t0"]
-        filters.append(
-            f"[{idx}:v]format=rgba,trim=duration={d + 0.05},setpts=PTS-STARTPTS+{o['t0']}/TB,"
-            f"fade=t=in:st={o['t0']}:d={fade}:alpha=1,fade=t=out:st={max(o['t0'], o['t1'] - fade)}:d={fade}:alpha=1[o{j}]"
-        )
+        # fade 0 = hard in/out, so an overlay at t0=0 is fully visible on frame 0 (the thumbnail).
+        fades = (f",fade=t=in:st={o['t0']}:d={fade}:alpha=1,fade=t=out:st={max(o['t0'], o['t1'] - fade)}:d={fade}:alpha=1"
+                 if fade > 0 else "")
+        filters.append(f"[{idx}:v]format=rgba,trim=duration={d + 0.05},setpts=PTS-STARTPTS+{o['t0']}/TB{fades}[o{j}]")
         filters.append(f"[{cur}][o{j}]overlay=0:0:enable='between(t,{o['t0']},{o['t1']})':eof_action=pass[c{j}]")
         cur = f"c{j}"
         idx += 1
