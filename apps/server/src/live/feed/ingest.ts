@@ -1,5 +1,7 @@
-// Feed events -> World. Turns PumpPortal create / trade / migrate events into
-// the ledger's external-ingest calls:
+// Feed events -> World. Turns create / trade / migrate events, from PumpPortal's
+// frames or from the programs' logs (feed/solana/map.ts makes the same events,
+// with what the logs add: exact wallet amounts, real reserves, block time, slot,
+// the migration's pool), into the ledger's external-ingest calls:
 //   create   addExternalToken (launchpad 'pump', dev = creator, created at receipt)
 //            registered at its launch curve (initial liquidity, launch market cap),
 //            then the creator's initial buy is booked as the token's first trade
@@ -9,7 +11,10 @@
 //   migrate  completeCurve + migrateExternal into the token's canonical PumpSwap pool
 // The trader's newTokenBalance is passed as the authoritative post-trade balance.
 // Events are deduplicated by signature (a bounded window), and the World again by
-// (signature, wallet, token), since our own fills arrive from a second source.
+// (signature, wallet, token), since our own fills arrive from a second source and
+// both feeds can deliver the same transaction. An event's block time is kept within
+// [the token's last trade, now]; a trade from an older slot than the token's state
+// (a gap's catch-up) is booked without its reserves.
 //
 // Units, as checked against mainnet transactions (the pump program's TradeEvent):
 //   - the feed's solAmount for a curve trade is the SOL into / out of the curve. Buyers pay the
@@ -26,7 +31,7 @@
 import { LIVE_DEXES, LIVE_LAUNCHPADS, type LaunchpadConfig } from '@trenchscope/shared';
 import type { PoolRuntime, TokenState, World } from '../../sim/world';
 import { classifyNarrative } from '../enrich/narratives';
-import type { CreateEvent, FeedEvent, MigrateEvent, TradeEvent } from './messages';
+import type { CreateEvent, FeedEvent, MigrateEvent, ReportedReserves, TradeEvent } from './messages';
 
 export const PUMP: LaunchpadConfig = LIVE_LAUNCHPADS.find((l) => l.id === 'pump')!;
 const PUMPSWAP = LIVE_DEXES.find((d) => d.id === 'pumpswap')!;
@@ -98,6 +103,14 @@ export class FeedIngestor {
   private readonly seen = new Set<string>();
   /** Mints whose feed events must not reach the World (a launch quoted in another mint). */
   private readonly ignoredMints = new Set<string>();
+  /**
+   * Highest slot applied per mint (program-log events carry one; insertion order = age). A trade from
+   * an older slot (a gap's catch-up, replayed after newer trades) is booked without its reserves: the
+   * curve / pool already holds a later state.
+   */
+  private readonly slots = new Map<string, number>();
+  /** Trades booked without their (older) reserves. */
+  staleReserves = 0;
 
   constructor(
     private readonly world: World,
@@ -163,16 +176,21 @@ export class FeedIngestor {
     if (!this.firstSight(e)) return { status: 'duplicate' };
     const known = this.world.tokens.get(e.mint);
     if (known) return { status: 'ok', token: known };
-    const at = this.opts.now();
+    // The block time when the source has it (never in the future of the World's clock), else receipt.
+    const now = this.opts.now();
+    const at = e.at !== undefined && e.at > 0 ? Math.min(e.at, now) : now;
     // Register at the launch state of the curve: the reported (post-buy) reserves less the creator's
     // initial buy, along the constant product (pump.fun fees are charged on top of the curve).
     let pre = { virtualNative: PUMP.virtualNative, virtualTokens: PUMP.virtualTokens };
-    const post = e.vSolInBondingCurve && e.vTokensInBondingCurve ? pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve) : null;
+    const post = reportedCurve(e);
     if (post) {
       const vTokens = post.virtualTokens + e.initialBuy;
       pre = { virtualTokens: vTokens, virtualNative: (post.virtualNative * post.virtualTokens) / vTokens };
     }
     const start = pumpCurveFromVirtual(pre.virtualNative, pre.virtualTokens);
+    // Real reserves reported with the launch (program logs) are exact, mayhem curves included.
+    if (post && e.realSolInBondingCurve !== undefined) start.realNative = Math.max(0, post.realNative - e.solAmount);
+    if (post && e.realTokensInBondingCurve !== undefined) start.realTokens = post.realTokens + e.initialBuy;
     const symbol = e.symbol || e.mint.slice(0, 4).toUpperCase();
     const name = e.name || symbol;
     const { narrative, glyph } = classifyNarrative(name, symbol);
@@ -186,7 +204,7 @@ export class FeedIngestor {
       description: '',
       imageUrl: null,
       metadataUri: e.uri || null,
-      creator: e.trader,
+      creator: e.creator ?? e.trader,
       createdAt: at,
       decimals: PUMP_DECIMALS,
       totalSupply: e.mayhem ? PUMP_MAYHEM_SUPPLY : PUMP.totalSupply,
@@ -198,16 +216,18 @@ export class FeedIngestor {
       logoGlyph: glyph,
     });
     this.stats.creates++;
+    if (e.slot !== undefined) this.noteSlot(e.mint, e.slot);
     // A mayhem launch (CreateV2) mints the extra billion straight to the mayhem agent: a holder from the start.
     if (e.mayhem) this.world.syncHolderBalance(token, PUMP_MAYHEM_AGENT, PUMP_MAYHEM_SUPPLY - PUMP.totalSupply);
     if (e.initialBuy > 0) {
       this.world.recordExternalTrade(token, {
         wallet: e.trader,
         side: 'buy',
-        nativeAmount: walletSol('buy', e.solAmount, e.trader === PUMP_MAYHEM_AGENT ? 0 : feeRate),
+        nativeAmount: e.walletSol ?? walletSol('buy', e.solAmount, e.trader === PUMP_MAYHEM_AGENT ? 0 : feeRate),
         tokenAmount: e.initialBuy,
         at,
         txHash: e.signature,
+        ...(e.slot !== undefined ? { slot: e.slot } : {}),
         ...(post ? { curve: post } : {}),
         walletTokenBalance: e.newTokenBalance ?? e.initialBuy,
       });
@@ -233,20 +253,28 @@ export class FeedIngestor {
       return { status: 'ignored', reason: 'not a SOL-quoted pump.fun curve' };
     }
     if (!this.firstSight(e)) return { status: 'duplicate' };
-    const at = this.opts.now();
+    // The block time when the source has it, kept within [the token's last trade, now] so candles and
+    // minute buckets stay in order whichever source delivered the earlier trades.
+    const now = this.opts.now();
+    const at = e.at !== undefined && e.at > 0 ? Math.min(now, Math.max(e.at, t.lastTradeAt)) : now;
     // A PumpSwap trade of a token we still have on its curve: the migration event was missed.
     if (!onCurve && !t.pool && t.launchpad === PUMP.id) this.migrateToPool(t, at);
     if (t.dormant) t.dormant = false;
-    const reserves = this.reservesAfter(t, e, onCurve);
+    const stale = e.slot !== undefined && (this.slots.get(e.mint) ?? -1) > e.slot;
+    if (stale) this.staleReserves++;
+    else if (e.slot !== undefined) this.noteSlot(e.mint, e.slot);
+    const reserves = stale ? {} : this.reservesAfter(t, e, onCurve);
     const curveTrade = onCurve && !!t.curve && t.status !== 'migrated';
     const trade = this.world.recordExternalTrade(t, {
       wallet: e.trader,
       side: e.side,
-      // PumpSwap amounts are taken as sent: no pump-amm trade could be captured to check their fee basis.
-      nativeAmount: curveTrade ? walletSol(e.side, e.solAmount, this.feeRateFor(t, e.trader)) : e.solAmount,
+      // Exact when the source reports it (program logs). Otherwise PumpSwap amounts are taken as sent:
+      // no PumpPortal pump-amm trade could be captured to check their fee basis.
+      nativeAmount: e.walletSol ?? (curveTrade ? walletSol(e.side, e.solAmount, this.feeRateFor(t, e.trader)) : e.solAmount),
       tokenAmount: e.tokenAmount,
       at,
       txHash: e.signature,
+      ...(e.slot !== undefined ? { slot: e.slot } : {}),
       ...reserves,
       ...(e.newTokenBalance !== undefined ? { walletTokenBalance: e.newTokenBalance } : {}),
     });
@@ -258,6 +286,15 @@ export class FeedIngestor {
     return { status: 'ok', token: t };
   }
 
+  private noteSlot(mint: string, slot: number): void {
+    this.slots.delete(mint);
+    this.slots.set(mint, slot);
+    if (this.slots.size > DEDUPE_WINDOW) {
+      const oldest = this.slots.keys().next().value;
+      if (oldest !== undefined) this.slots.delete(oldest);
+    }
+  }
+
   /** The curve's fee rate for a trader (the mayhem agent trades fee-free). */
   private feeRateFor(t: TokenState, trader: string): number {
     return trader === PUMP_MAYHEM_AGENT ? 0 : (t.curve?.feeRate ?? PUMP.feeRate);
@@ -265,10 +302,11 @@ export class FeedIngestor {
 
   /** The reserves a trade reports, in the World's terms. */
   private reservesAfter(t: TokenState, e: TradeEvent, onCurve: boolean): { curve?: ReturnType<typeof pumpCurveFromVirtual>; pool?: { native: number; tokens: number }; priceNative?: number } {
-    if (onCurve && t.curve && t.status !== 'migrated' && e.vSolInBondingCurve && e.vTokensInBondingCurve) {
-      const curve = pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve);
-      // Mayhem curves move their virtual SOL off the constant product: their real SOL is the flows'.
-      if (isMayhemToken(t)) curve.realNative = Math.max(0, t.curve.realNative + (e.side === 'buy' ? e.solAmount : -e.solAmount));
+    const curve = onCurve && t.curve && t.status !== 'migrated' ? reportedCurve(e) : null;
+    if (curve && t.curve) {
+      // Mayhem curves move their virtual SOL off the constant product: their real SOL is the one the
+      // source reports, else the flows'.
+      if (isMayhemToken(t) && e.realSolInBondingCurve === undefined) curve.realNative = Math.max(0, t.curve.realNative + (e.side === 'buy' ? e.solAmount : -e.solAmount));
       return { curve };
     }
     if (!t.pool) return {};
@@ -288,7 +326,11 @@ export class FeedIngestor {
     }
     if (!this.firstSight(e)) return { status: 'duplicate' };
     if (t.status === 'migrated') return { status: 'duplicate' };
-    this.migrateToPool(t, this.opts.now());
+    const now = this.opts.now();
+    const at = e.at !== undefined && e.at > 0 ? Math.min(now, Math.max(e.at, t.lastTradeAt)) : now;
+    const reported = e.poolNative !== undefined && e.poolTokens !== undefined && e.poolNative > 0 && e.poolTokens > 0 ? { native: e.poolNative, tokens: e.poolTokens, address: e.poolAddress } : undefined;
+    this.migrateToPool(t, at, reported);
+    if (e.slot !== undefined) this.noteSlot(e.mint, e.slot);
     this.stats.migrations++;
     return { status: 'ok', token: t };
   }
@@ -298,19 +340,32 @@ export class FeedIngestor {
    * less the migration fee, against the 206.9M tokens the curve never sold, LP burned. A normal
    * curve's completion state follows from its constant product whatever trades were missed (real
    * SOL 85.005, so 84.990 SOL in the pool on mainnet); a mayhem curve's from its tracked real SOL.
+   * A migration event that reports the pool (program logs) is taken as is.
    */
-  private migrateToPool(t: TokenState, at: number): void {
+  private migrateToPool(t: TokenState, at: number, reported?: { native: number; tokens: number; address?: string }): void {
     if (t.status === 'curve') this.world.completeCurve(t, at);
     const pool: Omit<PoolRuntime, 'createdAt' | 'initialLiquidityUsd'> = {
-      address: this.opts.pumpPoolAddress?.(t.address) ?? '',
+      address: reported?.address || (this.opts.pumpPoolAddress?.(t.address) ?? ''),
       dex: PUMPSWAP.name,
       feeRate: PUMPSWAP.feeRate,
-      native: Math.max(completedCurveSol(t) - Math.max(PUMP.migrationFeeNative, PUMP_MIGRATION_FEE_SOL), 1e-6),
-      tokens: PUMP_POOL_TOKENS,
+      native: reported?.native ?? Math.max(completedCurveSol(t) - Math.max(PUMP.migrationFeeNative, PUMP_MIGRATION_FEE_SOL), 1e-6),
+      tokens: reported?.tokens ?? PUMP_POOL_TOKENS,
       lpBurnedRate: 1,
     };
     this.world.migrateExternal(t, pool, at);
   }
+}
+
+/**
+ * A pump.fun curve's post-trade state as an event reports it: real reserves from the virtual ones
+ * (fixed offsets), or as reported when the source has them (program logs; exact for mayhem curves).
+ */
+function reportedCurve(e: ReportedReserves): ReturnType<typeof pumpCurveFromVirtual> | null {
+  if (!e.vSolInBondingCurve || !e.vTokensInBondingCurve) return null;
+  const c = pumpCurveFromVirtual(e.vSolInBondingCurve, e.vTokensInBondingCurve);
+  if (e.realSolInBondingCurve !== undefined && e.realSolInBondingCurve >= 0) c.realNative = e.realSolInBondingCurve;
+  if (e.realTokensInBondingCurve !== undefined && e.realTokensInBondingCurve >= 0) c.realTokens = e.realTokensInBondingCurve < CURVE_DUST_TOKENS ? 0 : e.realTokensInBondingCurve;
+  return c;
 }
 
 /**

@@ -234,6 +234,33 @@ export async function readPumpPool(connection: Connection, mint: PublicKey, run:
   return { address: poolKey.toBase58(), native: quote + virtualQuote, tokens };
 }
 
+/**
+ * The mint a PumpSwap pool trades, when it is that mint's canonical pool quoted in WSOL (1-2 reads:
+ * the pool, then the mint's decimals unless `decimalsOf` knows them). Null for any other pool.
+ */
+export async function readPoolMint(
+  connection: Connection,
+  pool: PublicKey,
+  run: <T>(fn: () => Promise<T>) => Promise<T>,
+  decimalsOf?: (mint: string) => number | undefined,
+): Promise<{ mint: string; decimals: number } | null> {
+  const sdk = loadPumpSdk();
+  const amm = loadPumpAmmSdk();
+  if (!sdk || !amm) return null;
+  const acc = await run(() => connection.getAccountInfo(pool, 'confirmed'));
+  if (!acc || !acc.owner.equals(amm.PUMP_AMM_PROGRAM_ID)) return null;
+  const p = amm.PUMP_AMM_SDK.decodePoolNullable(acc);
+  if (!p || p.quoteMint.toBase58() !== 'So11111111111111111111111111111111111111112') return null;
+  if (!sdk.canonicalPumpPoolPda(p.baseMint).equals(pool)) return null;
+  const mint = p.baseMint.toBase58();
+  let decimals = decimalsOf?.(mint);
+  if (decimals === undefined) {
+    const info = await run(() => connection.getParsedAccountInfo(p.baseMint, 'confirmed'));
+    decimals = parseMintAccount(info.value)?.decimals;
+  }
+  return decimals === undefined ? null : { mint, decimals };
+}
+
 export interface HolderBalance {
   owner: string;
   /** UI units. */

@@ -4,7 +4,7 @@ Trenchscope runs in one of two modes, chosen per deployment by `MODE`:
 
 | | `MODE=demo` (default) | `MODE=live` |
 |---|---|---|
-| Market | Deterministic simulator, 4 chains | Real Solana: pump.fun launches, trades and migrations from PumpPortal, on-demand mints from RPC |
+| Market | Deterministic simulator, 4 chains | Real Solana: pump.fun and PumpSwap launches, trades and migrations from the programs' logs (RPC WebSocket) and PumpPortal, on-demand mints from RPC |
 | Balances | Paper wallets with a faucet | Real SOL / SPL in an embedded wallet per account (Turnkey) |
 | Accounts | Guests, username/password | Registered accounts only (10+ character passwords), optional TOTP 2FA, withdrawal whitelist |
 | Persistence | `snapshot.bin` (snapshots) | `trenchscope.db` (SQLite, written through) + snapshot for market state |
@@ -21,20 +21,30 @@ never loaded in the other. Set `DEMO_URL` on the live site to show users a "Try 
 ## 1. Architecture of the live stack
 
 ```
-                PumpPortal WS (wss://pumpportal.fun/api/data)
-                      │ create / buy / sell / migrate (subscribeNewToken, subscribeMigration,
-                      │ subscribeTokenTrade [tracked mints], subscribeAccountTrade [followed / copied / KOL wallets])
-                      ▼
- live/feed/pumpportal.ts ── zod (messages.ts) ── verify.ts ── queue ──► applied on engine ticks (never during a snapshot hold)
-                 live/feed/verify.ts: each launch's curve account read (batched) for its quote mint,
-                                      mayhem flag and fee; launches quoted in another mint dropped
+  Solana RPC WebSocket (SOLANA_WS_URL)                      PumpPortal WS (wss://pumpportal.fun/api/data)
+     │ logsSubscribe({mentions:[pump.fun]}), ({mentions:[PumpSwap]}),   │ create / buy / sell / migrate (subscribeNewToken,
+     │ confirmed: every successful transaction's logs                    │ subscribeMigration; token / account trades only
+     ▼                                                                   │ with a funded PUMPPORTAL_API_KEY)
+ live/feed/solana/client.ts (reconnect, resubscribe, slot gaps)          ▼
+ events.ts: Anchor events of "Program data:" lines (SDK IDLs)     live/feed/pumpportal.ts ── zod (messages.ts)
+ map.ts: CreateEvent / TradeEvent / PostCompleteBuy / migration /             │
+   PumpSwap Buy / Sell -> the same create / trade / migrate events            │
+ source.ts: trades of tokens the World keeps + watched wallets;               │
+   truncated logs read back from event CPIs; gap catch-up (catchup.ts)        │
+     │ launches with their facts (quote mint, mayhem, fee)                    │
+     └──────────────────────────────► verify.ts ◄────────────────────────────┘
+                 live/feed/verify.ts: PumpPortal launches: curve account read (batched) for quote mint, mayhem flag,
+                                      fee; program-log launches decided from their event; other quotes dropped
+                                                           │ queue (bounded; program-log trades shed first)
+                                                           ▼ applied on engine ticks (never during a snapshot hold)
                                                            │
                 live/feed/ingest.ts: create → World.addExternalToken + dev buy
-                                     trade  → World.recordExternalTrade (post-trade curve reserves,
-                                              newTokenBalance, wallet amounts incl. curve fees;
-                                              dedupe by signature)
+                                     trade  → World.recordExternalTrade (post-trade curve / pool reserves,
+                                              newTokenBalance, wallet amounts incl. curve fees, block time
+                                              and slot from logs; dedupe by signature across sources)
                                      migrate→ World.completeCurve + migrateExternal (PumpSwap pool, LP
-                                              burned), then the pool is read back from chain
+                                              burned; as MigrateV2 reported it from logs), then the pool is
+                                              read back from chain
                 live/feed/tracker.ts: cap LIVE_MAX_TRACKED_TOKENS, idle drop, protected tokens pinned
                                                            ▼
                        World ledger ──► analytics (lists, security, holders, signals) ──► REST + WS hub
@@ -106,9 +116,11 @@ Key properties:
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `LIVE_SOLANA_SOURCES` | `logs,pumpportal` | Market-data sources. `logs`: the pump.fun and PumpSwap programs' logs over the RPC WebSocket (`SOLANA_WS_URL`, derived from `SOLANA_RPC_URL`), the **primary** source: launches, migrations and every trade of the tokens the World keeps and of watched wallets, no API key. `pumpportal`: launches and migrations, plus trades with a funded key. Both together are deduplicated by signature. `logs` without a WebSocket URL is reported and PumpPortal runs alone |
+| `LIVE_LOGS_CATCHUP_MINTS` | `10` (0 = off) | After the log stream drops and reconnects, read back the missed slots' transactions of this many tokens (protected first, then the most recently active), on the low-priority RPC budget |
 | `PUMPPORTAL_WS_URL` | `wss://pumpportal.fun/api/data` | Data feed socket |
-| `PUMPPORTAL_API_KEY` | unset | Appended as `?api-key=` (never logged). **Needed for trades**: PumpPortal refuses `subscribeTokenTrade` / `subscribeAccountTrade` without a key funded with at least 0.02 SOL (checked 2026-10-20). Without one only launches and migrations arrive, so streamed tokens' prices, holders and trades stay at their launch state; the feed retries the trade streams every 10 min and on reconnect (`diagnostics().feed.tradeStreams`) |
-| `LIVE_MAX_TRACKED_TOKENS` | `3000` (min 100) | Tokens whose trades are streamed at once (least recently active dropped) |
+| `PUMPPORTAL_API_KEY` | unset | Appended as `?api-key=` (never logged). PumpPortal refuses `subscribeTokenTrade` / `subscribeAccountTrade` without a key funded with at least 0.02 SOL (checked 2026-10-20): with the program-log source running the key is optional; without either, streamed tokens' prices, holders and trades stay at their launch state. The feed retries the trade streams every 10 min and on reconnect (`diagnostics().feed.tradeStreams`) |
+| `LIVE_MAX_TRACKED_TOKENS` | `3000` (min 100) | Tokens whose trades are streamed at once (least recently active dropped); the World keeps at most twice this many (dormant ones pruned) |
 | `LIVE_TOKEN_IDLE_MINUTES` | `30` | Stop streaming a token after this long without a trade (protected tokens excepted) |
 | `LIVE_RPC_RPS` | `5` | RPC requests/s the ingestion and enrichment may spend (page loads go first) |
 | `LIVE_KOL_FILE` | unset | JSON `[{ address, name, twitter? }]` of KOL wallets (labelled and streamed) |
@@ -121,7 +133,7 @@ Key properties:
 | Variable | Default | Meaning |
 |---|---|---|
 | `SOLANA_RPC_URL` | unset → balances, holders, deposits and trading disabled | HTTPS JSON-RPC (Helius, Triton, QuickNode, ...). Must serve `getTokenLargestAccounts` with both token programs indexed (top holders; pump.fun mints are Token-2022): public endpoints refuse it |
-| `SOLANA_WS_URL` | derived from `SOLANA_RPC_URL` | WebSocket RPC (passed to web3.js) |
+| `SOLANA_WS_URL` | derived from `SOLANA_RPC_URL` | WebSocket RPC (passed to web3.js) and the program-log market feed: it must serve `logsSubscribe` with `mentions` (two subscriptions, ~1,000 notifications/s, ~2 MB/s of JSON). Public endpoints are not enough for production (section 10) |
 | `JITO_BLOCK_ENGINE_URL` | `https://mainnet.block-engine.jito.wtf` | Anti-MEV sends (`/api/v1/transactions?bundleOnly=true`) |
 | `PLATFORM_FEE_BPS` | `80` (0.8%, max 300) | Platform fee on every swap |
 | `FEE_WALLET_ADDRESS` | unset → fees not collected | Receives platform fees (must be a funded, rent-exempt system account) |
@@ -194,8 +206,8 @@ encrypted at rest. It is refused when `NODE_ENV=production`, and dev wallets mus
 
 | Host | Used for |
 |---|---|
-| `pumpportal.fun` (WSS) | Market data feed |
-| your RPC host (`SOLANA_RPC_URL`, `SOLANA_WS_URL`) | Balances, holders, authorities, mint lookup, sending, confirmation |
+| `pumpportal.fun` (WSS) | Market data feed (launches, migrations; trades with a funded key) |
+| your RPC host (`SOLANA_RPC_URL`, `SOLANA_WS_URL`) | Program-log market feed (WSS), balances, holders, authorities, mint lookup, sending, confirmation |
 | `lite-api.jup.ag` or `api.jup.ag` | Swap quotes / instructions, prices |
 | `mainnet.block-engine.jito.wtf` (or your regional block engine) | Anti-MEV sends |
 | `api.turnkey.com` | Wallet creation and signing |
@@ -287,10 +299,16 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 - `LOCAL_KEYSTORE_KEY`: development only; changing it orphans the dev wallets.
 
 **Monitoring**
-- Poll `GET /api/meta` → `live`: `feedConnected`, `lastEventAt` (alert if older than ~60 s),
-  `rpcHealthy` (a `getSlot` probe), `tradingEnabled`, `trackedTokens`, `problems`. `GET /api/health`
-  gives tokens, clients and engine trades/s.
-- Logs to watch: `[pumpportal]` reconnects and refusals (a refused trade subscription usually means
+- Poll `GET /api/meta` → `live`: `feedConnected` (any source), `lastEventAt` (alert if older than ~60 s),
+  `rpcHealthy` (a `getSlot` probe), `tradingEnabled`, `trackedTokens`, `problems` (configuration problems
+  plus the sources' current ones: program-log feed refused or disconnected for 30 s, PumpPortal trade
+  streams refused with no program-log feed). `GET /api/health` gives tokens, clients and engine trades/s.
+- `LiveMarket.diagnostics().sources`: per source `connected`, `lastEventAt`, booked events/s; for program
+  logs also notifications/s, decoded events/s by type, failed / duplicate transactions, decode errors,
+  truncated logs recovered, filtered / other-quote / shed / queue-dropped trades, reconnects, slot gaps
+  and catch-up reads.
+- Logs to watch: `[solana-logs]` connection errors (at most one line a minute) and `logsSubscribe refused`,
+  `[pumpportal]` reconnects and refusals (a refused trade subscription usually means
   the API key is unfunded), `[live] price refresh failed`, `[wallets]` withdrawal tracking failures,
   `[store]` warnings, `[accounts] wallet provisioning failed`.
 - Audit table (`audit`): `withdrawal_*`, `swap_sent`, `swap_refused`, `swap_failed`, `swap_unreadable`,
@@ -332,8 +350,30 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
 - Balance sync covers accounts active in the last 15 minutes (API requests and fills), not idle
   sockets.
 - Creation time of a token loaded on demand is approximate (oldest of the newest 1000 signatures).
-- The feed's trade streams need a funded `PUMPPORTAL_API_KEY` (see section 2); holders and
-  authorities are refreshed only for tokens someone has open or holds.
+- Trades move prices only through the program-log feed or a funded `PUMPPORTAL_API_KEY` (see section 2);
+  holders and authorities are refreshed only for tokens someone has open or holds.
+- The program-log feed books trades of the tokens the World keeps (launches seen since start, tokens
+  someone opened, pinned / held / watchlisted ones) and of watched wallets (follows, copy-trade leaders,
+  alerts, KOLs: an unknown token they trade is loaded on demand, an unknown PumpSwap pool read once).
+  Everything else (60-100 curve and 100-400 pool trades a second on mainnet) is decoded, counted and
+  dropped: the World cannot hold every token that trades. A token the World does not have appears only
+  when launched after the start, opened, or traded by a watched wallet.
+- Program-log trades go to the `user` the program reports: the signer for direct trades, but through
+  some routers and aggregators an intermediate account; bots that buy into a token account owned by
+  another wallet show the payer as the holder (2 of 12 sampled PumpSwap trades of one busy token).
+- Nodes cut a transaction's logs at 10 KB: large bundles and migrations lose their last events. Those
+  transactions are read back with `getTransaction` (their event CPIs are complete), one RPC read each
+  on the low-priority budget (up to ~4 a minute on mainnet); when the read fails the partial logs are used.
+- `confirmed` notifications are not final: a few transactions of a dropped fork were seen (6 of ~4,700
+  sampled, two adjacent slots). They are booked like any other and never undone.
+- After a disconnect only `LIVE_LOGS_CATCHUP_MINTS` tokens' missed transactions are read back (a gap
+  longer than 1,500 slots, ~10 min, not at all). Every later trade carries its curve's or pool's full
+  state, so prices heal at the next trade; the missed trades of other tokens are lost. Caught-up trades
+  of watched wallets older than 10 s are not booked (copy trading would mirror them late).
+- Launches quoted in another mint are dropped from the launch event itself (no read); PumpSwap pools are
+  mapped to mints only for canonical WSOL pools (the World's migrated pump.fun coins, pools the feed saw
+  created): trades on other pools of the same coins are not booked.
+- Raydium LaunchLab (LetsBonk) is not decoded (no IDL shipped with the installed SDKs).
 - pump.fun launches quoted in another mint (24-46% of them in the 2026-10-20 runs: the PUMP token,
   CARDS, other coins) are not shown: their frames carry the program's shadow SOL values, not SOL.
   Telling them apart needs the launch's curve account, so without `SOLANA_RPC_URL` launches pass
@@ -343,9 +383,11 @@ wallets among its traders (`--wallet <address>`). It is **not market data**: not
   and their real SOL is tracked from trade flows (the program moves their virtual SOL on its own);
   the mayhem agent's trades are booked fee-free. The supply is not re-read when the agent's unsold
   tokens are burned after its 24 h.
-- PumpSwap trades (`pool: 'pump-amm'`) could not be captured: their amounts are taken as sent. A
-  migrated pool's reserves are read back from chain once after the migration. Fresh pump coins pay
-  tiered PumpSwap fees (20 + 5 + 95 bps observed), not the 0.25% in `LIVE_DEXES` (fee totals only).
+- PumpSwap trades from the program logs are exact (the user's side, the pool's post-trade vaults plus
+  its signed virtual quote reserve); PumpPortal's (`pool: 'pump-amm'`) could not be captured: their
+  amounts are taken as sent. A migrated pool's reserves are read back from chain once after the
+  migration. Fresh pump coins pay tiered PumpSwap fees (20 + 5 + 95 bps observed), not the 0.25% in
+  `LIVE_DEXES` (fee totals only).
 - Deposit records: a token account's signatures are re-read when its balance moved since the last scan,
   and every 30 minutes regardless (a deposit and an equal outflow between two balance reads shows up on
   that sweep). A transaction format newer than v1 is skipped by the scanner (logged once per version);
@@ -378,11 +420,42 @@ deposit detection, Turnkey signing) before enabling the site for users.
   launches per run, every one checked against its curve; tokens whose curve had not moved since the
   launch matched the chain exactly (price, market cap, progress, holders), the others differed by the
   trades the feed could not stream; a migration's pool was read back from chain.
-- Still open (needs a funded key): `buy` / `sell` frame keys (`newTokenBalance`), whether
+- Still open (needs a funded key; with the program-log feed PumpPortal trades are optional): `buy` / `sell` frame keys (`newTokenBalance`), whether
   `subscribeTokenTrade` delivers PumpSwap trades after migration and what their `solAmount` means,
   the trade-subscription ack, key / rate limits (we send ≤100 keys per message, batches every
   250 ms). Run `scripts/pumpportal-check.ts --capture frames.jsonl` with `PUMPPORTAL_API_KEY` set and
   replace the reconstructed trade frames in the fixtures with captured ones.
+
+**Program logs (Solana RPC WebSocket)** (checked 2026-10-20 with `apps/server/scripts/solana-logs-check.ts`,
+read-only; recorded logs, notifications and transactions in `apps/server/test/fixtures/solana-logs`, see its README)
+- Endpoints: `wss://api.mainnet-beta.solana.com` serves `logsSubscribe({mentions})` for both programs at
+  `confirmed`: 900-1,300 notifications/s (pump.fun ~170/s, PumpSwap ~800-1,100/s), half of them failed
+  transactions, ~390-550 successful transactions/s, 1.7-2.1 MB/s of JSON. It closes the socket every 20-70 s
+  (code 1006: 6 reconnects in 3 minutes); the feed reconnects within ~1 s, reports each gap (6 gaps, 385
+  slots) and catches up (30 missed transactions of tracked tokens read back in one run, booked without
+  stale reserves). `wss://solana-rpc.publicnode.com` delivered about half of the transactions (141 of 376
+  slots missing next to mainnet-beta), and an hour later acknowledged the subscriptions and delivered
+  nothing (the feed now reconnects after 30 s of silence and reports it). drpc (free plan: code 35),
+  OnFinality (-32029), Ankr and Helius without a key, Alchemy's demo key refuse it. **Use a provider
+  WebSocket in production** (Helius, Triton, QuickNode...) sized for ~2 MB/s per server.
+- Volume decoded (3-minute run): PumpSwap Sell 64/s and Buy 61/s, pump.fun TradeEvent 31/s (34-63/s in other
+  runs), CreateEvent 0.4-0.6/s (25-66% quoted in another mint per run: rejected from the event), one
+  migration every few minutes; no decode errors in ~70,000 events. Booked into a fresh World with 10 tokens
+  opened: 48 trades/s, 36 tokens, ~4,000 wallets, 101 MB heap, queue never above 49 events.
+- Event layouts: discriminators and bodies of `@pump-fun/pump-sdk` 4.2.0 / `@pump-fun/pump-swap-sdk` 2.2.0
+  IDLs match mainnet (SDK decoders, which accept every deployed layout); events are logged and emitted as
+  event CPIs. Amounts: the wallet's SOL change in `getTransaction` equals the booked amount to the lamport,
+  or differs by account rent, Jito tips or a trading bot's fee instruction in the same transaction (7 of 16
+  exact in the 3-minute run, the rest explained); token deltas matched for every sampled trade whose tokens
+  went to the signer. Parity with PumpPortal: the fixtures' transactions book the same trades (tokens, wallets,
+  reserves, pool) within 3 lamports (the logs' exact fees vs the 1.25% rate). Catch-up reads: a token's last
+  booked slots read back with `getSignaturesForAddress` + `getTransaction` returned its booked transactions,
+  decoded from their event CPIs (7 of 10, the rest rate-limited by the public RPC). 1-8 truncated transactions
+  per 2-3 minutes of the full stream, each read back whole.
+- Not verified: provider WebSockets' delivery completeness and limits (two subscriptions at ~1,000
+  notifications/s); behaviour across pump.fun program upgrades (event layouts are decoded leniently by the
+  SDK, but new instructions may change fee semantics: re-run the check after SDK upgrades); LaunchLab /
+  other launchpads (not decoded).
 
 **pump.fun / PumpSwap**: verified read-only on mainnet with `apps/server/scripts/sol-exec-verify.ts`
 (October 2026; every swap built by the venue for a real funded wallet and run through

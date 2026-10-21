@@ -13,6 +13,9 @@
 //   no RPC / read failed                released unverified (counted)
 // A held launch's later events (its first trades, a quick migration) wait behind
 // it so they apply in order; every other event passes straight through.
+// Program-log launches need no read: their CreateEvent names the quote mint, the
+// mayhem flag and the creator fee (pushVerified); decisions are remembered, so the
+// same launch from the other source is not read again.
 
 import { PublicKey, type AccountInfo, type Connection } from '@solana/web3.js';
 import { loadPumpSdk } from '../enrich/onchain';
@@ -100,7 +103,14 @@ export interface VerifierStats {
   readErrors: number;
   /** Events of a pending launch dropped beyond maxHeldPerMint. */
   dropped: number;
+  /** Launches decided from facts that came with them (program logs: the CreateEvent), no read. */
+  fromEvent: number;
+  /** Launches already decided when another source delivered them again (no second read). */
+  known: number;
 }
+
+/** Launch decisions remembered for a second source's copy of the same launch. */
+const DECIDED_WINDOW = 5000;
 
 interface Pending {
   events: FeedEvent[];
@@ -109,8 +119,10 @@ interface Pending {
 }
 
 export class LaunchVerifier {
-  readonly stats: VerifierStats = { verified: 0, rejected: 0, unverified: 0, retried: 0, readErrors: 0, dropped: 0 };
+  readonly stats: VerifierStats = { verified: 0, rejected: 0, unverified: 0, retried: 0, readErrors: 0, dropped: 0, fromEvent: 0, known: 0 };
   private readonly pending = new Map<string, Pending>();
+  /** Recently decided launches (mint -> the facts they were decided on), oldest first. */
+  private readonly decided = new Map<string, CurveFacts>();
   private timer: NodeJS.Timeout | null = null;
   private inFlight = false;
   private closed = false;
@@ -137,6 +149,11 @@ export class LaunchVerifier {
     return this.pending.size;
   }
 
+  /** A launch waits for its curve read (its later events are held behind it). */
+  isPending(mint: string): boolean {
+    return this.pending.has(mint);
+  }
+
   push(e: FeedEvent): void {
     const held = this.pending.get(e.mint);
     if (held) {
@@ -149,6 +166,13 @@ export class LaunchVerifier {
       this.opts.emit(e);
       return;
     }
+    // The same launch from a second source: decided already, no second read.
+    const known = this.decided.get(e.mint);
+    if (known) {
+      this.stats.known++;
+      if (known.solQuoted) this.opts.emit({ ...e, mayhem: known.mayhem, curveFeeRate: curveFeeRate(known) });
+      return;
+    }
     if (!this.opts.reader() || this.pending.size >= this.maxPending) {
       this.stats.unverified++;
       this.opts.emit(e);
@@ -156,6 +180,34 @@ export class LaunchVerifier {
     }
     this.pending.set(e.mint, { events: [e], attempts: 0, dueAt: this.now() + this.batchMs });
     this.schedule();
+  }
+
+  /**
+   * A launch that came with its curve facts (program logs: the CreateEvent names the quote mint,
+   * mayhem flag and creator fee): decided at once by the same rule, without a read. A copy of the
+   * launch already waiting for its read (PumpPortal's frame) is settled with these facts too.
+   */
+  pushVerified(e: FeedEvent & { kind: 'create' }, facts: CurveFacts): void {
+    if (this.closed) return;
+    this.stats.fromEvent++;
+    this.remember(e.mint, facts);
+    if (!facts.solQuoted) {
+      this.pending.delete(e.mint);
+      this.stats.rejected++;
+      this.opts.reject(e.mint, facts);
+      return;
+    }
+    if (this.pending.has(e.mint)) this.release(e.mint, facts);
+    this.opts.emit({ ...e, mayhem: facts.mayhem, curveFeeRate: curveFeeRate(facts) });
+  }
+
+  private remember(mint: string, facts: CurveFacts): void {
+    this.decided.delete(mint);
+    this.decided.set(mint, facts);
+    if (this.decided.size > DECIDED_WINDOW) {
+      const oldest = this.decided.keys().next().value;
+      if (oldest !== undefined) this.decided.delete(oldest);
+    }
   }
 
   close(): void {
@@ -207,6 +259,7 @@ export class LaunchVerifier {
       if (!facts) {
         this.release(mint, null);
       } else if (f) {
+        this.remember(mint, f);
         if (f.solQuoted) {
           this.release(mint, f);
         } else {
